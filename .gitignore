@@ -1,0 +1,38 @@
+# Secrets and machine-local configuration
+**/.env
+**/.env.*
+!**/.env.example
+!**/.env.template
+**/*.key
+**/*.pem
+**/id_rsa
+**/id_ed25519
+
+# Dependency environments and language caches
+**/.venv/
+**/venv/
+**/node_modules/
+**/__pycache__/
+**/*.py[cod]
+**/.pytest_cache/
+**/.mypy_cache/
+**/.ruff_cache/
+
+# Coverage and tool caches
+**/.coverage
+**/.coverage.*
+**/htmlcov/
+**/.cache/
+
+# Editor, operating-system, and temporary files
+**/.DS_Store
+**/Thumbs.db
+**/*.swp
+**/*.swo
+**/*~
+**/*.tmp
+**/*.bak
+**/*.log
+
+# Local course reference files
+docs/sources/

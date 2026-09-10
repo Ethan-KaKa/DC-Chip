@@ -1,0 +1,25 @@
+* text=auto
+
+*.sh text eol=lf
+*.bash text eol=lf
+*.py text eol=lf
+*.md text eol=lf
+*.toml text eol=lf
+*.cfg text eol=lf
+*.csv text eol=lf
+Makefile text eol=lf
+.githooks/* text eol=lf
+
+*.pdf binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.zip binary
+*.tar binary
+*.gz binary
+*.whl binary
+*.ppt binary
+*.pptx binary
+*.doc binary
+*.docx binary

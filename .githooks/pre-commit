@@ -1,0 +1,50 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+policy_file="GIT_RULES.md"
+max_bytes=$((10 * 1024 * 1024))
+failed=0
+
+reject() {
+    printf 'Git policy: %s\n' "$1" >&2
+    failed=1
+}
+
+if [[ ! -r "$policy_file" ]]; then
+    reject "cannot read ${policy_file}; restore the policy before committing."
+fi
+
+while IFS= read -r -d '' path; do
+    case "$path" in
+        .env|*/.env|.env.*|*/.env.*)
+            case "$path" in
+                *.env.example|*.env.template) ;;
+                *) reject "refusing possible secret configuration: ${path}" ;;
+            esac
+            ;;
+        *.key|*.pem|id_rsa|*/id_rsa|id_ed25519|*/id_ed25519)
+            reject "refusing possible private key: ${path}"
+            ;;
+        .venv/*|*/.venv/*|venv/*|*/venv/*|__pycache__/*|*/__pycache__/*|*.pyc|*.pyo|*/.pytest_cache/*|*/.mypy_cache/*|*/.ruff_cache/*)
+            reject "refusing environment or cache artifact: ${path}"
+            ;;
+    esac
+
+    index_entry=$(git ls-files --stage -- "$path")
+    mode=${index_entry%% *}
+    if [[ "$mode" == "100644" || "$mode" == "100755" ]]; then
+        size=$(git cat-file -s ":${path}")
+        if (( size > max_bytes )); then
+            reject "${path} is larger than 10 MiB; use external storage or Git LFS after approval."
+        fi
+    fi
+done < <(git diff --cached --name-only --diff-filter=ACMR -z)
+
+if ! git diff --cached --check; then
+    reject "staged changes contain whitespace errors."
+fi
+
+if (( failed != 0 )); then
+    printf '%s\n' 'Commit blocked. Review GIT_RULES.md and the staged files.' >&2
+    exit 1
+fi
