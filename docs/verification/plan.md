@@ -4,6 +4,7 @@
 - 状态：初版 CPU 实施基线
 - 更新日期：2026-09-10
 - ISA 规范：`docs/isa/isa.md` v0.1
+- 仿真器接口：[`simulator.md`](simulator.md)
 
 ## 1. 验证目标与证据边界
 
@@ -35,6 +36,9 @@ Icarus 和 Verilator 的通过结果只标记为 behavioral simulation。lint、
 | cpu_core | 两周期复位；ISA smoke；JUMP；PC 回绕；逐提交 trace；非法不提交、冻结及复位恢复 |
 
 ## 4. 集成验证
+
+HEX 镜像、DPI-C 边界、命令行参数、运行生命周期和退出码的稳定接口以
+[`simulator.md`](simulator.md) 为准；本节只定义需要覆盖的验证场景。
 
 正向测试包括：
 
