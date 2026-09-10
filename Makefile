@@ -4,6 +4,8 @@ VVP       ?= vvp
 CXX       ?= c++
 BUILD_DIR ?= build
 UNIT_DIR  := $(BUILD_DIR)/unit
+SIM_DIR   := $(BUILD_DIR)/verilator
+SIM_BIN   := $(SIM_DIR)/Vsim_top
 
 ISA_PKG := rtl/core/dc_isa_pkg.sv
 COMB_RTL := $(ISA_PKG) \
@@ -16,11 +18,16 @@ UNIT_TBS := sim/tb/tb_alu.sv \
 	sim/tb/tb_decoder.sv \
 	sim/tb/tb_regfile.sv \
 	sim/tb/tb_cpu_core.sv
+SIM_RTL := $(CORE_RTL) \
+	sim/verilator/sim_top.sv
+SIM_CPP := sim/verilator/memory.cpp \
+	sim/verilator/main.cpp
+SIM_CXXFLAGS := -std=c++17 -Wall -Wextra -Wpedantic
 
 .DEFAULT_GOAL := help
 
 .PHONY: check-tools help lint-comb lint test-alu test-decoder \
-	test-regfile test-core test-unit
+	test-regfile test-core test-unit sim-build sim
 
 check-tools:
 	@set -eu; \
@@ -91,11 +98,48 @@ test-unit:
 	$(MAKE) --no-print-directory test-regfile
 	$(MAKE) --no-print-directory test-core
 
+$(SIM_BIN): $(SIM_RTL) $(SIM_CPP) sim/verilator/memory.h Makefile
+	mkdir -p $(SIM_DIR)
+	CXX="$(CXX)" $(VERILATOR) --cc --exe --build \
+		--language 1800-2012 -Wall --top-module sim_top \
+		--Mdir $(SIM_DIR) \
+		-CFLAGS "-std=c++17" \
+		$(SIM_RTL) $(SIM_CPP)
+	@verilator_root=$$($(VERILATOR) --getenv VERILATOR_ROOT); \
+	$(CXX) $(SIM_CXXFLAGS) -fsyntax-only \
+		-I$(SIM_DIR) -Isim/verilator \
+		-isystem "$$verilator_root/include" \
+		-isystem "$$verilator_root/include/vltstd" $(SIM_CPP)
+
+sim-build: $(SIM_BIN)
+
+sim:
+	@set -eu; \
+	if [ -z '$(strip $(IMG))' ]; then \
+		printf '%s\n' 'error: IMG is required; use make sim IMG=<hex> [STEPS=<n>] [TRACE=1]' >&2; \
+		exit 1; \
+	fi; \
+	case '$(TRACE)' in \
+		'') ;; \
+		1) ;; \
+		*) printf 'error: TRACE must be empty or 1, got: %s\n' '$(TRACE)' >&2; exit 1 ;; \
+	esac
+	$(MAKE) --no-print-directory sim-build
+	@set -eu; \
+	set -- --image '$(IMG)'; \
+	if [ -n '$(strip $(STEPS))' ]; then \
+		set -- "$$@" --steps '$(STEPS)'; \
+	fi; \
+	if [ '$(TRACE)' = 1 ]; then \
+		set -- "$$@" --trace; \
+	fi; \
+	$(SIM_BIN) "$$@"
+
 help:
 	@printf '%s\n' \
 		'DC-Chip build entry points' \
 		'' \
-		'Available in stages A-C:' \
+		'Available in stages A-D:' \
 		'  make check-tools  Check required tools and C++17 support' \
 		'  make help         Show this help without creating build output' \
 		'  make lint-comb    Lint the combinational ALU and decoder' \
@@ -105,10 +149,10 @@ help:
 		'  make test-regfile Run the self-checking register-file testbench' \
 		'  make test-core    Run the self-checking CPU-core testbench' \
 		'  make test-unit    Run all four unit testbenches in order' \
-		'' \
-		'Planned for later stages (not implemented yet):' \
-		'  make sim-build' \
+		'  make sim-build    Build the Verilator DPI-C simulator' \
 		'  make sim IMG=<hex> [STEPS=<n>] [TRACE=1]' \
+		'' \
+		'Planned for stage E (not implemented yet):' \
 		'  make test-integration' \
 		'  make test' \
 		'  make clean' \

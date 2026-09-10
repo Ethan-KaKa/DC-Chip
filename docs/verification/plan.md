@@ -72,7 +72,7 @@ Icarus 和 Verilator 的通过结果只标记为 behavioral simulation。lint、
 | 日期 | 命令 | 结果 | 环境或备注 |
 | --- | --- | --- | --- |
 | 2026-09-10 | `make check-tools` | PASS | GNU Make 4.3；Verilator 5.041 devel；Icarus/vvp 13.0 devel；G++ 13.3.0；C++17 syntax check PASS |
-| 2026-09-10 | `make help` | PASS | 当前列出阶段 A–C 可用目标和阶段 D–E 规划目标；目标本身不创建构建输出 |
+| 2026-09-10 | `make help` | PASS | 当前列出阶段 A–D 可用目标和阶段 E 规划目标；目标本身不创建构建输出 |
 
 ### 阶段 B
 
@@ -95,7 +95,17 @@ Icarus 和 Verilator 的通过结果只标记为 behavioral simulation。lint、
 
 阶段 A–C 的九条累计门禁已按顺序复跑并通过。四个 testbench 均为有限超时自检，生成物仅为被 `/build/` 忽略的 `build/unit/tb_alu.vvp`、`tb_decoder.vvp`、`tb_regfile.vvp` 和 `tb_cpu_core.vvp`。
 
-阶段 D–E：未执行。DPI-C、集成测试、Vivado 综合/实现、时序、资源、功耗和真实板卡均未验证。
+### 阶段 D
+
+| 日期 | 命令 | 结果 | 环境或备注 |
+| --- | --- | --- | --- |
+| 2026-09-10 | `make sim-build` | PASS | Verilator 5.041 devel、G++ 13.3.0；package、decoder、ALU、regfile、core、wrapper 显式顺序构建；项目 C++ 源以 C++17、`-Wall -Wextra -Wpedantic` 检查；零 warning、零 error |
+| 2026-09-10 | `Vsim_top --image sim/tests/isa_smoke.hex --steps 8 --trace ...` | PASS | Verilator behavioral simulation；提交 PC 为 `0,1,2,3,4,5,6,7`；最终 `R0=0x0000 R1=0x0002 R2=0x0002 R3=0x0000 PC=0x08` |
+| 2026-09-10 | `Vsim_top --image sim/tests/jump_loop.hex --steps 5 --trace ...` | PASS | Verilator behavioral simulation；提交 PC 为 `0,1,2,1,2`；最终 `R0=0x0000 R1=0x0003 R2=0x0000 R3=0x0000 PC=0x01` |
+
+阶段 A–D 的十二条累计门禁已按顺序复跑并通过。两个程序均返回 0；smoke 的最后一次合法提交后，PC `0x08` 的组合越界预取未覆盖成功结果。Verilator 生成物仅位于被 `/build/` 忽略的 `build/verilator/`。
+
+阶段 E 未执行。负向集成 runner、完整回归、Vivado 综合/实现、时序、资源、功耗和真实板卡均未验证。
 
 ## 8. 后续验证
 

@@ -1,6 +1,6 @@
 # DC-Chip 初版代码详细实施计划
 
-- 状态：实施中（阶段 A–C 已完成，阶段 D–E 未执行）
+- 状态：实施中（阶段 A–D 已完成，阶段 E 未执行）
 - 更新日期：2026-09-10
 - 上位构思：`docs/00-temp/initial-build-concept.md`
 - 规范来源：`docs/isa/isa.md` v0.1
@@ -399,7 +399,7 @@ RTL 源列表显式列出，`dc_isa_pkg.sv` 必须在首位，不使用递归 `f
 
 ### 9.2 目标契约
 
-当前阶段 A–C 已实现 `make check-tools`、`make help`、`make lint-comb`、`make test-alu`、`make test-decoder`、`make lint`、`make test-regfile`、`make test-core` 和 `make test-unit`。`help` 将阶段 D–E 目标明确标记为后续阶段规划接口；下列目标只有在对应阶段完成后才可宣称可用或已经验证。
+当前阶段 A–D 已实现 `make check-tools`、`make help`、`make lint-comb`、`make test-alu`、`make test-decoder`、`make lint`、`make test-regfile`、`make test-core`、`make test-unit`、`make sim-build` 和 `make sim`。`help` 将阶段 E 目标明确标记为后续阶段规划接口；下列目标只有在对应阶段完成后才可宣称可用或已经验证。
 
 - `make check-tools`：依次检查 `verilator`、`iverilog`、`vvp` 和 C++17 编译器是否可执行，打印实际版本；任一工具缺失或不满足构建要求时给出工具名并失败，不自动安装；
 - `make help`：列出本节中真实存在的目标，以及 `BUILD_DIR`、`IMG`、`STEPS` 和 `TRACE` 参数；执行帮助不得隐式编译、运行测试或创建 `build/`；
@@ -527,9 +527,9 @@ R0=0x0000 R1=0x0002 R2=0x0002 R3=0x0000 PC=0x08
 
 - 已建立五份正式规格、`dc_isa_pkg.sv`、显式源列表、根 Makefile 和 `/build/` 忽略规则；
 - `make check-tools`：PASS；实际环境为 GNU Make 4.3、Verilator 5.041 devel、Icarus/vvp 13.0 devel、G++ 13.3.0，C++17 syntax check PASS；
-- `make help`：PASS；当前将阶段 A–C 目标列为可用，阶段 D–E 目标明确标记为未实现；阶段 A 首次执行时未创建 `build/`；
+- `make help`：PASS；当前将阶段 A–D 目标列为可用，阶段 E 目标明确标记为未实现；阶段 A 首次执行时未创建 `build/`；
 - package Icarus 语法探测、缺失工具负向检查、正式文档独立性、源列表顺序、Markdown、空目录和生成物审阅均通过；
-- 详细执行证据记录在 `docs/verification/plan.md`；当前阶段 A–C 已完成，阶段 D–E 仍未执行。
+- 详细执行证据记录在 `docs/verification/plan.md`；当前阶段 A–D 已完成，阶段 E 仍未执行。
 
 **进入条件**
 
@@ -574,7 +574,7 @@ make help
 - `make lint-comb`：PASS；Verilator 5.041 devel 分别以 `alu`、`decoder` 为 top，零 warning、零 error；
 - `make test-alu`：PASS；Icarus/vvp 13.0 devel behavioral simulation 覆盖 5 种已分配操作、回绕边界、3 个未分配 ALU 值及 X/Z 操作码；
 - `make test-decoder`：PASS；覆盖 8 个规范示例、8 个保留 opcode、全部规定的非规范字段类型及 opcode/规范条件中的 X/Z；
-- 阶段 B 完成时，阶段 A–B 五条累计门禁已按顺序复跑通过；当前阶段 C 的完成状态与累计复跑证据见下节。生成物仅位于被 `/build/` 忽略的 `build/unit/`，阶段 D–E、综合、时序、功耗和上板均未执行或未验证。
+- 阶段 B 完成时，阶段 A–B 五条累计门禁已按顺序复跑通过；当前阶段 C–D 的完成状态与累计复跑证据见后续各节。生成物仅位于被 `/build/` 忽略的 `build/unit/`；综合、时序、功耗和上板仍未验证。
 
 **进入条件**
 
@@ -619,7 +619,7 @@ make test-decoder
 - `make test-regfile`：PASS；Icarus/vvp 13.0 devel behavioral simulation 覆盖同步复位、写保持、四个普通可写寄存器、双组合读、沿前/沿后值、复位优先和 debug 拼接；
 - `make test-core`：PASS；覆盖两周期复位、8 条 ISA smoke、绝对跳转循环、PC 回绕、连续 trace、非法冻结及复位恢复；
 - `make test-unit`：PASS；按 ALU、decoder、regfile、cpu_core 顺序递归执行，四项各输出单行 PASS；
-- 阶段 A–C 九条累计门禁已按顺序复跑通过；`build/unit/` 仅含四个被 `/build/` 忽略的 `.vvp` 文件，阶段 D–E 及 Vivado/FPGA 验证均未执行。
+- 阶段 A–C 九条累计门禁已按顺序复跑通过；`build/unit/` 仅含四个被 `/build/` 忽略的 `.vvp` 文件；阶段 D 的完成状态见下节，阶段 E 及 Vivado/FPGA 验证均未执行。
 
 **进入条件**
 
@@ -660,6 +660,14 @@ make test-unit
 - 修复后先重跑失败目标，再从阶段 A 起按原顺序重跑截至 `make test-unit` 的全部门禁，全部通过后才可进入阶段 D。
 
 ### 阶段 D：DPI-C 端到端闭环
+
+**执行状态：已完成（2026-09-10）**
+
+- 已完成 Verilator 仿真 wrapper、DPI-C HEX 指令存储器、C++17 驱动及两个正向镜像，保持 ISA v0.1、`cpu_core` 接口和组合零等待取指协议不变；
+- `make sim-build`：PASS；Verilator 5.041 devel 与 G++ 13.3.0 完成构建，项目 C++ 源使用 `-std=c++17 -Wall -Wextra -Wpedantic` 检查，零 warning、零 error；
+- ISA smoke：PASS；8 次提交的 PC 为 `0,1,2,3,4,5,6,7`，最终寄存器和 PC 与全部显式 expectation 匹配；
+- jump-loop：PASS；5 次提交的 PC 为 `0,1,2,1,2`，最终 `R1=0x0003`、`PC=0x01`，其余寄存器为零；
+- 阶段 A–D 十二条累计门禁已按顺序复跑通过；生成物仅位于被 `/build/` 忽略的 `build/`，阶段 E 与 Vivado/FPGA 验证均未执行。
 
 **进入条件**
 
