@@ -1,7 +1,7 @@
 # DC-Chip Verilator 仿真器使用与接口约定
 
 - 版本：v0.1
-- 状态：阶段 D–E 已实现基线
+- 状态：阶段 D–E 基线及仿真配置步骤 1 已实现
 - 更新日期：2026-09-10
 - ISA 规范：[`../isa/isa.md`](../isa/isa.md)
 - 验证计划：[`plan.md`](plan.md)
@@ -123,11 +123,23 @@ summary commits=<n> cycles=<n> pc=0x00 r0=0x0000 r1=0x0000 r2=0x0000 r3=0x0000
 | 3 | 达到最大周期数 |
 | 4 | 最终寄存器或 PC 不匹配 |
 
-## 7. 构建与回归入口
+## 7. 构建配置边界
+
+仿真器构建通过根目录 `Dconfig` 接收 `DC_SIM_SDB` 和 `DC_SIM_WAVE`，两项
+默认均为 `n`。当前步骤 1 只建立 `.config`、Make `auto.conf` 和 C++
+`config.h` 的生成与传递；两个开关尚不改变 RTL、构建选项、CLI 或运行行为，
+也不能据此声称 SDB 或 VCD 已实现。完整配置接口见
+[`configuration.md`](configuration.md)。
+
+默认配置下 Verilator 仍以 `VM_TRACE=0` 构建。`--trace` 仍只是既有的逐提交
+文本输出参数，与尚未实现的 VCD 功能无关。
+
+## 8. 构建与回归入口
 
 ```bash
 make sim-build
 make sim IMG=<hex> [STEPS=<n>] [TRACE=1]
+make test-config
 make test-integration
 make test
 make clean
@@ -139,6 +151,6 @@ package、decoder、ALU、regfile、core、wrapper 的顺序构建
 `-Wall -Wextra -Wpedantic` 语法检查。
 
 `make test-integration` 对正向程序和负向输入逐项比较精确退出码，
-`make test` 依次运行 lint、模块测试和集成测试。`make clean` 只允许删除
+`make test` 依次运行配置测试、lint、模块测试和集成测试。`make clean` 只允许删除
 仓库根目录的默认 `build/`。所有生成物、fixture 和日志必须留在被忽略的
-`/build/` 中。
+`/build/` 中；本地 `.config` 由 `make clean` 保留。

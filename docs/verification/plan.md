@@ -1,7 +1,7 @@
 # DC-Chip 初版验证计划
 
 - 版本：v0.1
-- 状态：初版 CPU 实施基线
+- 状态：初版 CPU 基线及仿真配置步骤 1
 - 更新日期：2026-09-10
 - ISA 规范：`docs/isa/isa.md` v0.1
 - 仿真器接口：[`simulator.md`](simulator.md)
@@ -21,6 +21,7 @@ Icarus 和 Verilator 的通过结果只标记为 behavioral simulation。lint、
 | C | regfile、cpu_core 及单测 | `make lint`；`make test-regfile`；`make test-core`；`make test-unit` | reset、R0、PC、trace、非法冻结与恢复 |
 | D | DPI-C 端到端闭环 | `make sim-build`；smoke；jump-loop | 精确 trace、最终状态和组合越界预取处理 |
 | E | 完整正负回归 | `make test-integration`；`make test`；`make clean && make test` | 精确退出码和干净重建 |
+| F | Dconfig 配置基础设施 | `make test-config`；`make test` | 隔离配置测试、四种配置值/头文件编译、既有回归兼容 |
 
 阶段必须顺序完成。任一命令失败后立即停止，不运行当前阶段的后续命令，也不进入下一阶段。修复后先重跑失败项，再从阶段 A 起重跑截至当前阶段的所有累计门禁。
 
@@ -67,7 +68,7 @@ HEX 镜像、DPI-C 边界、命令行参数、运行生命周期和退出码的�
 - 超时必须为有限正整数；
 - 修复协议或时序问题时不得增加无规范依据的延时、脉冲或跳过比较；
 - 原始大日志、波形和生成物只进入 `/build/`，不得纳入版本管理；
-- `make test` 固定按 lint、unit、integration 顺序执行并在首个失败处停止。
+- `make test` 固定按 config、lint、unit、integration 顺序执行并在首个失败处停止。
 
 ## 7. 验证执行记录
 
@@ -120,6 +121,36 @@ HEX 镜像、DPI-C 边界、命令行参数、运行生命周期和退出码的�
 阶段 A–E 的十五条累计门禁均已通过。阶段 E runner 覆盖两个正向程序、保留 opcode、非规范编码、实际越界取指、文件不存在、空镜像、非法字符、错误宽度、257 个有效字、超时、状态失配、重复 expectation、未知参数、缺少参数值和缺少必选镜像。
 
 Vivado 综合/实现、时序、资源、功耗和真实板卡仍未验证。
+
+### 阶段 F：仿真调试基础设施步骤 0–1
+
+步骤 0 在引入配置前冻结阶段 A–E 基线：
+
+| 日期 | 命令 | 结果 | 环境或备注 |
+| --- | --- | --- | --- |
+| 2026-09-10 | `make check-tools` | PASS | GNU Make 4.3；Verilator 5.041 devel；Icarus/vvp 13.0 devel；G++ 13.3.0 |
+| 2026-09-10 | `make test` | PASS | RTL lint、4 个模块 testbench 和 17 个精确退出码集成用例全部通过；Verilator 为 `VM_TRACE=0` |
+
+该基线锁定两周期同步 reset 且不计入执行周期、`--steps` 按 `trace_valid`
+提交计数、最后一次目标提交优先于提交后的组合越界预取，以及退出码
+`0/1/2/3/4` 和既有 trace/summary/错误格式。步骤 1 不修改这些期望来掩盖
+差异。
+
+步骤 1 的配置测试使用
+`build/test-fixtures/config/.config` 和
+`build/test-fixtures/config/generated/`，不读写仓库根 `.config`：
+
+| 日期 | 命令 | 结果 | 环境或备注 |
+| --- | --- | --- | --- |
+| 2026-09-10 | `make check-tools` | PASS | 增加 Python 3.12.3 与标准库 `curses` import；原有工具及 C++17 检查保持通过 |
+| 2026-09-10 | `make help`（无 `.config`、无 `build/`） | PASS | 未创建 `.config` 或 `build/` |
+| 2026-09-10 | `make test-config` | PASS | default/set/show/sync、错误输入事务性、文件错误、mtime、路径隔离、vendored menuconfig/curses import、四种配置值及 C++17 头文件编译均通过 |
+| 2026-09-10 | `make test` | PASS | 配置测试、RTL lint、4 个模块 testbench 与原有 17 个集成用例通过；默认配置仍为 `VM_TRACE=0` |
+
+Kconfiglib 固定为 v14.1.0，三个上游原文件的 SHA-256 已与
+`tools/kconfiglib/UPSTREAM.md` 一致。步骤 1 仅验证配置值传递和 C++ 编译；
+SDB、VCD 波形、执行引擎、反汇编功能均未实现。Vivado 综合/实现、时序、
+资源、功耗和真实板卡仍未验证。
 
 ## 8. 后续验证
 

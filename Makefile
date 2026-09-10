@@ -2,10 +2,16 @@ VERILATOR ?= verilator
 IVERILOG  ?= iverilog
 VVP       ?= vvp
 CXX       ?= c++
+PYTHON    ?= python3
 BUILD_DIR ?= build
 UNIT_DIR  := $(BUILD_DIR)/unit
 SIM_DIR   := $(BUILD_DIR)/verilator
 SIM_BIN   := $(SIM_DIR)/Vsim_top
+CONFIG_FILE := .config
+CONFIG_DIR  := $(BUILD_DIR)/config
+AUTO_CONF   := $(CONFIG_DIR)/auto.conf
+CONFIG_H    := $(CONFIG_DIR)/config.h
+CONFIG_STAMP := $(CONFIG_DIR)/.sync.stamp
 
 ISA_PKG := rtl/core/dc_isa_pkg.sv
 COMB_RTL := $(ISA_PKG) \
@@ -22,12 +28,26 @@ SIM_RTL := $(CORE_RTL) \
 	sim/verilator/sim_top.sv
 SIM_CPP := sim/verilator/memory.cpp \
 	sim/verilator/main.cpp
-SIM_CXXFLAGS := -std=c++17 -Wall -Wextra -Wpedantic
+SIM_CONFIG_CXXFLAGS := -I$(abspath $(CONFIG_DIR)) \
+	-include $(abspath $(CONFIG_H))
+SIM_CXXFLAGS := -std=c++17 -Wall -Wextra -Wpedantic $(SIM_CONFIG_CXXFLAGS)
+CONFIG_INPUTS := Dconfig \
+	scripts/config.py \
+	tools/kconfiglib/kconfiglib.py \
+	tools/kconfiglib/menuconfig.py
+CONFIG_CMD = $(PYTHON) scripts/config.py \
+	--config "$(abspath $(CONFIG_FILE))" \
+	--output-dir "$(abspath $(CONFIG_DIR))"
+
+ifneq ($(filter sim-build sim test-integration test,$(MAKECMDGOALS)),)
+-include $(AUTO_CONF)
+endif
 
 .DEFAULT_GOAL := help
 
-.PHONY: check-tools help lint-comb lint test-alu test-decoder \
-	test-regfile test-core test-unit sim-build sim test-integration test clean
+.PHONY: check-tools help defconfig menuconfig config-show test-config \
+	lint-comb lint test-alu test-decoder test-regfile test-core test-unit \
+	sim-build sim test-integration test clean
 
 check-tools:
 	@set -eu; \
@@ -41,6 +61,7 @@ check-tools:
 	check_tool "$(IVERILOG)"; \
 	check_tool "$(VVP)"; \
 	check_tool "$(CXX)"; \
+	check_tool "$(PYTHON)"; \
 	version_output=$$(mktemp); \
 	trap 'rm -f "$$version_output"' EXIT; \
 	printf 'GNU Make %s\n' '$(MAKE_VERSION)'; \
@@ -51,9 +72,41 @@ check-tools:
 	sed -n '1p' "$$version_output"; \
 	CCACHE_DISABLE=1 $(CXX) --version >"$$version_output" 2>&1; \
 	sed -n '1p' "$$version_output"; \
+	$(PYTHON) --version; \
+	$(PYTHON) -c 'import curses; print("Python curses import: PASS")'; \
 	printf 'int main() { return 0; }\n' | \
 		CCACHE_DISABLE=1 $(CXX) -std=c++17 -x c++ -fsyntax-only -; \
 	printf 'C++17 syntax check: PASS\n'
+
+defconfig:
+	$(CONFIG_CMD) default
+
+$(CONFIG_FILE): configs/default_defconfig
+	$(CONFIG_CMD) default
+
+$(CONFIG_STAMP): $(CONFIG_FILE) $(CONFIG_INPUTS)
+	$(CONFIG_CMD) sync
+	@touch $@
+
+$(AUTO_CONF) $(CONFIG_H) &: | $(CONFIG_STAMP)
+	@set -eu; \
+	if [ ! -f "$(AUTO_CONF)" ] || [ ! -f "$(CONFIG_H)" ]; then \
+		$(CONFIG_CMD) sync; \
+	fi
+
+menuconfig: $(CONFIG_FILE)
+	CONFIG_="CONFIG_" KCONFIG_CONFIG_HEADER="" \
+		KCONFIG_CONFIG="$(abspath $(CONFIG_FILE))" srctree="$(abspath .)" \
+		$(PYTHON) tools/kconfiglib/menuconfig.py Dconfig
+	$(CONFIG_CMD) sync
+
+config-show:
+	$(CONFIG_CMD) show
+
+test-config:
+	$(PYTHON) scripts/test_config.py \
+		--fixture-root "$(abspath $(BUILD_DIR))/test-fixtures/config" \
+		--cxx "$(CXX)"
 
 lint-comb:
 	$(VERILATOR) --lint-only --language 1800-2012 -Wall \
@@ -98,15 +151,16 @@ test-unit:
 	$(MAKE) --no-print-directory test-regfile
 	$(MAKE) --no-print-directory test-core
 
-$(SIM_BIN): $(SIM_RTL) $(SIM_CPP) sim/verilator/memory.h Makefile
+$(SIM_BIN): $(SIM_RTL) $(SIM_CPP) sim/verilator/memory.h Makefile \
+	$(CONFIG_H) $(AUTO_CONF)
 	mkdir -p $(SIM_DIR)
-	CXX="$(CXX)" $(VERILATOR) --cc --exe --build \
+	CCACHE_DISABLE=1 CXX="$(CXX)" $(VERILATOR) --cc --exe --build \
 		--language 1800-2012 -Wall --top-module sim_top \
 		--Mdir $(SIM_DIR) \
-		-CFLAGS "-std=c++17" \
+		-CFLAGS "-std=c++17 $(SIM_CONFIG_CXXFLAGS)" \
 		$(SIM_RTL) $(SIM_CPP)
 	@verilator_root=$$($(VERILATOR) --getenv VERILATOR_ROOT); \
-	$(CXX) $(SIM_CXXFLAGS) -fsyntax-only \
+	CCACHE_DISABLE=1 $(CXX) $(SIM_CXXFLAGS) -fsyntax-only \
 		-I$(SIM_DIR) -Isim/verilator \
 		-isystem "$$verilator_root/include" \
 		-isystem "$$verilator_root/include/vltstd" $(SIM_CPP)
@@ -140,6 +194,7 @@ test-integration: sim-build
 		bash sim/tests/run_integration.sh "$(abspath $(SIM_BIN))"
 
 test:
+	$(MAKE) --no-print-directory test-config
 	$(MAKE) --no-print-directory lint
 	$(MAKE) --no-print-directory test-unit
 	$(MAKE) --no-print-directory test-integration
@@ -158,9 +213,13 @@ help:
 	@printf '%s\n' \
 		'DC-Chip build entry points' \
 		'' \
-		'Available in stages A-E:' \
-		'  make check-tools  Check required tools and C++17 support' \
+		'Available through simulator configuration step 1:' \
+		'  make check-tools  Check required tools, Python curses, and C++17' \
 		'  make help         Show this help without creating build output' \
+		'  make defconfig    Reset .config to configs/default_defconfig' \
+		'  make menuconfig   Edit .config with the vendored curses frontend' \
+		'  make config-show  Show the effective simulator configuration' \
+		'  make test-config  Test isolated configuration generation and use' \
 		'  make lint-comb    Lint the combinational ALU and decoder' \
 		'  make test-alu     Run the self-checking ALU testbench' \
 		'  make test-decoder Run the self-checking decoder testbench' \
@@ -171,9 +230,15 @@ help:
 		'  make sim-build    Build the Verilator DPI-C simulator' \
 		'  make sim IMG=<hex> [STEPS=<n>] [TRACE=1]' \
 		'  make test-integration  Run positive and negative integration cases' \
-		'  make test         Run lint, unit, and integration regression' \
+		'  make test         Run config, lint, unit, and integration regression' \
 		'  make clean        Remove only the repository-root build directory' \
 		'' \
 		'Configurable variables:' \
-		'  VERILATOR, IVERILOG, VVP, CXX, BUILD_DIR' \
-		'  IMG, STEPS and TRACE become active with make sim in stage D.'
+		'  VERILATOR, IVERILOG, VVP, CXX, PYTHON, BUILD_DIR' \
+		'  IMG, STEPS and TRACE become active with make sim in stage D.' \
+		'' \
+		'Configuration files:' \
+		'  .config is local and preserved by make clean.' \
+		'  configs/default_defconfig is the tracked default.' \
+		'  Simulator targets generate build/config/auto.conf and config.h.' \
+		'  DC_SIM_SDB and DC_SIM_WAVE default to n and are not active yet.'

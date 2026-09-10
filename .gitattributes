@@ -23,3 +23,6 @@ Makefile text eol=lf
 *.pptx binary
 *.doc binary
 *.docx binary
+
+# Upstream docstring has an underline that Git mistakes for a conflict marker.
+tools/kconfiglib/menuconfig.py -diff

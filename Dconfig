@@ -1,0 +1,19 @@
+mainmenu "DC-Chip configuration"
+
+menu "Simulator"
+
+config DC_SIM_SDB
+	bool "Build the simulator debugger"
+	default n
+	help
+	  Build support for the compact interactive simulator debugger.
+	  The debugger itself is not implemented in configuration step 1.
+
+config DC_SIM_WAVE
+	bool "Build VCD waveform support"
+	default n
+	help
+	  Build support for Verilator VCD waveform recording.
+	  Waveform recording itself is not implemented in configuration step 1.
+
+endmenu

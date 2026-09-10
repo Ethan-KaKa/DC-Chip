@@ -18,7 +18,8 @@
 ## 当前状态（2026-09-10）
 
 - 当前目录已初始化为 Git 仓库，默认分支为 `main`。
-- 当前已完成阶段 A–E：包含课程原始资料、初版正式规格、ISA package、构建骨架、组合 ALU、decoder、4×16-bit regfile、单周期 CPU 核心、四个自检 testbench、Verilator DPI-C 指令存储器、C++17 端到端驱动，以及覆盖正负路径和精确退出码的完整回归入口。
+- 当前已完成阶段 A–E 及仿真调试基础设施步骤 0–1：除课程原始资料、初版正式规格、ISA package、构建骨架、组合 ALU、decoder、4×16-bit regfile、单周期 CPU 核心、四个自检 testbench、Verilator DPI-C 指令存储器、C++17 端到端驱动和完整回归入口外，已加入固定 Kconfiglib v14.1.0 的 Dconfig 配置生成、Make/C++ 传递及隔离配置测试。
+- `DC_SIM_SDB` 与 `DC_SIM_WAVE` 当前默认关闭；步骤 1 只建立配置基础设施，SDB、执行引擎、反汇编和 VCD 波形均尚未实现，不得按开关名称提前声称功能可用。
 - 初版已确定采用 16 位定长自定义指令、4 个 16 位通用寄存器、8 位字地址 PC、8 条基础指令和单周期执行模式；规范以 `docs/isa/isa.md` 为准。
 - CPU 后续扩展指令、存储映射、板卡具体型号/封装、时钟频率、板级复位极性和演示传感器仍未定稿。
 - 在对应规格落盘前，不得把上述未决项当成既定事实写入 RTL 或测试。
@@ -208,11 +209,15 @@ build/        # 生成物，不作为源码
 
 ## 构建命令状态
 
-本项目当前已实现阶段 A–E 的工具检查、RTL lint、模块测试、端到端仿真和完整回归入口：
+本项目当前已实现阶段 A–E 及配置步骤 1 的工具检查、Dconfig、RTL lint、模块测试、端到端仿真和完整回归入口：
 
 ```bash
 make check-tools
 make help
+make defconfig
+make menuconfig
+make config-show
+make test-config
 make lint-comb
 make test-alu
 make test-decoder
