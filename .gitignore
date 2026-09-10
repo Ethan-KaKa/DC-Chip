@@ -36,3 +36,6 @@
 
 # Local course reference files
 docs/sources/
+
+# DC-Chip generated outputs
+/build/
