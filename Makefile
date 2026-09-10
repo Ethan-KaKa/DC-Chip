@@ -19,7 +19,8 @@ UNIT_TBS := sim/tb/tb_alu.sv \
 
 .DEFAULT_GOAL := help
 
-.PHONY: check-tools help lint-comb test-alu test-decoder
+.PHONY: check-tools help lint-comb lint test-alu test-decoder \
+	test-regfile test-core test-unit
 
 check-tools:
 	@set -eu; \
@@ -53,6 +54,10 @@ lint-comb:
 	$(VERILATOR) --lint-only --language 1800-2012 -Wall \
 		--top-module decoder $(ISA_PKG) rtl/core/decoder.sv
 
+lint:
+	$(VERILATOR) --lint-only --language 1800-2012 -Wall \
+		--top-module cpu_core $(CORE_RTL)
+
 $(UNIT_DIR):
 	mkdir -p $@
 
@@ -62,28 +67,46 @@ $(UNIT_DIR)/tb_alu.vvp: $(ISA_PKG) rtl/core/alu.sv sim/tb/tb_alu.sv | $(UNIT_DIR
 $(UNIT_DIR)/tb_decoder.vvp: $(ISA_PKG) rtl/core/decoder.sv sim/tb/tb_decoder.sv | $(UNIT_DIR)
 	$(IVERILOG) -g2012 -s tb_decoder -o $@ $^
 
+$(UNIT_DIR)/tb_regfile.vvp: $(ISA_PKG) rtl/core/regfile.sv sim/tb/tb_regfile.sv | $(UNIT_DIR)
+	$(IVERILOG) -g2012 -s tb_regfile -o $@ $^
+
+$(UNIT_DIR)/tb_cpu_core.vvp: $(CORE_RTL) sim/tb/tb_cpu_core.sv | $(UNIT_DIR)
+	$(IVERILOG) -g2012 -s tb_cpu_core -o $@ $^
+
 test-alu: $(UNIT_DIR)/tb_alu.vvp
 	$(VVP) $<
 
 test-decoder: $(UNIT_DIR)/tb_decoder.vvp
 	$(VVP) $<
 
+test-regfile: $(UNIT_DIR)/tb_regfile.vvp
+	$(VVP) $<
+
+test-core: $(UNIT_DIR)/tb_cpu_core.vvp
+	$(VVP) $<
+
+test-unit:
+	$(MAKE) --no-print-directory test-alu
+	$(MAKE) --no-print-directory test-decoder
+	$(MAKE) --no-print-directory test-regfile
+	$(MAKE) --no-print-directory test-core
+
 help:
 	@printf '%s\n' \
 		'DC-Chip build entry points' \
 		'' \
-		'Available in stages A-B:' \
+		'Available in stages A-C:' \
 		'  make check-tools  Check required tools and C++17 support' \
 		'  make help         Show this help without creating build output' \
 		'  make lint-comb    Lint the combinational ALU and decoder' \
 		'  make test-alu     Run the self-checking ALU testbench' \
 		'  make test-decoder Run the self-checking decoder testbench' \
+		'  make lint         Lint the complete CPU core' \
+		'  make test-regfile Run the self-checking register-file testbench' \
+		'  make test-core    Run the self-checking CPU-core testbench' \
+		'  make test-unit    Run all four unit testbenches in order' \
 		'' \
 		'Planned for later stages (not implemented yet):' \
-		'  make lint' \
-		'  make test-regfile' \
-		'  make test-core' \
-		'  make test-unit' \
 		'  make sim-build' \
 		'  make sim IMG=<hex> [STEPS=<n>] [TRACE=1]' \
 		'  make test-integration' \

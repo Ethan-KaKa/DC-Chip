@@ -72,7 +72,7 @@ Icarus 和 Verilator 的通过结果只标记为 behavioral simulation。lint、
 | 日期 | 命令 | 结果 | 环境或备注 |
 | --- | --- | --- | --- |
 | 2026-09-10 | `make check-tools` | PASS | GNU Make 4.3；Verilator 5.041 devel；Icarus/vvp 13.0 devel；G++ 13.3.0；C++17 syntax check PASS |
-| 2026-09-10 | `make help` | PASS | 列出阶段 A 可用目标和后续规划目标；未创建 `build/` |
+| 2026-09-10 | `make help` | PASS | 当前列出阶段 A–C 可用目标和阶段 D–E 规划目标；目标本身不创建构建输出 |
 
 ### 阶段 B
 
@@ -84,7 +84,18 @@ Icarus 和 Verilator 的通过结果只标记为 behavioral simulation。lint、
 
 阶段 A–B 的五条累计门禁已按顺序复跑并通过。两个 testbench 均为有限超时自检，成功时分别输出单行 `tb_alu: PASS` 和 `tb_decoder: PASS`。生成物仅位于被忽略的 `build/unit/`。
 
-阶段 C–E：未执行。
+### 阶段 C
+
+| 日期 | 命令 | 结果 | 环境或备注 |
+| --- | --- | --- | --- |
+| 2026-09-10 | `make lint` | PASS | Verilator 5.041 devel；以 `cpu_core` 为 top，按 package、decoder、ALU、regfile、core 顺序检查；零 warning、零 error |
+| 2026-09-10 | `make test-regfile` | PASS | Icarus/vvp 13.0 devel behavioral simulation；覆盖同步复位、写保持、`R0`–`R3`、双组合读、沿前/沿后值、复位优先及 debug 拼接 |
+| 2026-09-10 | `make test-core` | PASS | Icarus/vvp 13.0 devel behavioral simulation；覆盖两周期复位、8 条 ISA smoke、JUMP loop、PC 回绕、连续 trace、非法冻结及 reset 恢复 |
+| 2026-09-10 | `make test-unit` | PASS | 顺序递归执行 ALU、decoder、regfile、cpu_core；四项均返回 0 且各自输出单行 PASS |
+
+阶段 A–C 的九条累计门禁已按顺序复跑并通过。四个 testbench 均为有限超时自检，生成物仅为被 `/build/` 忽略的 `build/unit/tb_alu.vvp`、`tb_decoder.vvp`、`tb_regfile.vvp` 和 `tb_cpu_core.vvp`。
+
+阶段 D–E：未执行。DPI-C、集成测试、Vivado 综合/实现、时序、资源、功耗和真实板卡均未验证。
 
 ## 8. 后续验证
 

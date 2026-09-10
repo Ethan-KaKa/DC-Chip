@@ -18,7 +18,7 @@
 ## 当前状态（2026-09-10）
 
 - 当前目录已初始化为 Git 仓库，默认分支为 `main`。
-- 当前包含课程原始资料、初版正式规格、ISA package、阶段 A 构建骨架，以及阶段 B 的组合 ALU、decoder 和自检 testbench；尚无 regfile、CPU 核心或 DPI-C 仿真驱动。
+- 当前已完成阶段 A–C：包含课程原始资料、初版正式规格、ISA package、构建骨架、组合 ALU、decoder、4×16-bit regfile、单周期 CPU 核心及四个自检 testbench；尚无 DPI-C 仿真驱动或集成测试。
 - 初版已确定采用 16 位定长自定义指令、4 个 16 位通用寄存器、8 位字地址 PC、8 条基础指令和单周期执行模式；规范以 `docs/isa/isa.md` 为准。
 - CPU 后续扩展指令、存储映射、板卡具体型号/封装、时钟频率、板级复位极性和演示传感器仍未定稿。
 - 在对应规格落盘前，不得把上述未决项当成既定事实写入 RTL 或测试。
@@ -202,7 +202,7 @@ build/        # 生成物，不作为源码
 
 ## 构建命令状态
 
-本项目当前已实现阶段 A–B 的工具检查、组合 lint 和模块测试入口：
+本项目当前已实现阶段 A–C 的工具检查、RTL lint 和模块测试入口：
 
 ```bash
 make check-tools
@@ -210,18 +210,23 @@ make help
 make lint-comb
 make test-alu
 make test-decoder
+make lint
+make test-regfile
+make test-core
+make test-unit
 ```
 
-其余目标仍是后续阶段的规划接口，未实现前不得声称已经运行：
+阶段 D–E 及后续流程仍未实现，未实现前不得声称已经运行：
 
 ```bash
-make lint
+make sim-build
 make sim
+make test-integration
 make test
+make clean
 make sw
 make fpga-synth
 make fpga-bitstream
-make clean
 ```
 
 不要把 Vivado 的临时工程目录当成唯一构建方法；脚本、源文件清单、顶层、器件型号和 XDC 应可追踪、可复现。
