@@ -7,6 +7,8 @@ BUILD_DIR ?= build
 UNIT_DIR  := $(BUILD_DIR)/unit
 SIM_DIR   := $(BUILD_DIR)/verilator
 SIM_BIN   := $(SIM_DIR)/Vsim_top
+SIM_TEST_DIR := $(BUILD_DIR)/verilator-test
+SIM_TEST_BIN := $(SIM_TEST_DIR)/test_simulation
 CONFIG_FILE := .config
 CONFIG_DIR  := $(BUILD_DIR)/config
 AUTO_CONF   := $(CONFIG_DIR)/auto.conf
@@ -26,9 +28,13 @@ UNIT_TBS := sim/tb/tb_alu.sv \
 	sim/tb/tb_cpu_core.sv
 SIM_RTL := $(CORE_RTL) \
 	sim/verilator/sim_top.sv
-SIM_CPP := sim/verilator/memory.cpp \
-	sim/verilator/main.cpp
+SIM_ENGINE_CPP := sim/verilator/memory.cpp \
+	sim/verilator/simulation.cpp
+SIM_CLI_CPP := sim/verilator/main.cpp
+SIM_CPP := $(SIM_ENGINE_CPP) $(SIM_CLI_CPP)
+SIM_TEST_CPP := sim/tests/test_simulation.cpp
 SIM_CONFIG_CXXFLAGS := -I$(abspath $(CONFIG_DIR)) \
+	-I$(abspath sim/verilator) \
 	-include $(abspath $(CONFIG_H))
 SIM_CXXFLAGS := -std=c++17 -Wall -Wextra -Wpedantic $(SIM_CONFIG_CXXFLAGS)
 CONFIG_INPUTS := Dconfig \
@@ -39,7 +45,7 @@ CONFIG_CMD = $(PYTHON) scripts/config.py \
 	--config "$(abspath $(CONFIG_FILE))" \
 	--output-dir "$(abspath $(CONFIG_DIR))"
 
-ifneq ($(filter sim-build sim test-integration test,$(MAKECMDGOALS)),)
+ifneq ($(filter sim-build sim test-simulation test-integration test,$(MAKECMDGOALS)),)
 -include $(AUTO_CONF)
 endif
 
@@ -47,7 +53,7 @@ endif
 
 .PHONY: check-tools help defconfig menuconfig config-show test-config \
 	lint-comb lint test-alu test-decoder test-regfile test-core test-unit \
-	sim-build sim test-integration test clean
+	sim-build sim test-simulation test-integration test clean
 
 check-tools:
 	@set -eu; \
@@ -151,7 +157,8 @@ test-unit:
 	$(MAKE) --no-print-directory test-regfile
 	$(MAKE) --no-print-directory test-core
 
-$(SIM_BIN): $(SIM_RTL) $(SIM_CPP) sim/verilator/memory.h Makefile \
+$(SIM_BIN): $(SIM_RTL) $(SIM_CPP) sim/verilator/memory.h \
+	sim/verilator/simulation.h Makefile \
 	$(CONFIG_H) $(AUTO_CONF)
 	mkdir -p $(SIM_DIR)
 	CCACHE_DISABLE=1 CXX="$(CXX)" $(VERILATOR) --cc --exe --build \
@@ -166,6 +173,25 @@ $(SIM_BIN): $(SIM_RTL) $(SIM_CPP) sim/verilator/memory.h Makefile \
 		-isystem "$$verilator_root/include/vltstd" $(SIM_CPP)
 
 sim-build: $(SIM_BIN)
+
+$(SIM_TEST_BIN): $(SIM_RTL) $(SIM_ENGINE_CPP) $(SIM_TEST_CPP) \
+	sim/verilator/memory.h sim/verilator/simulation.h Makefile \
+	$(CONFIG_H) $(AUTO_CONF)
+	mkdir -p $(SIM_TEST_DIR)
+	CCACHE_DISABLE=1 CXX="$(CXX)" $(VERILATOR) --cc --exe --build \
+		--language 1800-2012 -Wall --top-module sim_top \
+		--Mdir $(SIM_TEST_DIR) -o test_simulation \
+		-CFLAGS "-std=c++17 $(SIM_CONFIG_CXXFLAGS)" \
+		$(SIM_RTL) $(SIM_ENGINE_CPP) $(SIM_TEST_CPP)
+	@verilator_root=$$($(VERILATOR) --getenv VERILATOR_ROOT); \
+	CCACHE_DISABLE=1 $(CXX) $(SIM_CXXFLAGS) -fsyntax-only \
+		-I$(SIM_TEST_DIR) -Isim/verilator \
+		-isystem "$$verilator_root/include" \
+		-isystem "$$verilator_root/include/vltstd" \
+		$(SIM_ENGINE_CPP) $(SIM_TEST_CPP)
+
+test-simulation: $(SIM_TEST_BIN)
+	$(SIM_TEST_BIN) "$(abspath sim/tests)"
 
 sim:
 	@set -eu; \
@@ -197,6 +223,7 @@ test:
 	$(MAKE) --no-print-directory test-config
 	$(MAKE) --no-print-directory lint
 	$(MAKE) --no-print-directory test-unit
+	$(MAKE) --no-print-directory test-simulation
 	$(MAKE) --no-print-directory test-integration
 
 clean:
@@ -213,7 +240,7 @@ help:
 	@printf '%s\n' \
 		'DC-Chip build entry points' \
 		'' \
-		'Available through simulator configuration step 1:' \
+		'Available through simulator execution-engine step 2:' \
 		'  make check-tools  Check required tools, Python curses, and C++17' \
 		'  make help         Show this help without creating build output' \
 		'  make defconfig    Reset .config to configs/default_defconfig' \
@@ -229,8 +256,9 @@ help:
 		'  make test-unit    Run all four unit testbenches in order' \
 		'  make sim-build    Build the Verilator DPI-C simulator' \
 		'  make sim IMG=<hex> [STEPS=<n>] [TRACE=1]' \
+		'  make test-simulation  Test the reusable Simulation engine' \
 		'  make test-integration  Run positive and negative integration cases' \
-		'  make test         Run config, lint, unit, and integration regression' \
+		'  make test         Run config, lint, unit, engine, and CLI regression' \
 		'  make clean        Remove only the repository-root build directory' \
 		'' \
 		'Configurable variables:' \

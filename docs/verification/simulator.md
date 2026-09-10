@@ -1,7 +1,7 @@
 # DC-Chip Verilator 仿真器使用与接口约定
 
 - 版本：v0.1
-- 状态：阶段 D–E 基线及仿真配置步骤 1 已实现
+- 状态：阶段 D–E 基线及仿真调试基础设施步骤 1–2 已实现
 - 更新日期：2026-09-10
 - ISA 规范：[`../isa/isa.md`](../isa/isa.md)
 - 验证计划：[`plan.md`](plan.md)
@@ -9,8 +9,8 @@
 ## 1. 适用范围
 
 本文记录当前 Verilator behavioral simulation 的稳定使用接口，包括 DPI-C
-取指边界、HEX 镜像格式、命令行参数、运行生命周期和退出码。实现位于
-`sim/verilator/`，集成用例位于 `sim/tests/`。
+取指边界、HEX 镜像格式、命令行参数、统一执行引擎、运行生命周期和退出码。
+实现位于 `sim/verilator/`，引擎自检与 CLI 集成用例位于 `sim/tests/`。
 
 仿真器只支持 ISA v0.1 的组合零等待取指协议。它不定义最终可执行文件
 ABI，也不能作为综合、时序、功耗或 FPGA 上板证据。
@@ -86,20 +86,52 @@ Vsim_top --help
 溢出、缺值、未知参数、未知 expectation、重复单值参数或重复 expectation
 均属于输入错误。
 
-## 5. 仿真生命周期与判定
+## 5. Simulation 执行引擎
 
-CLI 和镜像校验成功后，驱动创建模型并执行：
+`simulation.h/.cpp` 提供与 CLI 分离的 `dc_sim::Simulation`。公开头文件通过
+PIMPL 隐藏 `Vsim_top`、`VerilatedContext` 等 Verilator 类型；每个实例独占
+context、模型、时钟相位、仿真时间及周期/提交计数，析构时只调用一次
+`final()`。`main.cpp` 只保留参数解析、镜像加载、batch 调度、格式化与退出码
+映射。
 
-1. 初始化 `clk=0`、`rst=1`，驱动两个完整同步复位周期；
-2. 在低电平释放复位并清除加载期间产生的组合取指越界记录；
-3. 每个非复位上升沿 `eval()` 后统计一次周期，并仅在 `trace_valid=1` 时
-   增加提交计数；
-4. 按“目标提交完成、非法状态、超时”的固定顺序判断结果；
-5. 模型创建后的每个退出路径都调用 `final()`。
+主要状态和控制接口如下：
 
-目标提交完成优先于检查该沿之后的组合状态，因此最后一次合法提交造成的
-下一地址越界预取不会覆盖成功结果。尚未完成目标时，实际执行保留编码、
-非规范编码或越界返回的 `0x8000` 均按非法指令处理。
+- `ArchitecturalState` 包含当前 `fetch_pc/fetch_inst`、`R0`–`R3`、reset 后
+  非复位 `cycles`、`commits` 和包含 reset 推进在内的单调 `time`；
+- `StepEvent` 描述本周期提交及其 PC/指令、是否进入非法状态，以及是否实际
+  执行了越界取指；
+- `reset()`、`step_cycle()`、`step_instruction(max_cycles)`、
+  `run_until(target, count, max_cycles, breakpoints)` 和 `snapshot()` 构成统一
+  推进入口；
+- `RunTarget` 区分无数量目标、周期目标和提交目标；`StopReason` 区分周期或
+  提交完成、执行前断点、普通非法、越界取指、超时，并为后续 SDB 预留
+  `quit`。
+
+`reset()` 必须且只能在执行前调用一次。它从稳定低电平驱动两个完整同步复位
+周期，在低电平释放 reset，并清除模型加载和 reset 期间的 DPI 越界记录；这些
+边沿推进 `time`，但 `cycles` 和 `commits` 保持为零。未 reset 就步进或重复
+reset 属于内部接口误用，以 C++ 异常明确失败。
+
+`step_cycle()` 总是从稳定低电平开始，依次完成上升沿和下降沿并回到低电平；
+每次只增加一个非复位周期，且只在 `trace_valid=1` 时增加一次提交。提交事件
+保存上升沿对应的 `trace_pc/trace_inst`。batch 模式逐次调用
+`step_instruction()`，所以 `--steps` 始终按提交而非时钟周期计数。
+
+`run_until()` 的 `count` 相对本次调用起点，`max_cycles` 是 reset 后的绝对全局
+周期上限；断点集合使用 8 位 PC，并在目标指令执行前检查。每轮固定按以下
+顺序停止：
+
+1. 执行前已达到全局周期上限；
+2. 执行前断点；
+3. 推进一个完整周期；
+4. 达到提交目标；
+5. 实际进入非法状态，并按 DPI 首次越界地址细分普通非法与越界取指；
+6. 达到全局周期上限；
+7. 达到周期目标。
+
+只有 `illegal_inst=1` 且 DPI 首次越界地址等于该周期实际执行的 `fetch_pc` 时，
+停止原因为越界取指。提交目标先于非法分类，因此最后一次合法提交造成的下一
+地址组合预取不会覆盖成功结果；下一次步进才会实际执行并报告越界。
 
 ## 6. 输出与退出码
 
@@ -140,6 +172,7 @@ summary commits=<n> cycles=<n> pc=0x00 r0=0x0000 r1=0x0000 r2=0x0000 r3=0x0000
 make sim-build
 make sim IMG=<hex> [STEPS=<n>] [TRACE=1]
 make test-config
+make test-simulation
 make test-integration
 make test
 make clean
@@ -150,7 +183,9 @@ package、decoder、ALU、regfile、core、wrapper 的顺序构建
 `build/verilator/Vsim_top`；项目 C++ 源采用 C++17，并执行
 `-Wall -Wextra -Wpedantic` 语法检查。
 
-`make test-integration` 对正向程序和负向输入逐项比较精确退出码，
-`make test` 依次运行配置测试、lint、模块测试和集成测试。`make clean` 只允许删除
-仓库根目录的默认 `build/`。所有生成物、fixture 和日志必须留在被忽略的
-`/build/` 中；本地 `.config` 由 `make clean` 保留。
+`make test-simulation` 在独立 `build/verilator-test/` Mdir 中直接调用引擎，
+与正式 `build/verilator/Vsim_top` 隔离。`make test-integration` 的 19 个 CLI
+用例逐项比较精确退出码，并对 summary、trace、普通非法、越界、timeout 和
+状态失配执行精确文本断言。`make test` 依次运行配置、RTL lint/模块测试、
+Simulation 引擎自检和 CLI 集成测试。`make clean` 只允许删除仓库根目录的默认
+`build/`；本地 `.config` 由 `make clean` 保留。

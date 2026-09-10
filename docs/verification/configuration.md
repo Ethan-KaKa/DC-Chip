@@ -1,7 +1,7 @@
 # DC-Chip 构建配置说明
 
 - 版本：v0.1
-- 状态：仿真调试基础设施步骤 1 已实现
+- 状态：配置步骤 1 已实现；统一执行引擎步骤 2 已接入
 - 更新日期：2026-09-10
 - 配置规范：仓库根目录 `Dconfig`
 - 仿真器接口：[`simulator.md`](simulator.md)
@@ -72,9 +72,10 @@ build/config/auto.conf
 build/config/config.h
 ```
 
-只有 `sim-build`、`sim`、`test-integration` 和 `test` 在 Make 解析期间加载
-`auto.conf`。`help`、lint 和独立模块测试不会因为配置系统自动创建 `.config`
-或配置生成目录。Verilator 编译与独立 C++17 syntax check 都使用
+只有 `sim-build`、`sim`、`test-simulation`、`test-integration` 和 `test` 在
+Make 解析期间加载 `auto.conf`。`help`、lint 和独立 RTL 模块测试不会因为
+配置系统自动创建 `.config` 或配置生成目录。正式 CLI 与独立 Simulation
+引擎测试的 Verilator 编译和 C++17 syntax check 都使用
 `-Ibuild/config -include config.h`，从同一头文件读取配置。
 
 `make clean` 仍只删除默认仓库根 `build/`，不会删除用户 `.config`。可用

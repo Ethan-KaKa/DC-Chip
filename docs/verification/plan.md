@@ -1,7 +1,7 @@
 # DC-Chip 初版验证计划
 
 - 版本：v0.1
-- 状态：初版 CPU 基线及仿真配置步骤 1
+- 状态：初版 CPU 基线及仿真调试基础设施步骤 1–2
 - 更新日期：2026-09-10
 - ISA 规范：`docs/isa/isa.md` v0.1
 - 仿真器接口：[`simulator.md`](simulator.md)
@@ -22,6 +22,7 @@ Icarus 和 Verilator 的通过结果只标记为 behavioral simulation。lint、
 | D | DPI-C 端到端闭环 | `make sim-build`；smoke；jump-loop | 精确 trace、最终状态和组合越界预取处理 |
 | E | 完整正负回归 | `make test-integration`；`make test`；`make clean && make test` | 精确退出码和干净重建 |
 | F | Dconfig 配置基础设施 | `make test-config`；`make test` | 隔离配置测试、四种配置值/头文件编译、既有回归兼容 |
+| G | 统一 Simulation 执行引擎 | `make test-simulation`；`make test-integration`；`make test` | 生命周期、周期/提交步进、停止优先级及 CLI 兼容 |
 
 阶段必须顺序完成。任一命令失败后立即停止，不运行当前阶段的后续命令，也不进入下一阶段。修复后先重跑失败项，再从阶段 A 起重跑截至当前阶段的所有累计门禁。
 
@@ -45,7 +46,9 @@ HEX 镜像、DPI-C 边界、命令行参数、运行生命周期和退出码的�
 
 - ISA smoke：提交 PC 为 `0,1,2,3,4,5,6,7`，最终 `R0=0x0000 R1=0x0002 R2=0x0002 R3=0x0000 PC=0x08`；
 - jump-loop：提交 PC 为 `0,1,2,1,2`，最终 `R0=0x0000 R1=0x0003 R2=0x0000 R3=0x0000 PC=0x01`；
-- 达到目标提交数后的组合越界预取不覆盖成功结果。
+- 达到目标提交数后的组合越界预取不覆盖成功结果；
+- 单步 trace 的首条指令为 `cycle=1 commit=1`，两个 reset 周期不进入用户计数；
+- jump-loop 五条完整 trace 的周期、提交、PC、寄存器与 summary 逐字匹配。
 
 负向测试包括保留 opcode、非规范编码、文件不存在、空镜像、非法字符、非 4 位数据、超过 256 个有效字、超时、最终状态失配、重复 expectation、未知参数和缺失参数。
 
@@ -68,7 +71,8 @@ HEX 镜像、DPI-C 边界、命令行参数、运行生命周期和退出码的�
 - 超时必须为有限正整数；
 - 修复协议或时序问题时不得增加无规范依据的延时、脉冲或跳过比较；
 - 原始大日志、波形和生成物只进入 `/build/`，不得纳入版本管理；
-- `make test` 固定按 config、lint、unit、integration 顺序执行并在首个失败处停止。
+- `make test` 固定按 config、lint、unit、Simulation engine、CLI integration
+  顺序执行并在首个失败处停止。
 
 ## 7. 验证执行记录
 
@@ -151,6 +155,33 @@ Kconfiglib 固定为 v14.1.0，三个上游原文件的 SHA-256 已与
 `tools/kconfiglib/UPSTREAM.md` 一致。步骤 1 仅验证配置值传递和 C++ 编译；
 SDB、VCD 波形、执行引擎、反汇编功能均未实现。Vivado 综合/实现、时序、
 资源、功耗和真实板卡仍未验证。
+
+### 阶段 G：仿真调试基础设施步骤 2
+
+步骤 2 将模型生命周期、reset、稳定低电平周期推进、仿真时间、周期/提交计数
+和停止分类统一收敛到 `Simulation`。独立引擎测试使用
+`build/verilator-test/`，不与正式 CLI 的 Verilator Mdir 混用。CLI 保持原参数、
+输出与退出码，并逐次按提交调用指令步进接口。
+
+执行引擎自检覆盖 reset 状态和计数、单周期提交、jump-loop 五次指令步进、
+周期/提交目标、执行前断点、普通非法、实际越界、绝对全局 timeout、末次合法
+提交优先级，以及未 reset 执行和重复 reset 的明确失败。CLI runner 保留原有
+17 个退出码用例，并增加单步与 jump-loop 精确 trace，总计 19 个用例；同时对
+成功 summary、trace、普通非法、越界、timeout 和状态失配执行精确文本断言。
+
+| 日期 | 命令 | 结果 | 环境或备注 |
+| --- | --- | --- | --- |
+| 2026-09-10 | `make check-tools`；修改前 `make test` | PASS | GNU Make 4.3；Verilator 5.041 devel；Icarus/vvp 13.0 devel；G++ 13.3.0；修改前 17 项基线全部通过 |
+| 2026-09-10 | `make help`（临时移开 `.config` 且清空 `build/`） | PASS | 未创建 `.config` 或 `build/`，随后原样恢复本地配置 |
+| 2026-09-10 | `make test-simulation` | PASS | 独立 Mdir 直接验证 Simulation 生命周期、步进、停止原因与误用路径 |
+| 2026-09-10 | `make test-integration` | PASS | 19 个 CLI 用例精确退出码全部通过，新增两项精确 trace 及六类精确文本断言 |
+| 2026-09-10 | `make test` | PASS | config、RTL lint、4 个模块 testbench、Simulation engine 和 CLI integration 全部通过 |
+| 2026-09-10 | `make clean && make test` | PASS | 从空 `build/` 重建两个隔离的 Verilator Mdir；默认配置为 `n/n` 且正式 CLI 为 `VM_TRACE=0` |
+| 2026-09-10 | `git diff --check` | PASS | 本任务源码与文档变更无 whitespace error |
+
+步骤 2 不实现或启用 SDB、断点恢复策略、反汇编或 VCD，也不修改 RTL、ISA、
+DPI 接口、HEX 格式或软件 ABI。Vivado 综合/实现、时序、资源、功耗和真实板卡
+仍未验证。
 
 ## 8. 后续验证
 

@@ -1,6 +1,5 @@
-#include "Vsim_top.h"
 #include "memory.h"
-#include "verilated.h"
+#include "simulation.h"
 
 #include <array>
 #include <charconv>
@@ -8,7 +7,6 @@
 #include <iomanip>
 #include <iostream>
 #include <limits>
-#include <memory>
 #include <optional>
 #include <sstream>
 #include <string>
@@ -230,55 +228,46 @@ std::string hex_value(std::uint64_t value, int width) {
   return output.str();
 }
 
-std::array<std::uint16_t, 4> read_registers(const Vsim_top &top) {
-  const std::uint64_t packed = top.debug_regs;
-  std::array<std::uint16_t, 4> registers{};
-  for (std::size_t index = 0; index < registers.size(); ++index) {
-    registers[index] =
-        static_cast<std::uint16_t>((packed >> (index * 16U)) & 0xffffU);
-  }
-  return registers;
-}
-
-void print_state_summary(std::uint64_t commits, std::uint64_t cycles,
-                         const Vsim_top &top) {
-  const auto registers = read_registers(top);
-  std::cout << "summary commits=" << commits << " cycles=" << cycles
-            << " pc=" << hex_value(top.fetch_pc, 2);
-  for (std::size_t index = 0; index < registers.size(); ++index) {
-    std::cout << " r" << index << "=" << hex_value(registers[index], 4);
+void print_state_summary(const dc_sim::ArchitecturalState &state) {
+  std::cout << "summary commits=" << state.commits
+            << " cycles=" << state.cycles
+            << " pc=" << hex_value(state.fetch_pc, 2);
+  for (std::size_t index = 0; index < state.registers.size(); ++index) {
+    std::cout << " r" << index << "="
+              << hex_value(state.registers[index], 4);
   }
   std::cout << '\n';
 }
 
-void print_trace(std::uint64_t cycle, std::uint64_t commit,
-                 const Vsim_top &top) {
-  const auto registers = read_registers(top);
-  std::cout << "cycle=" << cycle << " commit=" << commit
-            << " pc=" << hex_value(top.trace_pc, 2)
-            << " inst=" << hex_value(top.trace_inst, 4);
-  for (std::size_t index = 0; index < registers.size(); ++index) {
-    std::cout << " r" << index << "=" << hex_value(registers[index], 4);
+void print_trace(const dc_sim::StepEvent &event,
+                 const dc_sim::ArchitecturalState &state) {
+  std::cout << "cycle=" << state.cycles << " commit=" << state.commits
+            << " pc=" << hex_value(event.commit_pc, 2)
+            << " inst=" << hex_value(event.commit_inst, 4);
+  for (std::size_t index = 0; index < state.registers.size(); ++index) {
+    std::cout << " r" << index << "="
+              << hex_value(state.registers[index], 4);
   }
   std::cout << '\n';
 }
 
-bool check_expectations(const Options &options, const Vsim_top &top) {
+bool check_expectations(const Options &options,
+                        const dc_sim::ArchitecturalState &state) {
   bool matches = true;
-  const auto registers = read_registers(top);
-  for (std::size_t index = 0; index < registers.size(); ++index) {
+  for (std::size_t index = 0; index < state.registers.size(); ++index) {
     if (options.expected_registers[index].has_value() &&
-        registers[index] != *options.expected_registers[index]) {
+        state.registers[index] != *options.expected_registers[index]) {
       std::cerr << "error: r" << index << " expected "
                 << hex_value(*options.expected_registers[index], 4)
-                << " but got " << hex_value(registers[index], 4) << '\n';
+                << " but got " << hex_value(state.registers[index], 4)
+                << '\n';
       matches = false;
     }
   }
   if (options.expected_pc.has_value() &&
-      top.fetch_pc != *options.expected_pc) {
+      state.fetch_pc != *options.expected_pc) {
     std::cerr << "error: pc expected " << hex_value(*options.expected_pc, 2)
-              << " but got " << hex_value(top.fetch_pc, 2) << '\n';
+              << " but got " << hex_value(state.fetch_pc, 2) << '\n';
     matches = false;
   }
   return matches;
@@ -317,71 +306,39 @@ int main(int argc, char **argv) {
     max_cycles = steps + 4U;
   }
 
-  auto context = std::make_unique<VerilatedContext>();
-  context->commandArgs(argc, argv);
-  auto top = std::make_unique<Vsim_top>(context.get());
-  const auto finish = [&](int exit_code) {
-    top->final();
-    return exit_code;
-  };
-
-  top->clk = 0;
-  top->rst = 1;
-  top->eval();
-  for (int reset_cycle = 0; reset_cycle < 2; ++reset_cycle) {
-    top->clk = 0;
-    top->eval();
-    top->clk = 1;
-    top->eval();
-  }
-  top->clk = 0;
-  top->rst = 0;
-  top->eval();
-  dc_sim::clear_fetch_status();
-
-  std::uint64_t commits = 0;
-  std::uint64_t cycles = 0;
-  while (true) {
-    top->clk = 1;
-    top->eval();
-    ++cycles;
-
-    if (top->trace_valid != 0) {
-      ++commits;
+  dc_sim::Simulation simulation(argc, argv);
+  simulation.reset();
+  for (std::uint64_t step = 0; step < steps; ++step) {
+    const dc_sim::RunResult result =
+        simulation.step_instruction(max_cycles);
+    if (result.reason == dc_sim::StopReason::commits_complete) {
       if (options.trace) {
-        print_trace(cycles, commits, *top);
+        print_trace(result.event, result.state);
       }
+      continue;
     }
-
-    if (commits == steps) {
-      print_state_summary(commits, cycles, *top);
-      if (!check_expectations(options, *top)) {
-        return finish(kStateMismatch);
-      }
-      return finish(kSuccess);
-    }
-
-    if (top->illegal_inst != 0) {
-      if (dc_sim::fetch_out_of_bounds() &&
-          dc_sim::first_oob_address() == top->fetch_pc) {
-        std::cerr << "error: executed out-of-bounds instruction fetch at pc="
-                  << hex_value(top->fetch_pc, 2) << " inst="
-                  << hex_value(top->fetch_inst, 4) << '\n';
+    if (result.reason == dc_sim::StopReason::illegal_instruction ||
+        result.reason == dc_sim::StopReason::out_of_bounds_fetch) {
+      if (result.reason == dc_sim::StopReason::out_of_bounds_fetch) {
+        std::cerr << "error: executed out-of-bounds instruction fetch at pc=";
       } else {
-        std::cerr << "error: illegal instruction at pc="
-                  << hex_value(top->fetch_pc, 2) << " inst="
-                  << hex_value(top->fetch_inst, 4) << '\n';
+        std::cerr << "error: illegal instruction at pc=";
       }
-      return finish(kIllegalInstruction);
+      std::cerr << hex_value(result.state.fetch_pc, 2) << " inst="
+                << hex_value(result.state.fetch_inst, 4) << '\n';
+      return kIllegalInstruction;
     }
-
-    if (cycles == max_cycles) {
-      std::cerr << "error: timeout after " << cycles << " cycles and "
-                << commits << " commits\n";
-      return finish(kTimeout);
+    if (result.reason == dc_sim::StopReason::timeout) {
+      std::cerr << "error: timeout after " << result.state.cycles
+                << " cycles and " << result.state.commits << " commits\n";
+      return kTimeout;
     }
-
-    top->clk = 0;
-    top->eval();
   }
+
+  const dc_sim::ArchitecturalState final_state = simulation.snapshot();
+  print_state_summary(final_state);
+  if (!check_expectations(options, final_state)) {
+    return kStateMismatch;
+  }
+  return kSuccess;
 }
