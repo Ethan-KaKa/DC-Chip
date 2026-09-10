@@ -72,7 +72,7 @@ Icarus 和 Verilator 的通过结果只标记为 behavioral simulation。lint、
 | 日期 | 命令 | 结果 | 环境或备注 |
 | --- | --- | --- | --- |
 | 2026-09-10 | `make check-tools` | PASS | GNU Make 4.3；Verilator 5.041 devel；Icarus/vvp 13.0 devel；G++ 13.3.0；C++17 syntax check PASS |
-| 2026-09-10 | `make help` | PASS | 当前列出阶段 A–D 可用目标和阶段 E 规划目标；目标本身不创建构建输出 |
+| 2026-09-10 | `make help` | PASS | 当前列出阶段 A–E 可用目标；目标本身不创建构建输出 |
 
 ### 阶段 B
 
@@ -105,7 +105,17 @@ Icarus 和 Verilator 的通过结果只标记为 behavioral simulation。lint、
 
 阶段 A–D 的十二条累计门禁已按顺序复跑并通过。两个程序均返回 0；smoke 的最后一次合法提交后，PC `0x08` 的组合越界预取未覆盖成功结果。Verilator 生成物仅位于被 `/build/` 忽略的 `build/verilator/`。
 
-阶段 E 未执行。负向集成 runner、完整回归、Vivado 综合/实现、时序、资源、功耗和真实板卡均未验证。
+### 阶段 E
+
+| 日期 | 命令 | 结果 | 环境或备注 |
+| --- | --- | --- | --- |
+| 2026-09-10 | `make test-integration` | PASS | Verilator behavioral simulation；17 个用例逐项核对精确退出码：成功/帮助为 0，CLI/HEX 错误为 1，非法或越界取指为 2，超时为 3，状态失配为 4 |
+| 2026-09-10 | `make test` | PASS | 按 lint、四个 Icarus 模块测试、Verilator 集成测试顺序执行；全部返回 0 |
+| 2026-09-10 | `make clean && make test` | PASS | 从空的默认 `build/` 重新生成四个 `.vvp` 和 `Vsim_top` 后重复通过 17 个集成用例；构建零 warning、零 error |
+
+阶段 A–E 的十五条累计门禁均已通过。阶段 E runner 覆盖两个正向程序、保留 opcode、非规范编码、实际越界取指、文件不存在、空镜像、非法字符、错误宽度、257 个有效字、超时、状态失配、重复 expectation、未知参数、缺少参数值和缺少必选镜像。
+
+Vivado 综合/实现、时序、资源、功耗和真实板卡仍未验证。
 
 ## 8. 后续验证
 

@@ -27,7 +27,7 @@ SIM_CXXFLAGS := -std=c++17 -Wall -Wextra -Wpedantic
 .DEFAULT_GOAL := help
 
 .PHONY: check-tools help lint-comb lint test-alu test-decoder \
-	test-regfile test-core test-unit sim-build sim
+	test-regfile test-core test-unit sim-build sim test-integration test clean
 
 check-tools:
 	@set -eu; \
@@ -135,11 +135,30 @@ sim:
 	fi; \
 	$(SIM_BIN) "$$@"
 
+test-integration: sim-build
+	TEST_FIXTURE_DIR="$(abspath $(BUILD_DIR))/test-fixtures" \
+		bash sim/tests/run_integration.sh "$(abspath $(SIM_BIN))"
+
+test:
+	$(MAKE) --no-print-directory lint
+	$(MAKE) --no-print-directory test-unit
+	$(MAKE) --no-print-directory test-integration
+
+clean:
+	@set -eu; \
+	repo_root='$(abspath .)'; \
+	build_dir='$(abspath $(BUILD_DIR))'; \
+	if [ "$$build_dir" != "$$repo_root/build" ]; then \
+		printf 'error: refusing to clean non-default BUILD_DIR: %s\n' "$$build_dir" >&2; \
+		exit 1; \
+	fi; \
+	rm -rf -- "$$build_dir"
+
 help:
 	@printf '%s\n' \
 		'DC-Chip build entry points' \
 		'' \
-		'Available in stages A-D:' \
+		'Available in stages A-E:' \
 		'  make check-tools  Check required tools and C++17 support' \
 		'  make help         Show this help without creating build output' \
 		'  make lint-comb    Lint the combinational ALU and decoder' \
@@ -151,11 +170,9 @@ help:
 		'  make test-unit    Run all four unit testbenches in order' \
 		'  make sim-build    Build the Verilator DPI-C simulator' \
 		'  make sim IMG=<hex> [STEPS=<n>] [TRACE=1]' \
-		'' \
-		'Planned for stage E (not implemented yet):' \
-		'  make test-integration' \
-		'  make test' \
-		'  make clean' \
+		'  make test-integration  Run positive and negative integration cases' \
+		'  make test         Run lint, unit, and integration regression' \
+		'  make clean        Remove only the repository-root build directory' \
 		'' \
 		'Configurable variables:' \
 		'  VERILATOR, IVERILOG, VVP, CXX, BUILD_DIR' \
