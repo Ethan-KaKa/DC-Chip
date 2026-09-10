@@ -1,6 +1,6 @@
 # DC-Chip 初版代码详细实施计划
 
-- 状态：实施中（阶段 A 已完成，阶段 B–E 未执行）
+- 状态：实施中（阶段 A–B 已完成，阶段 C–E 未执行）
 - 更新日期：2026-09-10
 - 上位构思：`docs/00-temp/initial-build-concept.md`
 - 规范来源：`docs/isa/isa.md` v0.1
@@ -399,7 +399,7 @@ RTL 源列表显式列出，`dc_isa_pkg.sv` 必须在首位，不使用递归 `f
 
 ### 9.2 目标契约
 
-当前阶段 A 只实现 `make check-tools` 和 `make help`。`help` 将其余目标明确标记为后续阶段规划接口；下列目标只有在对应阶段完成后才可宣称可用或已经验证。
+当前阶段 A–B 已实现 `make check-tools`、`make help`、`make lint-comb`、`make test-alu` 和 `make test-decoder`。`help` 将阶段 C–E 目标明确标记为后续阶段规划接口；下列目标只有在对应阶段完成后才可宣称可用或已经验证。
 
 - `make check-tools`：依次检查 `verilator`、`iverilog`、`vvp` 和 C++17 编译器是否可执行，打印实际版本；任一工具缺失或不满足构建要求时给出工具名并失败，不自动安装；
 - `make help`：列出本节中真实存在的目标，以及 `BUILD_DIR`、`IMG`、`STEPS` 和 `TRACE` 参数；执行帮助不得隐式编译、运行测试或创建 `build/`；
@@ -417,7 +417,7 @@ Makefile 不自动安装工具，不依赖 `/home/kaka/ysyx-workbench`，也不�
 
 ## 10. 模块级测试
 
-所有 testbench 使用 SystemVerilog 自检和 `$fatal(1, ...)` 报错；成功时打印单行 PASS 后 `$finish`。每个测试设置有限超时，禁止无限等待。
+所有 testbench 使用 SystemVerilog 自检和 `$fatal(1, ...)` 报错；成功时打印单行 PASS 并结束。每个测试设置有限超时，禁止无限等待。
 
 ### 10.1 `tb_alu.sv`
 
@@ -567,6 +567,14 @@ make help
 - 修复后先重跑失败的检查，再依次重跑 `make check-tools`、`make help`，两项均通过后才可退出阶段 A。
 
 ### 阶段 B：组合译码与 ALU
+
+**执行状态：已完成（2026-09-10）**
+
+- 已完成组合 `alu`、`decoder` 及对应的两个有限超时自检 testbench，未修改 ISA v0.1 编码；
+- `make lint-comb`：PASS；Verilator 5.041 devel 分别以 `alu`、`decoder` 为 top，零 warning、零 error；
+- `make test-alu`：PASS；Icarus/vvp 13.0 devel behavioral simulation 覆盖 5 种已分配操作、回绕边界、3 个未分配 ALU 值及 X/Z 操作码；
+- `make test-decoder`：PASS；覆盖 8 个规范示例、8 个保留 opcode、全部规定的非规范字段类型及 opcode/规范条件中的 X/Z；
+- 阶段 A–B 五条累计门禁已按顺序复跑通过；生成物仅位于被 `/build/` 忽略的 `build/unit/`，阶段 C–E、综合、时序、功耗和上板均未执行或未验证。
 
 **进入条件**
 

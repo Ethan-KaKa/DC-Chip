@@ -3,6 +3,7 @@ IVERILOG  ?= iverilog
 VVP       ?= vvp
 CXX       ?= c++
 BUILD_DIR ?= build
+UNIT_DIR  := $(BUILD_DIR)/unit
 
 ISA_PKG := rtl/core/dc_isa_pkg.sv
 COMB_RTL := $(ISA_PKG) \
@@ -18,7 +19,7 @@ UNIT_TBS := sim/tb/tb_alu.sv \
 
 .DEFAULT_GOAL := help
 
-.PHONY: check-tools help
+.PHONY: check-tools help lint-comb test-alu test-decoder
 
 check-tools:
 	@set -eu; \
@@ -46,19 +47,40 @@ check-tools:
 		CCACHE_DISABLE=1 $(CXX) -std=c++17 -x c++ -fsyntax-only -; \
 	printf 'C++17 syntax check: PASS\n'
 
+lint-comb:
+	$(VERILATOR) --lint-only --language 1800-2012 -Wall \
+		--top-module alu $(ISA_PKG) rtl/core/alu.sv
+	$(VERILATOR) --lint-only --language 1800-2012 -Wall \
+		--top-module decoder $(ISA_PKG) rtl/core/decoder.sv
+
+$(UNIT_DIR):
+	mkdir -p $@
+
+$(UNIT_DIR)/tb_alu.vvp: $(ISA_PKG) rtl/core/alu.sv sim/tb/tb_alu.sv | $(UNIT_DIR)
+	$(IVERILOG) -g2012 -s tb_alu -o $@ $^
+
+$(UNIT_DIR)/tb_decoder.vvp: $(ISA_PKG) rtl/core/decoder.sv sim/tb/tb_decoder.sv | $(UNIT_DIR)
+	$(IVERILOG) -g2012 -s tb_decoder -o $@ $^
+
+test-alu: $(UNIT_DIR)/tb_alu.vvp
+	$(VVP) $<
+
+test-decoder: $(UNIT_DIR)/tb_decoder.vvp
+	$(VVP) $<
+
 help:
 	@printf '%s\n' \
 		'DC-Chip build entry points' \
 		'' \
-		'Available in stage A:' \
+		'Available in stages A-B:' \
 		'  make check-tools  Check required tools and C++17 support' \
 		'  make help         Show this help without creating build output' \
+		'  make lint-comb    Lint the combinational ALU and decoder' \
+		'  make test-alu     Run the self-checking ALU testbench' \
+		'  make test-decoder Run the self-checking decoder testbench' \
 		'' \
 		'Planned for later stages (not implemented yet):' \
-		'  make lint-comb' \
 		'  make lint' \
-		'  make test-alu' \
-		'  make test-decoder' \
 		'  make test-regfile' \
 		'  make test-core' \
 		'  make test-unit' \

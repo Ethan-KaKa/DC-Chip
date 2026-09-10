@@ -74,7 +74,17 @@ Icarus 和 Verilator 的通过结果只标记为 behavioral simulation。lint、
 | 2026-09-10 | `make check-tools` | PASS | GNU Make 4.3；Verilator 5.041 devel；Icarus/vvp 13.0 devel；G++ 13.3.0；C++17 syntax check PASS |
 | 2026-09-10 | `make help` | PASS | 列出阶段 A 可用目标和后续规划目标；未创建 `build/` |
 
-阶段 B–E：未执行。
+### 阶段 B
+
+| 日期 | 命令 | 结果 | 环境或备注 |
+| --- | --- | --- | --- |
+| 2026-09-10 | `make lint-comb` | PASS | Verilator 5.041 devel；分别以 `alu`、`decoder` 为 top；零 warning、零 error |
+| 2026-09-10 | `make test-alu` | PASS | Icarus/vvp 13.0 devel behavioral simulation；覆盖 5 种已分配操作、16 位加减回绕、3 个未分配值及 X/Z 操作码 |
+| 2026-09-10 | `make test-decoder` | PASS | Icarus/vvp 13.0 devel behavioral simulation；覆盖 8 个规范示例、全部保留 opcode、各类非规范字段及 opcode/规范条件中的 X/Z |
+
+阶段 A–B 的五条累计门禁已按顺序复跑并通过。两个 testbench 均为有限超时自检，成功时分别输出单行 `tb_alu: PASS` 和 `tb_decoder: PASS`。生成物仅位于被忽略的 `build/unit/`。
+
+阶段 C–E：未执行。
 
 ## 8. 后续验证
 
