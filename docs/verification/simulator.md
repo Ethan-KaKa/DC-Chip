@@ -1,21 +1,27 @@
-# DC-Chip Verilator 仿真器使用与接口约定
+# DC-Chip Verilator 仿真器使用与迁移接口约定
 
-- 版本：v0.1
-- 状态：阶段 D–E 基线及仿真调试基础设施步骤 1–8 已实现并归档
+- 文档版本：v0.2
+- 状态：v0.1 当前接口已归档；v0.2 目标契约尚未实现
 - 更新日期：2026-09-11
-- ISA 规范：[`../isa/isa.md`](../isa/isa.md)
+- 目标 ISA 规范：[`../isa/isa.md`](../isa/isa.md) v0.2
+- v0.1 实现冻结点：`9bfb9a97153be05de34c6d2311c09f41cb6f43ab`
 - 验证计划：[`plan.md`](plan.md)
 
 ## 1. 适用范围
 
-本文记录当前 Verilator behavioral simulation 的稳定使用接口，包括 DPI-C
-取指边界、HEX 镜像格式、命令行参数、统一执行引擎、SDB、VCD 波形、运行
-生命周期和退出码。
+本文分别记录当前 Verilator behavioral simulation 的 v0.1 稳定接口，以及
+后续步骤 2.2--2.5 必须实现的 v0.2 目标契约。第 2--11 节均描述 **当前 v0.1
+实现**；第 12 节描述 **尚未实现的 v0.2 目标**。两者不得混作同一可执行接口。
+
+当前接口包括 DPI-C 取指边界、HEX 镜像格式、命令行参数、统一执行引擎、SDB、
+VCD 波形、运行生命周期和退出码。
 实现位于 `sim/verilator/`，反汇编器、引擎自检与 CLI 集成用例位于
 `sim/tests/`。
 
-仿真器只支持 ISA v0.1 的组合零等待取指协议。它不定义最终可执行文件
-ABI，也不能作为综合、时序、功耗或 FPGA 上板证据。
+仿真器目前只支持自定义 ISA v0.1 的组合零等待取指协议。正式 ISA 文档已经
+切换到 RV32E 过渡子集 v0.2，因此当前仿真结果只能作为迁移前防回归证据，不能
+证明 v0.2 已实现。仿真器也不定义最终可执行文件 ABI，不能作为综合、时序、
+功耗或 FPGA 上板证据。
 
 ## 2. RTL 与 DPI-C 边界
 
@@ -316,3 +322,82 @@ lint/模块测试、Simulation 引擎自检和 CLI 集成测试。`make clean` �
 SDB-only 和 SDB+WAVE。它检查条件编译、提示符与逐字命令输出、断点恢复、数值
 及用法错误、终止状态、19 个 batch CLI 用例、交互选项冲突、`BATCH=1` 传递，
 以及 SDB 波形暂停间隙和状态等价。
+
+## 12. v0.2 目标契约（尚未实现）
+
+本节冻结迁移后的仿真器边界，但不改变当前二进制、Make 入口或测试。迁移完成
+前，调用者必须继续按第 2--11 节使用 v0.1；不得让 loader 自动猜测 ISA，且不
+提供双 ISA 开关。
+
+### 12.1 RTL wrapper 与状态
+
+目标 `sim_top` 必须暴露 `docs/architecture/microarchitecture.md` 定义的 32 位
+取指/data valid-ready 请求--响应通道，并向执行引擎提供：
+
+- 32 位 `trace_pc` 和 `trace_inst`，仅在成功提交时由 `trace_valid` 报告；
+- 4 位索引加 32 位数据的 debug regfile 读取，可遍历 `x0`--`x15`；
+- `fault_valid`、3 位 cause、32 位 PC/指令和指令有效位组成的结构化 fault；
+- 当前 fetch PC/指令、周期数、提交数和统一仿真时间。
+
+v0.1 的 8 位 PC、16 位指令、64 位 `{R3,R2,R1,R0}` 和单一
+`illegal_inst` 均为待移除接口。32 位 trace 文本必须使用八位小写十六进制
+PC/指令；寄存器状态使用 `x0`--`x15` 和八位十六进制值。精确行格式将在 CLI
+迁移实现时与测试一同冻结，当前文档不声称它已经可用。
+
+### 12.2 目标文本 HEX
+
+v0.2 文本 HEX 延续当前注释与空行规则，但每个有效行必须恰好包含 8 个 ASCII
+十六进制字符，表示一条完整 32 位指令。有效行 `n` 放在
+`reset_pc + 4*n` 的私有仿真取指位置；地址计算溢出必须在模型创建前报错。
+
+目标示例：
+
+```text
+00100093  # addi x1, x0, 1
+002081b3  # add  x3, x1, x2
+00008067  # jalr x0, 0(x1)
+```
+
+loader 必须事务性解析，文件/行诊断规则继续保持明确。当前 loader 仍要求每行
+4 个字符并映射到 8 位指令字地址；8 字符格式 **尚未实现**。原 v0.1 HEX 和裸
+机器码将在迁移完成时移除，不长期兼容。`.bin` 和 ELF loader 属于阶段 2，
+本阶段不定义。
+
+### 12.3 私有 `tohost` 终止机制
+
+阶段 1 v0.2 behavioral simulation 将地址 `0xfffffff0` 定义为仿真私有
+`tohost`，只用于让自检 guest 终止：
+
+- 对该地址成功执行一次四字节 `sw` 时停止，写入的 32 位值记录为
+  `guest_exit_code`；
+- `guest_exit_code=0` 表示 guest 成功，非零表示 guest 自检失败；
+- `sb`、load 或其他地址不触发终止；
+- 该 store 按正常成功指令提交，并在提交后报告 guest exit；
+- 若 store 自身得到错误响应，则按 `store access fault` 停止，不报告 guest exit；
+- guest exit 的 host 进程退出码映射和精确输出文本在 CLI 迁移时冻结为测试
+  契约，当前为 `TODO`。
+
+`tohost` 不是 ISA 指令、正式 MMIO 外设或 SoC ABI，不进入
+`docs/architecture/memory-map.md`。仿真内存模型应在正式地址译码之外拦截它，
+未来若正式 memory map 冲突，必须迁移私有地址而不能默认为硬件寄存器。
+
+### 12.4 timeout 与停止优先级
+
+目标执行引擎仍使用 reset 后绝对、有限、正整数 `max_cycles`。请求或响应 stall
+消耗周期并计入 timeout；没有提交不等于仿真挂死。一个周期结束后若同时满足
+多个条件，目标停止优先级为：
+
+1. 成功提交的 `tohost` guest exit；
+2. 本周期锁存的结构化 fault；
+3. 达到调用者要求的提交/周期目标；
+4. 达到绝对 `max_cycles`。
+
+执行周期开始前已经达到 `max_cycles` 时不得再推进。精确 breakpoint 交互优先级
+在 SDB 迁移时补充；当前 v0.1 的停止优先级和退出码继续以第 5、8、9 节为准。
+
+### 12.5 迁移验收
+
+目标 loader、wrapper、Simulation、SDB、VCD、反汇编器和 batch CLI 必须共享
+同一 32 位状态与推进时间轴。迁移测试至少覆盖八条指令、所有 fault、任意
+valid/ready stall、16 个寄存器、32 位 trace、8 字符 HEX、`tohost` 成功/失败、
+timeout 和参考模型 difftest。各项通过前，本节所有能力均标记为未实现。
