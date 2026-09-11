@@ -11,7 +11,7 @@
 namespace {
 
 struct Example {
-  std::uint16_t instruction;
+  std::uint32_t instruction;
   const char *text;
 };
 
@@ -21,96 +21,127 @@ void require(bool condition, const std::string &message) {
   }
 }
 
-std::string hex_value(std::uint16_t value, int width) {
+std::string hex_value(std::uint32_t value) {
   std::ostringstream output;
   output << "0x" << std::hex << std::nouppercase << std::setfill('0')
-         << std::setw(width) << value;
+         << std::setw(8) << value;
   return output.str();
 }
 
-std::string register_name(std::uint8_t index) {
-  return "R" + std::to_string(index);
+void require_disassembly(std::uint32_t instruction, const std::string &expected) {
+  const std::string actual = dc_sim::disassemble(instruction);
+  require(actual == expected,
+          hex_value(instruction) + " expected '" + expected + "' but got '" +
+              actual + "'");
 }
 
-std::string expected_disassembly(std::uint16_t instruction,
-                                 bool *canonical) {
-  const std::uint8_t opcode =
-      static_cast<std::uint8_t>((instruction >> 12U) & 0x0fU);
-  const std::uint8_t rd =
-      static_cast<std::uint8_t>((instruction >> 10U) & 0x03U);
-  const std::uint8_t rs =
-      static_cast<std::uint8_t>((instruction >> 8U) & 0x03U);
-  const std::uint8_t immediate =
-      static_cast<std::uint8_t>(instruction & 0xffU);
-
-  *canonical = false;
-  const char *mnemonic = nullptr;
-  bool immediate_form = false;
-  if ((opcode == 0x0 || opcode == 0x2) && rs == 0) {
-    mnemonic = opcode == 0x0 ? "MOVI" : "ADDI";
-    immediate_form = true;
-  } else if (opcode >= 0x1 && opcode <= 0x6 && opcode != 0x2 &&
-             immediate == 0) {
-    constexpr std::array<const char *, 7> kMnemonics = {
-        nullptr, "MOV", nullptr, "ADD", "SUB", "AND", "OR"};
-    mnemonic = kMnemonics[opcode];
-  } else if (opcode == 0x7 && rd == 0 && rs == 0) {
-    *canonical = true;
-    return "JUMP #" + hex_value(immediate, 2);
-  }
-
-  if (mnemonic != nullptr) {
-    *canonical = true;
-    std::string text = std::string(mnemonic) + " " + register_name(rd) +
-                       ", ";
-    if (immediate_form) {
-      return text + "#" + hex_value(immediate, 2);
-    }
-    return text + register_name(rs);
-  }
-
-  return ".word " + hex_value(instruction, 4);
+void require_raw(std::uint32_t instruction) {
+  require_disassembly(instruction, ".word " + hex_value(instruction));
 }
 
 void test_specification_examples() {
   constexpr std::array<Example, 8> kExamples = {{
-      {0x0402, "MOVI R1, #0x02"},
-      {0x1900, "MOV R2, R1"},
-      {0x2408, "ADDI R1, #0x08"},
-      {0x3600, "ADD R1, R2"},
-      {0x4600, "SUB R1, R2"},
-      {0x5600, "AND R1, R2"},
-      {0x6600, "OR R1, R2"},
-      {0x7008, "JUMP #0x08"},
+      {0x002081b3U, "add x3, x1, x2"},
+      {0xfff08193U, "addi x3, x1, -1"},
+      {0x123451b7U, "lui x3, 0x12345"},
+      {0x0040a183U, "lw x3, 4(x1)"},
+      {0x0010c183U, "lbu x3, 1(x1)"},
+      {0x0020a223U, "sw x2, 4(x1)"},
+      {0x002080a3U, "sb x2, 1(x1)"},
+      {0x008082e7U, "jalr x5, 8(x1)"},
   }};
 
   for (const Example &example : kExamples) {
-    const std::string actual = dc_sim::disassemble(example.instruction);
-    require(actual == example.text,
-            "specification example " + hex_value(example.instruction, 4) +
-                " expected '" + example.text + "' but got '" + actual +
-                "'");
+    require_disassembly(example.instruction, example.text);
   }
 }
 
-void test_all_instruction_words() {
-  std::uint32_t canonical_count = 0;
-  for (std::uint32_t word = 0; word <= 0xffffU; ++word) {
-    const std::uint16_t instruction = static_cast<std::uint16_t>(word);
-    bool canonical = false;
-    const std::string expected =
-        expected_disassembly(instruction, &canonical);
-    const std::string actual = dc_sim::disassemble(instruction);
-    require(actual == expected,
-            "instruction " + hex_value(instruction, 4) + " expected '" +
-                expected + "' but got '" + actual + "'");
-    if (canonical) {
-      ++canonical_count;
+void test_immediate_boundaries() {
+  require_disassembly(0x80008093U, "addi x1, x1, -2048");
+  require_disassembly(0x7ff08093U, "addi x1, x1, 2047");
+  require_disassembly(0x8000a023U, "sw x0, -2048(x1)");
+  require_disassembly(0x7e20afa3U, "sw x2, 2047(x1)");
+  require_disassembly(0xfffff7b7U, "lui x15, 0xfffff");
+}
+
+void test_exact_function_codes() {
+  for (std::uint32_t funct3 = 0; funct3 < 8; ++funct3) {
+    for (std::uint32_t funct7 = 0; funct7 < 128; ++funct7) {
+      const std::uint32_t instruction =
+          (funct7 << 25U) | (2U << 20U) | (1U << 15U) | (funct3 << 12U) |
+          (3U << 7U) | 0x33U;
+      if (funct3 == 0 && funct7 == 0) {
+        require_disassembly(instruction, "add x3, x1, x2");
+      } else {
+        require_raw(instruction);
+      }
     }
   }
 
-  require(canonical_count == 2384,
-          "canonical instruction count is not 2384");
+  for (std::uint32_t funct3 = 0; funct3 < 8; ++funct3) {
+    const std::uint32_t op_imm =
+        (1U << 15U) | (funct3 << 12U) | (3U << 7U) | 0x13U;
+    const std::uint32_t load =
+        (1U << 15U) | (funct3 << 12U) | (3U << 7U) | 0x03U;
+    const std::uint32_t store =
+        (2U << 20U) | (1U << 15U) | (funct3 << 12U) | 0x23U;
+    const std::uint32_t jalr =
+        (1U << 15U) | (funct3 << 12U) | (3U << 7U) | 0x67U;
+
+    if (funct3 == 0) {
+      require_disassembly(op_imm, "addi x3, x1, 0");
+      require_disassembly(store, "sb x2, 0(x1)");
+      require_disassembly(jalr, "jalr x3, 0(x1)");
+    } else {
+      require_raw(op_imm);
+      require_raw(jalr);
+      if (funct3 == 2) {
+        require_disassembly(store, "sw x2, 0(x1)");
+      } else {
+        require_raw(store);
+      }
+    }
+
+    if (funct3 == 2) {
+      require_disassembly(load, "lw x3, 0(x1)");
+    } else if (funct3 == 4) {
+      require_disassembly(load, "lbu x3, 0(x1)");
+    } else {
+      require_raw(load);
+    }
+  }
+}
+
+void test_rv32e_register_limit() {
+  for (std::uint32_t reg = 0; reg < 16; ++reg) {
+    const std::uint32_t instruction =
+        (reg << 20U) | (reg << 15U) | (reg << 7U) | 0x33U;
+    require_disassembly(instruction, "add x" + std::to_string(reg) + ", x" +
+                                             std::to_string(reg) + ", x" +
+                                             std::to_string(reg));
+  }
+
+  constexpr std::array<std::uint32_t, 16> kUpperRegisterEncodings = {{
+      0x00208833U, 0x002800b3U, 0x010080b3U, 0x00008813U,
+      0x00080093U, 0x0000a803U, 0x00082083U, 0x0000c803U,
+      0x00084083U, 0x0100a023U, 0x00282023U, 0x01008023U,
+      0x00280023U, 0x00008867U, 0x000800e7U, 0x00000837U,
+  }};
+  for (std::uint32_t instruction : kUpperRegisterEncodings) {
+    require_raw(instruction);
+  }
+
+  // High immediate bits in LUI are data, not rs1/rs2 fields.
+  require_disassembly(0xfffff7b7U, "lui x15, 0xfffff");
+}
+
+void test_unassigned_opcodes() {
+  for (std::uint32_t opcode = 0; opcode < 128; ++opcode) {
+    if (opcode != 0x03U && opcode != 0x13U && opcode != 0x23U &&
+        opcode != 0x33U && opcode != 0x37U && opcode != 0x67U) {
+      require_raw(opcode);
+    }
+  }
 }
 
 }  // namespace
@@ -118,12 +149,15 @@ void test_all_instruction_words() {
 int main() {
   try {
     test_specification_examples();
-    test_all_instruction_words();
+    test_immediate_boundaries();
+    test_exact_function_codes();
+    test_rv32e_register_limit();
+    test_unassigned_opcodes();
   } catch (const std::exception &error) {
     std::cerr << "test_disasm: FAIL " << error.what() << '\n';
     return 1;
   }
 
-  std::cout << "test_disasm: PASS (65536 instruction words)\n";
+  std::cout << "test_disasm: PASS (v0.2 directed and function-space cases)\n";
   return 0;
 }

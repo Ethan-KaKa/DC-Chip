@@ -1,5 +1,6 @@
 #include "disasm.h"
 
+#include <cstdint>
 #include <iomanip>
 #include <sstream>
 #include <string>
@@ -7,7 +8,14 @@
 namespace dc_sim {
 namespace {
 
-std::string hex_value(std::uint16_t value, int width) {
+constexpr std::uint8_t kOpcodeLoad = 0x03;
+constexpr std::uint8_t kOpcodeOpImm = 0x13;
+constexpr std::uint8_t kOpcodeStore = 0x23;
+constexpr std::uint8_t kOpcodeOp = 0x33;
+constexpr std::uint8_t kOpcodeLui = 0x37;
+constexpr std::uint8_t kOpcodeJalr = 0x67;
+
+std::string hex_value(std::uint32_t value, int width) {
   std::ostringstream output;
   output << "0x" << std::hex << std::nouppercase << std::setfill('0')
          << std::setw(width) << value;
@@ -15,80 +23,70 @@ std::string hex_value(std::uint16_t value, int width) {
 }
 
 std::string register_name(std::uint8_t index) {
-  return "R" + std::to_string(index);
+  return "x" + std::to_string(index);
 }
 
-std::string register_instruction(const char *mnemonic, std::uint8_t rd,
-                                 std::uint8_t rs) {
-  return std::string(mnemonic) + " " + register_name(rd) + ", " +
-         register_name(rs);
+std::int32_t sign_extend_12(std::uint32_t value) {
+  const std::uint32_t immediate = value & 0xfffU;
+  return static_cast<std::int32_t>((immediate ^ 0x800U) - 0x800U);
 }
 
-std::string immediate_instruction(const char *mnemonic, std::uint8_t rd,
-                                  std::uint8_t immediate) {
-  return std::string(mnemonic) + " " + register_name(rd) + ", #" +
-         hex_value(immediate, 2);
-}
+bool valid_register(std::uint8_t index) { return index < 16U; }
 
-std::string raw_word(std::uint16_t instruction) {
-  return ".word " + hex_value(instruction, 4);
+std::string raw_word(std::uint32_t instruction) {
+  return ".word " + hex_value(instruction, 8);
 }
 
 }  // namespace
 
-std::string disassemble(std::uint16_t instruction) {
+std::string disassemble(std::uint32_t instruction) {
   const std::uint8_t opcode =
-      static_cast<std::uint8_t>((instruction >> 12U) & 0x0fU);
+      static_cast<std::uint8_t>(instruction & 0x7fU);
   const std::uint8_t rd =
-      static_cast<std::uint8_t>((instruction >> 10U) & 0x03U);
-  const std::uint8_t rs =
-      static_cast<std::uint8_t>((instruction >> 8U) & 0x03U);
-  const std::uint8_t immediate =
-      static_cast<std::uint8_t>(instruction & 0xffU);
+      static_cast<std::uint8_t>((instruction >> 7U) & 0x1fU);
+  const std::uint8_t funct3 =
+      static_cast<std::uint8_t>((instruction >> 12U) & 0x07U);
+  const std::uint8_t rs1 =
+      static_cast<std::uint8_t>((instruction >> 15U) & 0x1fU);
+  const std::uint8_t rs2 =
+      static_cast<std::uint8_t>((instruction >> 20U) & 0x1fU);
+  const std::uint8_t funct7 =
+      static_cast<std::uint8_t>((instruction >> 25U) & 0x7fU);
+  const std::int32_t immediate_i = sign_extend_12(instruction >> 20U);
+  const std::uint32_t immediate_s_bits =
+      ((instruction >> 20U) & 0xfe0U) | ((instruction >> 7U) & 0x1fU);
+  const std::int32_t immediate_s = sign_extend_12(immediate_s_bits);
 
-  switch (opcode) {
-    case 0x0:
-      if (rs == 0) {
-        return immediate_instruction("MOVI", rd, immediate);
-      }
-      break;
-    case 0x1:
-      if (immediate == 0) {
-        return register_instruction("MOV", rd, rs);
-      }
-      break;
-    case 0x2:
-      if (rs == 0) {
-        return immediate_instruction("ADDI", rd, immediate);
-      }
-      break;
-    case 0x3:
-      if (immediate == 0) {
-        return register_instruction("ADD", rd, rs);
-      }
-      break;
-    case 0x4:
-      if (immediate == 0) {
-        return register_instruction("SUB", rd, rs);
-      }
-      break;
-    case 0x5:
-      if (immediate == 0) {
-        return register_instruction("AND", rd, rs);
-      }
-      break;
-    case 0x6:
-      if (immediate == 0) {
-        return register_instruction("OR", rd, rs);
-      }
-      break;
-    case 0x7:
-      if (rd == 0 && rs == 0) {
-        return "JUMP #" + hex_value(immediate, 2);
-      }
-      break;
-    default:
-      break;
+  if (opcode == kOpcodeOp && funct3 == 0U && funct7 == 0U &&
+      valid_register(rd) && valid_register(rs1) && valid_register(rs2)) {
+    return "add " + register_name(rd) + ", " + register_name(rs1) + ", " +
+           register_name(rs2);
+  }
+  if (opcode == kOpcodeOpImm && funct3 == 0U && valid_register(rd) &&
+      valid_register(rs1)) {
+    return "addi " + register_name(rd) + ", " + register_name(rs1) + ", " +
+           std::to_string(immediate_i);
+  }
+  if (opcode == kOpcodeLui && valid_register(rd)) {
+    const std::uint32_t immediate_u = instruction >> 12U;
+    return "lui " + register_name(rd) + ", " + hex_value(immediate_u, 5);
+  }
+  if (opcode == kOpcodeLoad && (funct3 == 2U || funct3 == 4U) &&
+      valid_register(rd) && valid_register(rs1)) {
+    const char *mnemonic = funct3 == 2U ? "lw" : "lbu";
+    return std::string(mnemonic) + " " + register_name(rd) + ", " +
+           std::to_string(immediate_i) + "(" + register_name(rs1) + ")";
+  }
+  if (opcode == kOpcodeStore && (funct3 == 0U || funct3 == 2U) &&
+      valid_register(rs1) && valid_register(rs2)) {
+    const char *mnemonic = funct3 == 2U ? "sw" : "sb";
+    return std::string(mnemonic) + " " + register_name(rs2) + ", " +
+           std::to_string(immediate_s) + "(" + register_name(rs1) + ")";
+  }
+  if (opcode == kOpcodeJalr && funct3 == 0U && valid_register(rd) &&
+      valid_register(rs1)) {
+    return "jalr " + register_name(rd) + ", " +
+           std::to_string(immediate_i) + "(" + register_name(rs1) + ")";
   }
 
   return raw_word(instruction);

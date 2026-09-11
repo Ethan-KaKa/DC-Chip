@@ -19,8 +19,8 @@
 
 - 当前目录已初始化为 Git 仓库，默认分支为 `main`。
 - 已冻结 RV32E 过渡子集 v0.2 的 ISA、微架构、地址模型和验证目标；它使用 32 位标准编码、32 位 byte-addressed PC、`x0`--`x15` 以及 `add/addi/lui/lw/lbu/sw/sb/jalr`。这只是目标规格，不是完整 RV32E。
-- 当前可执行实现仍为自定义 ISA v0.1：已完成阶段 A–E 及仿真调试基础设施步骤 0–8，包括 ISA package、组合 ALU、decoder、4×16-bit regfile、单周期 CPU 核心、四个自检 testbench、Verilator DPI-C 指令存储器、C++17 驱动、Dconfig、统一 Simulation、v0.1 反汇编器、可选 VCD、SDB 和完整回归。v0.2 尚未进入 RTL、仿真器或测试，旧回归不能证明 v0.2 已实现。
-- `DC_SIM_SDB` 与 `DC_SIM_WAVE` 当前默认关闭；`DC_SIM_SDB=y` 时 reset 后默认进入 SDB，`--batch` 可恢复原 batch 行为；`DC_SIM_WAVE=y` 时从 reset 前开始记录 `<BUILD_DIR>/dump.vcd`，并向 SDB 注册 `info wave`、`wave on/off`。关闭相应配置时不编译对应 SDB 或 VCD 支持。独立反汇编接口只供 SDB 使用，既有 batch `--trace` 不增加反汇编字段。
+- 阶段 1 步骤 2.2 已把 ISA package、decoder、反汇编器和集中式测试编码器迁移到 v0.2，并由 `make test-isa` 专项验证。组合 ALU、regfile、CPU 核心、Verilator wrapper/loader、Simulation 和 SDB 仍停留在 v0.1 接口，留待步骤 2.3--2.5 原位迁移；迁移窗口内完整 `make test` 不可用，不能宣称 v0.2 CPU 已可执行。
+- `DC_SIM_SDB` 与 `DC_SIM_WAVE` 的 v0.1 冻结行为是默认关闭；步骤 2.2 后仿真器尚未恢复构建。独立反汇编接口已改为 v0.2 的 32 位接口，后续 SDB 迁移复用；既有 batch `--trace` 的目标契约仍不增加反汇编字段。
 - v0.1 可执行基线冻结在 commit `9bfb9a97153be05de34c6d2311c09f41cb6f43ab`；不提供双 ISA 开关，旧语义只由 Git 历史和迁移前验证记录保留。
 - 完整 RV32E、正式 IROM/DRAM/MMIO 地址、板卡具体型号/封装、时钟频率、板级复位极性和演示传感器仍未定稿。
 - 在对应规格落盘前，不得把上述未决项当成既定事实写入 RTL 或测试。
@@ -210,7 +210,7 @@ build/        # 生成物，不作为源码
 
 ## 构建命令状态
 
-本项目当前已实现阶段 A–E 及仿真调试基础设施步骤 0–8 的工具检查、Dconfig、RTL lint、模块测试、反汇编测试、统一执行引擎、编译期 VCD、SDB、端到端仿真、配置矩阵和完整回归入口：
+以下 v0.1 构建入口冻结在 commit `9bfb9a97153be05de34c6d2311c09f41cb6f43ab`。当前迁移窗口只有 `make check-tools`、`make help`、`make lint-isa`、`make test-isa`、`make test-decoder` 和 `make test-disasm` 已适配 v0.2；其余入口需等待步骤 2.3--2.5 恢复：
 
 ```bash
 make check-tools
@@ -219,6 +219,8 @@ make defconfig
 make menuconfig
 make config-show
 make test-config
+make lint-isa
+make test-isa
 make lint-comb
 make test-alu
 make test-decoder

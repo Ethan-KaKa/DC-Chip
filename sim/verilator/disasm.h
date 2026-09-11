@@ -6,7 +6,7 @@
 
 namespace dc_sim {
 
-std::string disassemble(std::uint16_t instruction);
+std::string disassemble(std::uint32_t instruction);
 
 }  // namespace dc_sim
 

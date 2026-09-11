@@ -1,7 +1,7 @@
 # DC-Chip 验证计划
 
 - 版本：v0.2
-- 状态：v0.2 验收契约已冻结；当前自动化仍只验证 v0.1
+- 状态：v0.2 验收契约已冻结；ISA 公共层专项已迁移
 - 更新日期：2026-09-11
 - ISA 规范：`docs/isa/isa.md` v0.2
 - 仿真器接口：[`simulator.md`](simulator.md)
@@ -17,12 +17,14 @@
 | 层次 | 状态 | 能作为何种证据 |
 | --- | --- | --- |
 | v0.2 ISA/微架构/存储规格 | 已冻结 | 后续实现的验收依据 |
-| RTL、仿真器、反汇编器、测试 | 仍为自定义 ISA v0.1 | 只能证明旧基线未被文档修改破坏 |
+| ISA package、decoder、编码器、反汇编器 | 已迁移至 v0.2 | `make test-isa` 的公共层专项证据 |
+| ALU、regfile、core、仿真器 | 仍为 v0.1 接口，迁移中不可构建 | 等待步骤 2.3--2.5，当前无 v0.2 执行证据 |
 | v0.2 功能回归、参考模型、difftest | 未实现 | 不能宣称 v0.2 已通过 |
 | Vivado、时序、资源、功耗、上板 | 未验证 | 不能从 behavioral simulation 推断 |
 
-步骤 2.2--2.5 完成前，所有 `make test` PASS 必须标注“v0.1 behavioral
-simulation”，不得列入 v0.2 功能通过项。
+步骤 2.2 已使旧完整回归不再适用于当前工作树。步骤 2.3--2.5 完成前，只有
+`make test-isa` 能列为 v0.2 公共层证据；迁移前 `make test` PASS 仍只属于
+commit `9bfb9a9` 的 v0.1 behavioral simulation 记录。
 
 ## 2. v0.1 迁移前冻结记录
 
@@ -73,17 +75,29 @@ v0.1 的精确 CLI、SDB、VCD、HEX 和退出码契约继续记录在
 这组结果发生在正式规格切换到 v0.2 之后，但被测代码没有随之迁移，因此仍只
 是 v0.1 防回归证据，不是 v0.2 功能验收。
 
+### 2.4 v0.2 ISA 公共层迁移记录
+
+| 日期 | 命令 | 结果 | 证据边界 |
+| --- | --- | --- | --- |
+| 2026-09-11 | `make test-isa` | PASS | 测试编码器/HEX、GNU 编码与反汇编交叉校验、decoder lint/自检、C++ 反汇编专项 |
+| 2026-09-11 | `make lint` | EXPECTED FAIL | v0.1 ALU 枚举和 core decoder 端口尚未迁移，确认步骤 2.3 的明确恢复边界 |
+
+默认交叉工具为 GCC 13.3.0 和 GNU binutils 2.42，调用参数为
+`-march=rv32e -mabi=ilp32e`，可分别通过 `RISCV_GCC` 和 `RISCV_OBJDUMP`
+覆盖。该记录只证明 ISA 公共层，不覆盖 ALU、regfile、core、存储协议、
+Simulation、SDB、difftest、综合或 FPGA。
+
 ## 3. v0.2 验收矩阵
 
-下表各项在对应代码和测试完成前均为 **未实现/未验证**：
+下表未标明已完成的项目在对应代码和测试完成前均为 **未实现/未验证**：
 
 | 类别 | 必测内容 | 主要方法 |
 | --- | --- | --- |
-| 编码 | 八条指令的标准 `opcode/funct3/funct7` 与格式；其他编码非法 | decoder 定向与合法空间穷举 |
+| 编码 | 八条指令的标准 `opcode/funct3/funct7` 与格式；其他编码非法 | **已完成公共层专项**：decoder 定向与功能码空间枚举 |
 | 寄存器 | `x0` 恒零并忽略写；`x1`--`x15` 读写/reset | regfile 自检 |
-| RV32E 上界 | 实际 `rd/rs1/rs2` 使用 `x16`--`x31` 时非法 | 每类指令逐字段测试 |
-| `lui` 特例 | 只检查 `rd`；立即数中与 `rs1/rs2` 重叠的位不得误判 | 穷举高立即数向量 |
-| 立即数 | I/S 拼接、`-2048/-1/0/2047`，U 型最低 12 位清零 | decoder/execute 边界测试 |
+| RV32E 上界 | 实际 `rd/rs1/rs2` 使用 `x16`--`x31` 时非法 | **已完成 decoder/反汇编专项**；core 尚未验证 |
+| `lui` 特例 | 只检查 `rd`；立即数中与 `rs1/rs2` 重叠的位不得误判 | **已完成公共层定向测试** |
+| 立即数 | I/S 拼接、`-2048/-1/0/2047`，U 型最低 12 位清零 | decoder/编码器已完成；execute 尚未验证 |
 | 算术 | `add/addi` 只保留低 32 位，正负溢出均不 fault | ALU 与参考模型 |
 | load | `lw` 小端与四字节对齐；`lbu` 任意 lane、零扩展；`rd=x0` 仍访问 | 可停顿/错误注入 BFM |
 | store | `sw` 四 lane；`sb` 单 lane；错误响应无部分副作用 | 带内存记分板 BFM |
@@ -146,9 +160,10 @@ v0.2 目标文本 HEX 每个有效行是一条 32 位指令，即恰好 8 个十
 
 后续步骤按以下顺序恢复规格与实现一致：
 
-1. 迁移 ISA package、decoder、ALU 和 regfile，并通过模块测试；
-2. 迁移控制器、32 位取指/data valid-ready 和结构化 fault；
-3. 迁移 Verilator wrapper、loader、trace/debug、反汇编器和 CLI；
+1. 迁移 ISA package、decoder、编码器和反汇编器，并通过 `make test-isa`
+   （已完成）；
+2. 迁移 ALU、regfile、控制器、32 位取指/data valid-ready 和结构化 fault；
+3. 迁移 Verilator wrapper、loader、trace/debug、SDB 和 CLI；
 4. 加入独立参考模型、difftest、stall/fault 和程序回归；
 5. 删除 v0.1 裸机器码、`R0`--`R3` 和 16 位接口的剩余依赖。
 

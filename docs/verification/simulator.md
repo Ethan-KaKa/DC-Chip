@@ -1,7 +1,7 @@
 # DC-Chip Verilator 仿真器使用与迁移接口约定
 
 - 文档版本：v0.2
-- 状态：v0.1 当前接口已归档；v0.2 目标契约尚未实现
+- 状态：v0.1 执行接口已归档；v0.2 反汇编器已迁移，其余目标尚未实现
 - 更新日期：2026-09-11
 - 目标 ISA 规范：[`../isa/isa.md`](../isa/isa.md) v0.2
 - v0.1 实现冻结点：`9bfb9a97153be05de34c6d2311c09f41cb6f43ab`
@@ -9,19 +9,20 @@
 
 ## 1. 适用范围
 
-本文分别记录当前 Verilator behavioral simulation 的 v0.1 稳定接口，以及
-后续步骤 2.2--2.5 必须实现的 v0.2 目标契约。第 2--11 节均描述 **当前 v0.1
-实现**；第 12 节描述 **尚未实现的 v0.2 目标**。两者不得混作同一可执行接口。
+本文分别归档 Verilator behavioral simulation 的 v0.1 稳定接口，以及后续
+步骤 2.2--2.5 必须实现的 v0.2 目标契约。第 2--11 节除特别说明外描述冻结于
+`9bfb9a9` 的 **v0.1 归档实现**；第 12 节描述 v0.2 目标及迁移状态。两者不得
+混作同一可执行接口。
 
 当前接口包括 DPI-C 取指边界、HEX 镜像格式、命令行参数、统一执行引擎、SDB、
 VCD 波形、运行生命周期和退出码。
 实现位于 `sim/verilator/`，反汇编器、引擎自检与 CLI 集成用例位于
 `sim/tests/`。
 
-仿真器目前只支持自定义 ISA v0.1 的组合零等待取指协议。正式 ISA 文档已经
-切换到 RV32E 过渡子集 v0.2，因此当前仿真结果只能作为迁移前防回归证据，不能
-证明 v0.2 已实现。仿真器也不定义最终可执行文件 ABI，不能作为综合、时序、
-功耗或 FPGA 上板证据。
+步骤 2.2 已先迁移公共 ISA 层和独立反汇编器，v0.1 仿真器因此在步骤 2.3--2.5
+完成前不再构建。既有仿真结果只作为迁移前防回归证据，不能证明 v0.2 CPU
+已实现。仿真器也不定义最终可执行文件 ABI，不能作为综合、时序、功耗或 FPGA
+上板证据。
 
 ## 2. RTL 与 DPI-C 边界
 
@@ -176,7 +177,7 @@ HEX 加载错误均发生在模型创建前，不创建或覆盖波形。
 关闭配置时 Verilator 不接收 `--trace`，`VM_TRACE=0`、`VM_TRACE_VCD=0`，VCD
 头文件、公开接口、tracer 成员和 dump 调用均不参与编译。
 
-## 7. 最小反汇编接口
+## 7. v0.1 最小反汇编接口（归档）
 
 `disasm.h/.cpp` 提供与 DUT 状态无关的纯 C++17 接口：
 
@@ -189,8 +190,10 @@ std::string dc_sim::disassemble(std::uint16_t instruction);
 `MOVI R1, #0x02`、`ADD R1, R2` 和 `JUMP #0x08`。保留 opcode 或未使用字段
 非零的非规范编码统一输出四位小写十六进制 `.word 0xXXXX`，不产生合法别名。
 
-SDB 的提交与状态输出调用该接口；现有 batch `--trace`、summary 和错误输出
-仍不调用反汇编器，因而其文本契约保持不变。
+这些行为只存在于冻结 commit。当前源码接口已迁移为
+`std::string dc_sim::disassemble(std::uint32_t instruction)`，支持 v0.2 八条
+指令、小写 `x0`--`x15`、有符号 I/S 立即数和五位十六进制 LUI 字段；其他编码
+统一输出 `.word 0xXXXXXXXX`。SDB 尚未迁移，不能把该纯函数测试视为 SDB 可用。
 
 ## 8. SDB 接口与命令契约
 
@@ -303,7 +306,7 @@ package、decoder、ALU、regfile、core、wrapper 的顺序构建
 `build/verilator/Vsim_top`；项目 C++ 源采用 C++17，并执行
 `-Wall -Wextra -Wpedantic` 语法检查。
 
-`make test-disasm` 使用纯 C++17 自检穷举全部 65,536 个指令字，其中 2,384 个
+冻结的 `make test-disasm` 使用纯 C++17 自检穷举全部 65,536 个指令字，其中 2,384 个
 规范编码必须生成精确汇编，其余编码必须生成精确 `.word`。该测试不创建或
 驱动 Verilator 模型。`make test-simulation` 在独立
 `build/verilator-test/` Mdir 中直接调用引擎，
@@ -323,11 +326,11 @@ SDB-only 和 SDB+WAVE。它检查条件编译、提示符与逐字命令输出�
 及用法错误、终止状态、19 个 batch CLI 用例、交互选项冲突、`BATCH=1` 传递，
 以及 SDB 波形暂停间隙和状态等价。
 
-## 12. v0.2 目标契约（尚未实现）
+## 12. v0.2 目标契约（部分迁移）
 
-本节冻结迁移后的仿真器边界，但不改变当前二进制、Make 入口或测试。迁移完成
-前，调用者必须继续按第 2--11 节使用 v0.1；不得让 loader 自动猜测 ISA，且不
-提供双 ISA 开关。
+本节冻结迁移后的仿真器边界。步骤 2.2 已迁移纯反汇编接口并新增
+`make test-isa`；wrapper、loader、Simulation、SDB 和 CLI 仍未迁移，因此当前
+没有可执行仿真器。不得让 loader 自动猜测 ISA，且不提供双 ISA 开关。
 
 ### 12.1 RTL wrapper 与状态
 
@@ -359,9 +362,11 @@ v0.2 文本 HEX 延续当前注释与空行规则，但每个有效行必须恰�
 ```
 
 loader 必须事务性解析，文件/行诊断规则继续保持明确。当前 loader 仍要求每行
-4 个字符并映射到 8 位指令字地址；8 字符格式 **尚未实现**。原 v0.1 HEX 和裸
-机器码将在迁移完成时移除，不长期兼容。`.bin` 和 ELF loader 属于阶段 2，
-本阶段不定义。
+4 个字符并映射到 8 位指令字地址；8 字符 loader **尚未实现**。
+`scripts/rv32e_encode.py` 已提供严格编码和 8 字符测试 HEX 生成接口，并校验
+寄存器、立即数、起始 PC 对齐、32 位范围及地址回绕。原 v0.1 HEX 和裸机器码
+将在迁移完成时移除，不长期兼容。`.bin` 和 ELF loader 属于阶段 2，本阶段不
+定义。
 
 ### 12.3 私有 `tohost` 终止机制
 
@@ -398,6 +403,7 @@ loader 必须事务性解析，文件/行诊断规则继续保持明确。当前
 ### 12.5 迁移验收
 
 目标 loader、wrapper、Simulation、SDB、VCD、反汇编器和 batch CLI 必须共享
-同一 32 位状态与推进时间轴。迁移测试至少覆盖八条指令、所有 fault、任意
-valid/ready stall、16 个寄存器、32 位 trace、8 字符 HEX、`tohost` 成功/失败、
-timeout 和参考模型 difftest。各项通过前，本节所有能力均标记为未实现。
+同一 32 位状态与推进时间轴。纯反汇编器已通过 `make test-isa`；迁移测试仍需
+覆盖所有 fault、任意 valid/ready stall、16 个寄存器、32 位 trace、8 字符
+loader HEX、`tohost` 成功/失败、timeout 和参考模型 difftest。各项只能按实际
+专项结果分别标记，不得由反汇编测试推断仿真器可用。

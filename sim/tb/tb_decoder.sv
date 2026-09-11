@@ -2,129 +2,247 @@
 `default_nettype none
 
 module tb_decoder;
-  logic [15:0] inst;
-  logic [1:0]  rd_addr;
-  logic [1:0]  rs_addr;
-  logic [15:0] imm;
-  dc_isa_pkg::alu_op_e alu_op;
-  logic alu_src_imm;
-  logic reg_write;
-  logic jump;
-  logic legal;
+  logic [31:0] inst;
+  logic [3:0]  rd_addr;
+  logic [3:0]  rs1_addr;
+  logic [3:0]  rs2_addr;
+  logic [31:0] imm_i;
+  logic [31:0] imm_s;
+  logic [31:0] imm_u;
+  dc_isa_pkg::alu_op_e        alu_op;
+  dc_isa_pkg::writeback_sel_e writeback_sel;
+  dc_isa_pkg::mem_op_e        mem_op;
+  logic                       jalr;
+  logic                       legal;
 
   decoder dut (
-    .inst_i        (inst),
-    .rd_addr_o     (rd_addr),
-    .rs_addr_o     (rs_addr),
-    .imm_o         (imm),
-    .alu_op_o      (alu_op),
-    .alu_src_imm_o (alu_src_imm),
-    .reg_write_o   (reg_write),
-    .jump_o        (jump),
-    .legal_o       (legal)
+    .inst_i         (inst),
+    .rd_addr_o      (rd_addr),
+    .rs1_addr_o     (rs1_addr),
+    .rs2_addr_o     (rs2_addr),
+    .imm_i_o        (imm_i),
+    .imm_s_o        (imm_s),
+    .imm_u_o        (imm_u),
+    .alu_op_o       (alu_op),
+    .writeback_sel_o(writeback_sel),
+    .mem_op_o       (mem_op),
+    .jalr_o         (jalr),
+    .legal_o        (legal)
   );
 
   task automatic check_decode(
-    input logic [15:0] test_inst,
-    input logic [1:0]  expected_rd,
-    input logic [1:0]  expected_rs,
-    input logic [15:0] expected_imm,
-    input logic [2:0]  expected_alu_op,
-    input logic        expected_alu_src_imm,
-    input logic        expected_reg_write,
-    input logic        expected_jump,
+    input logic [31:0] test_inst,
+    input logic [2:0]  expected_writeback,
+    input logic [2:0]  expected_mem_op,
+    input logic        expected_jalr,
     input logic        expected_legal
   );
+    logic [31:0] expected_imm_i;
+    logic [31:0] expected_imm_s;
+    logic [31:0] expected_imm_u;
     begin
+      expected_imm_i = {{20{test_inst[31]}}, test_inst[31:20]};
+      expected_imm_s = {{20{test_inst[31]}}, test_inst[31:25],
+                        test_inst[11:7]};
+      expected_imm_u = {test_inst[31:12], 12'b0};
       inst = test_inst;
       #1;
-      if ((rd_addr !== expected_rd) ||
-          (rs_addr !== expected_rs) ||
-          (imm !== expected_imm) ||
-          (alu_op !== expected_alu_op) ||
-          (alu_src_imm !== expected_alu_src_imm) ||
-          (reg_write !== expected_reg_write) ||
-          (jump !== expected_jump) ||
+      if ((rd_addr !== test_inst[10:7]) ||
+          (rs1_addr !== test_inst[18:15]) ||
+          (rs2_addr !== test_inst[23:20]) ||
+          (imm_i !== expected_imm_i) || (imm_s !== expected_imm_s) ||
+          (imm_u !== expected_imm_u) ||
+          (alu_op !== dc_isa_pkg::ALU_ADD) ||
+          (writeback_sel !== expected_writeback) ||
+          (mem_op !== expected_mem_op) || (jalr !== expected_jalr) ||
           (legal !== expected_legal)) begin
         $fatal(1,
-               {"tb_decoder: inst=%h expected rd=%b rs=%b imm=%h ",
-                "alu=%b src_imm=%b write=%b jump=%b legal=%b; ",
-                "actual rd=%b rs=%b imm=%h alu=%b src_imm=%b ",
-                "write=%b jump=%b legal=%b"},
-               test_inst,
-               expected_rd, expected_rs, expected_imm, expected_alu_op,
-               expected_alu_src_imm, expected_reg_write, expected_jump,
-               expected_legal, rd_addr, rs_addr, imm, alu_op,
-               alu_src_imm, reg_write, jump, legal);
+               {"tb_decoder: inst=%h expected wb=%0d mem=%0d ",
+                "jalr=%b legal=%b; actual rd=%0d rs1=%0d rs2=%0d ",
+                "imm_i=%h imm_s=%h imm_u=%h alu=%0d wb=%0d mem=%0d ",
+                "jalr=%b legal=%b"},
+               test_inst, expected_writeback, expected_mem_op,
+               expected_jalr, expected_legal, rd_addr, rs1_addr,
+               rs2_addr, imm_i, imm_s, imm_u, alu_op, writeback_sel,
+               mem_op, jalr, legal);
       end
     end
   endtask
 
-  task automatic check_safe_illegal(input logic [15:0] test_inst);
+  task automatic check_illegal(input logic [31:0] test_inst);
     begin
-      check_decode(test_inst,
-                   test_inst[11:10],
-                   test_inst[9:8],
-                   {8'h00, test_inst[7:0]},
-                   dc_isa_pkg::ALU_PASS_B,
-                   1'b0,
-                   1'b0,
-                   1'b0,
-                   1'b0);
+      check_decode(test_inst, dc_isa_pkg::WB_NONE,
+                   dc_isa_pkg::MEM_NONE, 1'b0, 1'b0);
     end
   endtask
 
-  integer opcode;
+  integer funct3_value;
+  integer funct7_value;
+  integer opcode_value;
+  integer register_value;
 
   initial begin
-    inst = 16'h0000;
+    inst = 32'h00000000;
 
-    check_decode(16'h0402, 2'b01, 2'b00, 16'h0002,
-                 dc_isa_pkg::ALU_PASS_B, 1'b1, 1'b1, 1'b0, 1'b1);
-    check_decode(16'h1900, 2'b10, 2'b01, 16'h0000,
-                 dc_isa_pkg::ALU_PASS_B, 1'b0, 1'b1, 1'b0, 1'b1);
-    check_decode(16'h2408, 2'b01, 2'b00, 16'h0008,
-                 dc_isa_pkg::ALU_ADD, 1'b1, 1'b1, 1'b0, 1'b1);
-    check_decode(16'h3600, 2'b01, 2'b10, 16'h0000,
-                 dc_isa_pkg::ALU_ADD, 1'b0, 1'b1, 1'b0, 1'b1);
-    check_decode(16'h4600, 2'b01, 2'b10, 16'h0000,
-                 dc_isa_pkg::ALU_SUB, 1'b0, 1'b1, 1'b0, 1'b1);
-    check_decode(16'h5600, 2'b01, 2'b10, 16'h0000,
-                 dc_isa_pkg::ALU_AND, 1'b0, 1'b1, 1'b0, 1'b1);
-    check_decode(16'h6600, 2'b01, 2'b10, 16'h0000,
-                 dc_isa_pkg::ALU_OR, 1'b0, 1'b1, 1'b0, 1'b1);
-    check_decode(16'h7008, 2'b00, 2'b00, 16'h0008,
-                 dc_isa_pkg::ALU_PASS_B, 1'b0, 1'b0, 1'b1, 1'b1);
+    check_decode(32'h002081b3, dc_isa_pkg::WB_ALU,
+                 dc_isa_pkg::MEM_NONE, 1'b0, 1'b1);
+    check_decode(32'hfff08193, dc_isa_pkg::WB_ALU,
+                 dc_isa_pkg::MEM_NONE, 1'b0, 1'b1);
+    check_decode(32'h123451b7, dc_isa_pkg::WB_UIMM,
+                 dc_isa_pkg::MEM_NONE, 1'b0, 1'b1);
+    check_decode(32'h0040a183, dc_isa_pkg::WB_LOAD,
+                 dc_isa_pkg::MEM_LW, 1'b0, 1'b1);
+    check_decode(32'h0010c183, dc_isa_pkg::WB_LOAD,
+                 dc_isa_pkg::MEM_LBU, 1'b0, 1'b1);
+    check_decode(32'h0020a223, dc_isa_pkg::WB_NONE,
+                 dc_isa_pkg::MEM_SW, 1'b0, 1'b1);
+    check_decode(32'h002080a3, dc_isa_pkg::WB_NONE,
+                 dc_isa_pkg::MEM_SB, 1'b0, 1'b1);
+    check_decode(32'h008082e7, dc_isa_pkg::WB_PC4,
+                 dc_isa_pkg::MEM_NONE, 1'b1, 1'b1);
 
-    check_safe_illegal(16'h0101);
-    check_safe_illegal(16'h2201);
-    check_safe_illegal(16'h1101);
-    check_safe_illegal(16'h3101);
-    check_safe_illegal(16'h4101);
-    check_safe_illegal(16'h5101);
-    check_safe_illegal(16'h6101);
-    check_safe_illegal(16'h7401);
-    check_safe_illegal(16'h7101);
-
-    for (opcode = 8; opcode <= 15; opcode = opcode + 1) begin
-      check_safe_illegal({opcode[3:0], 4'ha, 8'h5a});
+    for (register_value = 0; register_value < 16;
+         register_value = register_value + 1) begin
+      check_decode({7'd0, register_value[4:0], register_value[4:0], 3'b000,
+                    register_value[4:0], dc_isa_pkg::OPCODE_OP},
+                   dc_isa_pkg::WB_ALU, dc_isa_pkg::MEM_NONE, 1'b0, 1'b1);
+      check_decode({12'h800, register_value[4:0], 3'b000,
+                    register_value[4:0], dc_isa_pkg::OPCODE_OP_IMM},
+                   dc_isa_pkg::WB_ALU, dc_isa_pkg::MEM_NONE, 1'b0, 1'b1);
+      check_decode({20'habcde, register_value[4:0], dc_isa_pkg::OPCODE_LUI},
+                   dc_isa_pkg::WB_UIMM, dc_isa_pkg::MEM_NONE, 1'b0, 1'b1);
+      check_decode({12'd0, register_value[4:0], 3'b010,
+                    register_value[4:0], dc_isa_pkg::OPCODE_LOAD},
+                   dc_isa_pkg::WB_LOAD, dc_isa_pkg::MEM_LW, 1'b0, 1'b1);
+      check_decode({12'd0, register_value[4:0], 3'b100,
+                    register_value[4:0], dc_isa_pkg::OPCODE_LOAD},
+                   dc_isa_pkg::WB_LOAD, dc_isa_pkg::MEM_LBU, 1'b0, 1'b1);
+      check_decode({7'd0, register_value[4:0], register_value[4:0], 3'b010,
+                    5'd0, dc_isa_pkg::OPCODE_STORE},
+                   dc_isa_pkg::WB_NONE, dc_isa_pkg::MEM_SW, 1'b0, 1'b1);
+      check_decode({7'd0, register_value[4:0], register_value[4:0], 3'b000,
+                    5'd0, dc_isa_pkg::OPCODE_STORE},
+                   dc_isa_pkg::WB_NONE, dc_isa_pkg::MEM_SB, 1'b0, 1'b1);
+      check_decode({12'd0, register_value[4:0], 3'b000,
+                    register_value[4:0], dc_isa_pkg::OPCODE_JALR},
+                   dc_isa_pkg::WB_PC4, dc_isa_pkg::MEM_NONE, 1'b1, 1'b1);
     end
 
-    check_safe_illegal(16'b0x00_01_00_10100101);
-    check_safe_illegal(16'b0z00_10_00_01011010);
-    check_safe_illegal(16'b0000_11_0x_11110000);
-    check_safe_illegal(16'b0010_10_0z_00001111);
-    check_safe_illegal(16'b0001_01_10_000x0000);
-    check_safe_illegal(16'b0110_10_01_000z0000);
-    check_safe_illegal(16'b0111_0x_00_00111100);
-    check_safe_illegal(16'b0111_00_0z_11000011);
+    check_decode(32'h80008193, dc_isa_pkg::WB_ALU,
+                 dc_isa_pkg::MEM_NONE, 1'b0, 1'b1);
+    if (imm_i !== 32'hfffff800) begin
+      $fatal(1, "tb_decoder: I-immediate -2048 decoded as %h", imm_i);
+    end
+    check_decode(32'h7e20afa3, dc_isa_pkg::WB_NONE,
+                 dc_isa_pkg::MEM_SW, 1'b0, 1'b1);
+    if (imm_s !== 32'h000007ff) begin
+      $fatal(1, "tb_decoder: S-immediate 2047 decoded as %h", imm_s);
+    end
+
+    // LUI does not use the bit positions occupied by rs1/rs2 in other formats.
+    check_decode(32'hfffff7b7, dc_isa_pkg::WB_UIMM,
+                 dc_isa_pkg::MEM_NONE, 1'b0, 1'b1);
+
+    // Every actually used register field rejects x16--x31 independently.
+    check_illegal(32'h00208833);  // add rd=x16
+    check_illegal(32'h002800b3);  // add rs1=x16
+    check_illegal(32'h010080b3);  // add rs2=x16
+    check_illegal(32'h00008813);  // addi rd=x16
+    check_illegal(32'h00080093);  // addi rs1=x16
+    check_illegal(32'h0000a803);  // lw rd=x16
+    check_illegal(32'h00082083);  // lw rs1=x16
+    check_illegal(32'h0000c803);  // lbu rd=x16
+    check_illegal(32'h00084083);  // lbu rs1=x16
+    check_illegal(32'h0100a023);  // sw rs2=x16
+    check_illegal(32'h00282023);  // sw rs1=x16
+    check_illegal(32'h01008023);  // sb rs2=x16
+    check_illegal(32'h00280023);  // sb rs1=x16
+    check_illegal(32'h00008867);  // jalr rd=x16
+    check_illegal(32'h000800e7);  // jalr rs1=x16
+    check_illegal(32'h00000837);  // lui rd=x16
+
+    // ADD is the only accepted OP funct3/funct7 combination.
+    for (funct3_value = 0; funct3_value < 8;
+         funct3_value = funct3_value + 1) begin
+      for (funct7_value = 0; funct7_value < 128;
+           funct7_value = funct7_value + 1) begin
+        if ((funct3_value != 0) || (funct7_value != 0)) begin
+          check_illegal({funct7_value[6:0], 5'd2, 5'd1,
+                         funct3_value[2:0], 5'd3,
+                         dc_isa_pkg::OPCODE_OP});
+        end
+      end
+    end
+
+    // Only assigned funct3 values are accepted for the other opcode groups.
+    for (funct3_value = 0; funct3_value < 8;
+         funct3_value = funct3_value + 1) begin
+      if (funct3_value != 0) begin
+        check_illegal({12'd0, 5'd1, funct3_value[2:0], 5'd3,
+                       dc_isa_pkg::OPCODE_OP_IMM});
+        check_illegal({12'd0, 5'd1, funct3_value[2:0], 5'd3,
+                       dc_isa_pkg::OPCODE_JALR});
+      end
+      if ((funct3_value != 2) && (funct3_value != 4)) begin
+        check_illegal({12'd0, 5'd1, funct3_value[2:0], 5'd3,
+                       dc_isa_pkg::OPCODE_LOAD});
+      end
+      if ((funct3_value != 0) && (funct3_value != 2)) begin
+        check_illegal({7'd0, 5'd2, 5'd1, funct3_value[2:0], 5'd0,
+                       dc_isa_pkg::OPCODE_STORE});
+      end
+    end
+
+    for (opcode_value = 0; opcode_value < 128;
+         opcode_value = opcode_value + 1) begin
+      if ((opcode_value != dc_isa_pkg::OPCODE_LOAD) &&
+          (opcode_value != dc_isa_pkg::OPCODE_OP_IMM) &&
+          (opcode_value != dc_isa_pkg::OPCODE_STORE) &&
+          (opcode_value != dc_isa_pkg::OPCODE_OP) &&
+          (opcode_value != dc_isa_pkg::OPCODE_LUI) &&
+          (opcode_value != dc_isa_pkg::OPCODE_JALR)) begin
+        check_illegal({25'd0, opcode_value[6:0]});
+      end
+    end
+
+    inst = 32'b0000000_00010_00001_000_00011_0x10011;
+    #1;
+    if ((legal !== 1'b0) || (writeback_sel !== dc_isa_pkg::WB_NONE) ||
+        (mem_op !== dc_isa_pkg::MEM_NONE) || (jalr !== 1'b0)) begin
+      $fatal(1, "tb_decoder: X opcode did not select safe controls");
+    end
+    inst = 32'b0000000_00010_00001_0z0_00011_0110011;
+    #1;
+    if ((legal !== 1'b0) || (writeback_sel !== dc_isa_pkg::WB_NONE) ||
+        (mem_op !== dc_isa_pkg::MEM_NONE) || (jalr !== 1'b0)) begin
+      $fatal(1, "tb_decoder: Z funct3 did not select safe controls");
+    end
+    inst = 32'b000000x_00010_00001_000_00011_0110011;
+    #1;
+    if ((legal !== 1'b0) || (writeback_sel !== dc_isa_pkg::WB_NONE) ||
+        (mem_op !== dc_isa_pkg::MEM_NONE) || (jalr !== 1'b0)) begin
+      $fatal(1, "tb_decoder: X funct7 did not select safe controls");
+    end
+    inst = 32'b0000000_00010_00001_000_00011_011011x;
+    #1;
+    if ((legal !== 1'b0) || (writeback_sel !== dc_isa_pkg::WB_NONE) ||
+        (mem_op !== dc_isa_pkg::MEM_NONE) || (jalr !== 1'b0)) begin
+      $fatal(1, "tb_decoder: X LUI immediate did not select safe controls");
+    end
+    inst = 32'b0000000_00010_00001_000_00011_0010011;
+    inst[31] = 1'bz;
+    #1;
+    if ((legal !== 1'b0) || (writeback_sel !== dc_isa_pkg::WB_NONE) ||
+        (mem_op !== dc_isa_pkg::MEM_NONE) || (jalr !== 1'b0)) begin
+      $fatal(1, "tb_decoder: Z I-immediate did not select safe controls");
+    end
 
     $display("tb_decoder: PASS");
     disable timeout_block;
   end
 
   initial begin : timeout_block
-    #1000;
+    #100000;
     $fatal(1, "tb_decoder: timeout");
   end
 endmodule

@@ -3,6 +3,8 @@ IVERILOG  ?= iverilog
 VVP       ?= vvp
 CXX       ?= c++
 PYTHON    ?= python3
+RISCV_GCC     ?= riscv64-linux-gnu-gcc
+RISCV_OBJDUMP ?= riscv64-linux-gnu-objdump
 BUILD_DIR ?= build
 UNIT_DIR  := $(BUILD_DIR)/unit
 SIM_DIR   := $(BUILD_DIR)/verilator
@@ -66,7 +68,7 @@ endif
 .DEFAULT_GOAL := help
 
 .PHONY: check-tools help defconfig menuconfig config-show test-config \
-	lint-comb lint test-alu test-decoder test-regfile test-core test-unit \
+	lint-isa lint-comb lint test-isa test-alu test-decoder test-regfile test-core test-unit \
 	test-disasm sim-build sim test-simulation test-integration test-wave \
 	test-sdb test clean
 
@@ -83,6 +85,8 @@ check-tools:
 	check_tool "$(VVP)"; \
 	check_tool "$(CXX)"; \
 	check_tool "$(PYTHON)"; \
+	check_tool "$(RISCV_GCC)"; \
+	check_tool "$(RISCV_OBJDUMP)"; \
 	version_output=$$(mktemp); \
 	trap 'rm -f "$$version_output"' EXIT; \
 	printf 'GNU Make %s\n' '$(MAKE_VERSION)'; \
@@ -94,6 +98,10 @@ check-tools:
 	CCACHE_DISABLE=1 $(CXX) --version >"$$version_output" 2>&1; \
 	sed -n '1p' "$$version_output"; \
 	$(PYTHON) --version; \
+	CCACHE_DISABLE=1 $(RISCV_GCC) --version >"$$version_output" 2>&1; \
+	sed -n '1p' "$$version_output"; \
+	$(RISCV_OBJDUMP) --version >"$$version_output" 2>&1; \
+	sed -n '1p' "$$version_output"; \
 	$(PYTHON) -c 'import curses; print("Python curses import: PASS")'; \
 	printf 'int main() { return 0; }\n' | \
 		CCACHE_DISABLE=1 $(CXX) -std=c++17 -x c++ -fsyntax-only -; \
@@ -128,6 +136,10 @@ test-config:
 	$(PYTHON) scripts/test_config.py \
 		--fixture-root "$(abspath $(BUILD_DIR))/test-fixtures/config" \
 		--cxx "$(CXX)"
+
+lint-isa:
+	$(VERILATOR) --lint-only --language 1800-2012 -Wall -Wno-UNUSEDPARAM \
+		--top-module decoder $(ISA_PKG) rtl/core/decoder.sv
 
 lint-comb:
 	$(VERILATOR) --lint-only --language 1800-2012 -Wall \
@@ -182,6 +194,20 @@ $(DISASM_TEST_BIN): $(DISASM_CPP) $(DISASM_TEST_CPP) \
 
 test-disasm: $(DISASM_TEST_BIN)
 	$(DISASM_TEST_BIN)
+
+test-isa:
+	@set -eu; \
+	for tool in "$(RISCV_GCC)" "$(RISCV_OBJDUMP)"; do \
+		if ! command -v "$$tool" >/dev/null 2>&1; then \
+			printf 'error: required RV32E cross-tool not found: %s\n' "$$tool" >&2; \
+			exit 1; \
+		fi; \
+	done
+	CCACHE_DISABLE=1 $(PYTHON) sim/tests/test_isa.py \
+		--gcc "$(RISCV_GCC)" --objdump "$(RISCV_OBJDUMP)"
+	$(MAKE) --no-print-directory lint-isa
+	$(MAKE) --no-print-directory test-decoder
+	$(MAKE) --no-print-directory test-disasm
 
 $(SIM_BIN): $(SIM_RTL) $(SIM_CPP) sim/verilator/memory.h \
 	sim/verilator/numeric.h sim/verilator/simulation.h \
@@ -292,13 +318,15 @@ help:
 	@printf '%s\n' \
 		'DC-Chip build entry points' \
 		'' \
-		'Available through simulator debugger step 8:' \
+		'Repository targets (see docs for the current migration boundary):' \
 		'  make check-tools  Check required tools, Python curses, and C++17' \
 		'  make help         Show this help without creating build output' \
 		'  make defconfig    Reset .config to configs/default_defconfig' \
 		'  make menuconfig   Edit .config with the vendored curses frontend' \
 		'  make config-show  Show the effective simulator configuration' \
 		'  make test-config  Test isolated configuration generation and use' \
+		'  make test-isa     Test the v0.2 encoder, decoder, and disassembler' \
+		'  make lint-isa     Lint the v0.2 ISA package and decoder' \
 		'  make lint-comb    Lint the combinational ALU and decoder' \
 		'  make test-alu     Run the self-checking ALU testbench' \
 		'  make test-decoder Run the self-checking decoder testbench' \
@@ -306,7 +334,7 @@ help:
 		'  make test-regfile Run the self-checking register-file testbench' \
 		'  make test-core    Run the self-checking CPU-core testbench' \
 		'  make test-unit    Run all four unit testbenches in order' \
-		'  make test-disasm  Test all 16-bit ISA disassemblies' \
+		'  make test-disasm  Test directed v0.2 ISA disassemblies' \
 		'  make sim-build    Build the Verilator DPI-C simulator' \
 		'  make sim IMG=<hex> [STEPS=<n>] [TRACE=1] [BATCH=1]' \
 		'  make test-simulation  Test the reusable Simulation engine' \
@@ -318,6 +346,7 @@ help:
 		'' \
 		'Configurable variables:' \
 		'  VERILATOR, IVERILOG, VVP, CXX, PYTHON, BUILD_DIR' \
+		'  RISCV_GCC and RISCV_OBJDUMP select the RV32E cross-tools.' \
 		'  IMG, STEPS, TRACE and BATCH become active with make sim.' \
 		'' \
 		'Configuration files:' \
