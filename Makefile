@@ -85,7 +85,7 @@ endif
 .PHONY: check-tools help defconfig menuconfig config-show test-config \
 	lint-isa lint-comb lint lint-mem test-isa test-alu test-decoder test-regfile test-core test-unit \
 	test-disasm test-memory test-reference sim-build sim test-simulation test-difftest \
-	test-integration test-wave test-sdb test clean
+	test-integration test-wave test-sdb sw test-sw test clean
 
 check-tools:
 	@set -eu; \
@@ -320,8 +320,20 @@ test-difftest: $(DIFF_TEST_BIN)
 
 sim:
 	@set -eu; \
-	if [ -z '$(strip $(IMG))' ]; then \
-		printf '%s\n' 'error: IMG is required; use make sim IMG=<path> [DATA_IMG=<path>] [STEPS=<n>] [TRACE=1] [BATCH=1]' >&2; \
+	img='$(strip $(IMG))'; \
+	data_img='$(strip $(DATA_IMG))'; \
+	app='$(strip $(APP))'; \
+	if [ -n "$$app" ]; then \
+		$(MAKE) --no-print-directory sw; \
+		if [ -z "$$img" ]; then \
+			img='$(abspath $(BUILD_DIR))/sw/tests/'"$$app/$$app.inst.bin"; \
+		fi; \
+		if [ -z "$$data_img" ] && [ -f '$(abspath $(BUILD_DIR))/sw/tests/'"$$app/$$app.data.bin" ]; then \
+			data_img='$(abspath $(BUILD_DIR))/sw/tests/'"$$app/$$app.data.bin"; \
+		fi; \
+	fi; \
+	if [ -z "$$img" ]; then \
+		printf '%s\n' 'error: IMG or APP is required; use make sim IMG=<path> [DATA_IMG=<path>] or make sim APP=<app_name>' >&2; \
 		exit 1; \
 	fi; \
 	case '$(TRACE)' in \
@@ -333,12 +345,11 @@ sim:
 		'') ;; \
 		1) ;; \
 		*) printf 'error: BATCH must be empty or 1, got: %s\n' '$(BATCH)' >&2; exit 1 ;; \
-	esac
-	$(MAKE) --no-print-directory sim-build
-	@set -eu; \
-	set -- --image '$(IMG)'; \
-	if [ -n '$(strip $(DATA_IMG))' ]; then \
-		set -- "$$@" --image-data '$(DATA_IMG)'; \
+	esac; \
+	$(MAKE) --no-print-directory sim-build; \
+	set -- --image "$$img"; \
+	if [ -n "$$data_img" ]; then \
+		set -- "$$@" --image-data "$$data_img"; \
 	fi; \
 	if [ -n '$(strip $(STEPS))' ]; then \
 		set -- "$$@" --steps '$(STEPS)'; \
@@ -351,6 +362,13 @@ sim:
 	fi; \
 	$(SIM_BIN) "$$@"
 
+sw:
+	$(MAKE) -C sw/tests BUILD_DIR=$(abspath $(BUILD_DIR))/sw
+
+test-sw: sw sim-build
+	$(PYTHON) scripts/run_sw_tests.py \
+		--simulator "$(abspath $(SIM_BIN))" \
+		--test-dir "$(abspath $(BUILD_DIR))/sw/tests"
 
 test-integration: sim-build
 	TEST_FIXTURE_DIR="$(abspath $(BUILD_DIR))/test-fixtures" \
@@ -382,8 +400,10 @@ test:
 	$(MAKE) --no-print-directory test-memory
 	$(MAKE) --no-print-directory test-reference
 	$(MAKE) --no-print-directory test-simulation
+	$(MAKE) --no-print-directory sw
 	$(MAKE) --no-print-directory test-difftest
 	$(MAKE) --no-print-directory test-integration
+	$(MAKE) --no-print-directory test-sw
 
 clean:
 	@set -eu; \
@@ -420,13 +440,15 @@ help:
 		'  make test-memory  Run self-checking simulation memory tests' \
 		'  make test-reference Run self-checking C++ reference model tests' \
 		'  make sim-build    Build the Verilator DPI-C simulator' \
-		'  make sim IMG=<hex> [STEPS=<n>] [TRACE=1] [BATCH=1]' \
+		'  make sw           Build AM runtime and all software tests' \
+		'  make test-sw      Run software tests on the Verilator simulator' \
+		'  make sim [IMG=<hex|bin>] [DATA_IMG=<bin>] [APP=<name>] [STEPS=<n>] [TRACE=1] [BATCH=1]' \
 		'  make test-simulation  Test the reusable Simulation engine' \
 		'  make test-difftest    Run lockstep differential testing' \
 		'  make test-integration  Run positive and negative integration cases' \
 		'  make test-wave    Test isolated WAVE-off/on simulator builds' \
 		'  make test-sdb     Test isolated SDB-off/on and SDB+WAVE builds' \
-		'  make test         Run all config, disasm, RTL, ref, difftest, and CLI regression' \
+		'  make test         Run all config, disasm, RTL, ref, sw, difftest, and CLI regression' \
 		'  make clean        Remove only the repository-root build directory' \
 		'' \
 		'Configurable variables:' \

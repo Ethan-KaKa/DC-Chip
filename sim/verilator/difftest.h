@@ -33,9 +33,12 @@ class Difftest {
   bool run_difftest(std::uint64_t max_commits, std::uint64_t max_cycles,
                     DifftestMismatch *mismatch = nullptr);
 
+  bool last_tohost_exit() const { return last_tohost_exit_; }
+
  private:
   Simulation &dut_;
   ReferenceModel &ref_;
+  bool last_tohost_exit_ = false;
 };
 
 }  // namespace dc_sim

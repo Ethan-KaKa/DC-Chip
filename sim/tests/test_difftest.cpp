@@ -236,6 +236,44 @@ void test_binary_difftest(const std::string &temp_dir) {
   }
 }
 
+void test_sw_difftest() {
+  const std::vector<std::string> sw_cases = {
+      "trm_smoke", "trm_exit_code", "calc_add", "dram_access", "heap_smoke", "jump_table"
+  };
+  for (const auto &name : sw_cases) {
+    const std::string inst_bin = "build/sw/tests/" + name + "/" + name + ".inst.bin";
+    const std::string data_bin = "build/sw/tests/" + name + "/" + name + ".data.bin";
+
+    std::ifstream check_file(inst_bin);
+    if (!check_file.is_open()) {
+      continue;
+    }
+    check_file.close();
+
+    dc_sim::reset_memory();
+    std::string error;
+    require(dc_sim::load_binary_image(inst_bin, dc_sim::MemoryRegion::kIrom, &error), error);
+
+    std::ifstream data_in(data_bin, std::ios::binary | std::ios::ate);
+    if (data_in.is_open()) {
+      if (data_in.tellg() > 0) {
+        require(dc_sim::load_binary_image(data_bin, dc_sim::MemoryRegion::kDram, &error), error);
+      }
+    }
+
+    dc_sim::Simulation dut;
+    dut.reset();
+
+    dc_sim::ReferenceModel ref;
+    ref.load_from_sim_memory();
+
+    dc_sim::Difftest difftest(dut, ref);
+    dc_sim::DifftestMismatch mismatch;
+    bool ok = difftest.run_difftest(10000, 50000, &mismatch);
+    require(ok, "sw difftest failed on " + name + ": " + mismatch.message);
+  }
+}
+
 }  // namespace
 
 int main(int argc, char **argv) {
@@ -245,6 +283,7 @@ int main(int argc, char **argv) {
     test_randomized(temp_dir);
     test_fault_difftest(temp_dir);
     test_binary_difftest(temp_dir);
+    test_sw_difftest();
     std::cout << "test_difftest: PASS (all cases matched)\n";
     return 0;
   } catch (const std::exception &e) {

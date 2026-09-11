@@ -19,10 +19,10 @@
 
 - 当前目录已初始化为 Git 仓库，默认分支为 `main`。
 - 已冻结 RV32E 过渡子集 v0.2 的 ISA、微架构、地址模型和验证目标；它使用 32 位标准编码、32 位 byte-addressed PC、`x0`--`x15` 以及 `add/addi/lui/lw/lbu/sw/sb/jalr`。这只是目标规格，不是完整 RV32E。
-- 阶段 1 步骤 2.2--2.5 已完成全链路迁移：ISA package、decoder、反汇编器、集中式测试编码器、32 位 ALU、16×32-bit regfile、CPU 核心、仿真存储子系统（`sim_mem.sv`）、32 位 8 字符 HEX 加载器、Verilator wrapper（`sim_top.sv`）、Simulation 引擎、SDB 调试器、C++17 独立参考模型（`reference_model.cpp`）与 lockstep 差分测试（`difftest.cpp`）。
-- 构建系统与回归闭环已全面恢复：`make sim-build`、`make test-reference`、`make test-simulation`、`make test-difftest`、`make test-integration`（22 项正反向用例）、`make test-wave`、`make test-sdb` 以及最高层 `make test` 全面 PASS，端到端仿真执行与回归闭环已建立。
+- 阶段 1 已完成八指令基线全链路迁移；阶段 2 已完成 64 KiB IROM（`0x00000000`）与 64 KiB DRAM（`0x20000000`）的 Harvard 架构隔离与双 `.bin` 镜像装载；阶段 3 已完成仓库内自包含的 AM-like 裸机中间层（`sw/am/`）、`scripts/check_isa_subset.py` 8 指令子集自动化审计工具、6 项定向软件测试套件（`sw/tests/`）以及软硬件仿真/差分回归闭环。
+- 构建系统与回归闭环已全面恢复并扩充：`make sim-build`、`make test-reference`、`make test-simulation`、`make sw`、`make test-sw`、`make test-difftest`、`make test-integration`、`make test-wave`、`make test-sdb` 以及最高层 `make test` 全面 PASS，端到端仿真执行与回归闭环已建立。
 - v0.1 可执行基线冻结在 commit `9bfb9a97153be05de34c6d2311c09f41cb6f43ab`；不提供双 ISA 开关，旧语义只由 Git 历史和迁移前验证记录保留。
-- 完整 RV32E、正式 IROM/DRAM/MMIO 地址、板卡具体型号/封装、时钟频率、板级复位极性和演示传感器仍未定稿。
+- 完整 RV32E、正式 MMIO 地址（timer/UART 等）、板卡具体型号/封装、时钟频率、板级复位极性和演示传感器仍未定稿。
 - 在对应规格落盘前，不得把上述未决项当成既定事实写入 RTL 或测试。
 
 ## 设计原则
@@ -234,8 +234,10 @@ make test-disasm
 make test-memory
 make test-reference
 make sim-build
-make sim IMG=<hex> [STEPS=<n>] [TRACE=1] [BATCH=1]
 make test-simulation
+make sw
+make test-sw
+make sim [IMG=<hex|bin>] [DATA_IMG=<bin>] [APP=<name>] [STEPS=<n>] [TRACE=1] [BATCH=1]
 make test-difftest
 make test-integration
 make test-wave
@@ -244,11 +246,10 @@ make test
 make clean
 ```
 
-`BATCH=1` 用于在 SDB 构建中显式选择 batch。后续软件与 FPGA 流程仍未实现，
+`BATCH=1` 用于在 SDB 构建中显式选择 batch。后续 FPGA 流程仍未实现，
 未实现前不得声称已经运行：
 
 ```bash
-make sw
 make fpga-synth
 make fpga-bitstream
 ```

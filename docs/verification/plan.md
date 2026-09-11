@@ -127,6 +127,16 @@ core BFM 覆盖请求背压、请求接受当周期响应、延迟响应、四�
 
 本步骤证明了端到端仿真器、SDB 调试器、C++ 独立参考模型与 lockstep difftest 的完整实现。
 
+### 2.8 v0.2 AM-like 中间层与软件测试体系迁移记录
+
+| 日期 | 命令 | 结果 | 证据边界 |
+| --- | --- | --- | --- |
+| 2026-09-11 | `make sw` | PASS | 编译 AM 运行时 (`start.S`, `trm.c`) 与 6 项软件测试，并通过 `check_isa_subset.py` 8 指令子集审计 |
+| 2026-09-11 | `make test-sw` | PASS | 自动化运行 `trm_smoke` (0), `trm_exit_code` (17), `calc_add` (0), `dram_access` (0), `heap_smoke` (0), `jump_table` (0) |
+| 2026-09-11 | `make test-difftest` | PASS | 扩展包含软件测试二进制的 lockstep 逐指令差分测试全面 PASS |
+| 2026-09-11 | `make test` | PASS | 全量门禁累计回归通过（包含 sw 和 test-sw） |
+| 2026-09-11 | `git diff --check` | PASS | 本步骤源码、测试与文档无 whitespace error |
+
 ## 3. v0.2 验收矩阵
 
 | 类别 | 必测内容 | 主要方法 |
@@ -148,9 +158,12 @@ core BFM 覆盖请求背压、请求接受当周期响应、延迟响应、四�
 | tohost/镜像 | 8 字符 HEX 加载、`tohost=0xfffffff0` 退出码捕获 | **已完成**：`make test-memory`、`make test-integration` 覆盖 0 与非 0 退出 |
 | 程序 | 八指令 smoke、load/store lane、JALR loop、fault 负向镜像 | **已完成**：Verilator 22 项 CLI 集成与波形测试（`make test-integration`、`make test-wave`） |
 | 参考模型 | 与 RTL 独立实现，逐提交比较 PC/寄存器/内存副作用/fault | **已完成**：C++ 独立参考模型与 lockstep difftest（`make test-reference`、`make test-difftest`） |
-| **阶段 2 二进制加载** | raw binary (`.bin`) 小端载入 IROM/DRAM、非 4 字节补零对齐、超限拦截 | **进行中**：`test_memory` 单元测试与 CLI 二进制集成测试 |
-| **阶段 2 双镜像协同** | `--image-inst` 与 `--image-data` 协同装载、DRAM 变量读写与退出码校验 | **进行中**：汇编测试夹具与端到端 CLI 集成测试 |
-| **阶段 2 Harvard 隔离** | IFU 访问 DRAM 报 cause 2；LSU 访问 IROM 报 cause 5/7 | **进行中**：存储协议 BFM、参考模型自检与 CLI 负向集成测试 |
+| **阶段 2 二进制加载** | raw binary (`.bin`) 小端载入 IROM/DRAM、非 4 字节补零对齐、超限拦截 | **已完成**：`test_memory` 单元测试与 CLI 二进制集成测试 |
+| **阶段 2 双镜像协同** | `--image-inst` 与 `--image-data` 协同装载、DRAM 变量读写与退出码校验 | **已完成**：汇编测试夹具与端到端 CLI 集成测试 |
+| **阶段 2 Harvard 隔离** | IFU 访问 DRAM 报 cause 2；LSU 访问 IROM 报 cause 5/7 | **已完成**：存储协议 BFM、参考模型自检与 CLI 负向集成测试 |
+| **阶段 3 AM 裸机中间层** | 标准 AM API (`am.h`, `klib.h`)、`start.S` 启动与 `link.ld` Harvard 布局 | **已完成**：`sw/am/` 运行时与 `make sw` 构建系统 |
+| **阶段 3 子集机械审计** | 静态扫描反汇编，确保 100% 满足 8 指令子集与 `x0`--`x15` 约束 | **已完成**：`scripts/check_isa_subset.py` 自动化门禁 |
+| **阶段 3 定向软件测试** | 涵盖 TRM 引导、退出码传递、算术与栈、DRAM 数据段、堆探测与跳转表 | **已完成**：`make test-sw` 与扩展 `make test-difftest` 逐指令验证 |
 
 ## 4. 模块与协议测试要求
 

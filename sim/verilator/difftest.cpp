@@ -175,17 +175,22 @@ bool Difftest::step_and_compare(std::uint64_t max_cycles, DifftestMismatch *mism
     return false;
   }
 
+  last_tohost_exit_ = dut_res.event.tohost_exit;
   return true;
 }
 
 bool Difftest::run_difftest(std::uint64_t max_commits, std::uint64_t max_cycles,
                             DifftestMismatch *mismatch) {
   sync_memory();
+  last_tohost_exit_ = false;
   for (std::uint64_t commit = 0; commit < max_commits; ++commit) {
     if (!step_and_compare(max_cycles, mismatch)) {
       return false;
     }
     if (dut_.snapshot().fetch_pc == ref_.pc() && ref_.in_fault()) {
+      break;
+    }
+    if (last_tohost_exit_) {
       break;
     }
   }
