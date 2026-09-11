@@ -9,6 +9,8 @@ SIM_DIR   := $(BUILD_DIR)/verilator
 SIM_BIN   := $(SIM_DIR)/Vsim_top
 SIM_TEST_DIR := $(BUILD_DIR)/verilator-test
 SIM_TEST_BIN := $(SIM_TEST_DIR)/test_simulation
+DISASM_TEST_DIR := $(BUILD_DIR)/disasm-test
+DISASM_TEST_BIN := $(DISASM_TEST_DIR)/test_disasm
 CONFIG_FILE := .config
 CONFIG_DIR  := $(BUILD_DIR)/config
 AUTO_CONF   := $(CONFIG_DIR)/auto.conf
@@ -33,6 +35,8 @@ SIM_ENGINE_CPP := sim/verilator/memory.cpp \
 SIM_CLI_CPP := sim/verilator/main.cpp
 SIM_CPP := $(SIM_ENGINE_CPP) $(SIM_CLI_CPP)
 SIM_TEST_CPP := sim/tests/test_simulation.cpp
+DISASM_CPP := sim/verilator/disasm.cpp
+DISASM_TEST_CPP := sim/tests/test_disasm.cpp
 SIM_CONFIG_CXXFLAGS := -I$(abspath $(CONFIG_DIR)) \
 	-I$(abspath sim/verilator) \
 	-include $(abspath $(CONFIG_H))
@@ -53,7 +57,7 @@ endif
 
 .PHONY: check-tools help defconfig menuconfig config-show test-config \
 	lint-comb lint test-alu test-decoder test-regfile test-core test-unit \
-	sim-build sim test-simulation test-integration test clean
+	test-disasm sim-build sim test-simulation test-integration test clean
 
 check-tools:
 	@set -eu; \
@@ -157,6 +161,17 @@ test-unit:
 	$(MAKE) --no-print-directory test-regfile
 	$(MAKE) --no-print-directory test-core
 
+$(DISASM_TEST_DIR):
+	mkdir -p $@
+
+$(DISASM_TEST_BIN): $(DISASM_CPP) $(DISASM_TEST_CPP) \
+	sim/verilator/disasm.h Makefile | $(DISASM_TEST_DIR)
+	CCACHE_DISABLE=1 $(CXX) -std=c++17 -Wall -Wextra -Wpedantic \
+		-Isim/verilator -o $@ $(DISASM_CPP) $(DISASM_TEST_CPP)
+
+test-disasm: $(DISASM_TEST_BIN)
+	$(DISASM_TEST_BIN)
+
 $(SIM_BIN): $(SIM_RTL) $(SIM_CPP) sim/verilator/memory.h \
 	sim/verilator/simulation.h Makefile \
 	$(CONFIG_H) $(AUTO_CONF)
@@ -221,6 +236,7 @@ test-integration: sim-build
 
 test:
 	$(MAKE) --no-print-directory test-config
+	$(MAKE) --no-print-directory test-disasm
 	$(MAKE) --no-print-directory lint
 	$(MAKE) --no-print-directory test-unit
 	$(MAKE) --no-print-directory test-simulation
@@ -240,7 +256,7 @@ help:
 	@printf '%s\n' \
 		'DC-Chip build entry points' \
 		'' \
-		'Available through simulator execution-engine step 2:' \
+		'Available through simulator disassembler step 3:' \
 		'  make check-tools  Check required tools, Python curses, and C++17' \
 		'  make help         Show this help without creating build output' \
 		'  make defconfig    Reset .config to configs/default_defconfig' \
@@ -254,11 +270,12 @@ help:
 		'  make test-regfile Run the self-checking register-file testbench' \
 		'  make test-core    Run the self-checking CPU-core testbench' \
 		'  make test-unit    Run all four unit testbenches in order' \
+		'  make test-disasm  Test all 16-bit ISA disassemblies' \
 		'  make sim-build    Build the Verilator DPI-C simulator' \
 		'  make sim IMG=<hex> [STEPS=<n>] [TRACE=1]' \
 		'  make test-simulation  Test the reusable Simulation engine' \
 		'  make test-integration  Run positive and negative integration cases' \
-		'  make test         Run config, lint, unit, engine, and CLI regression' \
+		'  make test         Run config, disasm, RTL, engine, and CLI regression' \
 		'  make clean        Remove only the repository-root build directory' \
 		'' \
 		'Configurable variables:' \

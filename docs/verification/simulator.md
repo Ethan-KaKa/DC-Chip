@@ -1,8 +1,8 @@
 # DC-Chip Verilator 仿真器使用与接口约定
 
 - 版本：v0.1
-- 状态：阶段 D–E 基线及仿真调试基础设施步骤 1–2 已实现
-- 更新日期：2026-09-10
+- 状态：阶段 D–E 基线及仿真调试基础设施步骤 1–3 已实现
+- 更新日期：2026-09-11
 - ISA 规范：[`../isa/isa.md`](../isa/isa.md)
 - 验证计划：[`plan.md`](plan.md)
 
@@ -10,7 +10,8 @@
 
 本文记录当前 Verilator behavioral simulation 的稳定使用接口，包括 DPI-C
 取指边界、HEX 镜像格式、命令行参数、统一执行引擎、运行生命周期和退出码。
-实现位于 `sim/verilator/`，引擎自检与 CLI 集成用例位于 `sim/tests/`。
+实现位于 `sim/verilator/`，反汇编器、引擎自检与 CLI 集成用例位于
+`sim/tests/`。
 
 仿真器只支持 ISA v0.1 的组合零等待取指协议。它不定义最终可执行文件
 ABI，也不能作为综合、时序、功耗或 FPGA 上板证据。
@@ -133,7 +134,23 @@ reset 属于内部接口误用，以 C++ 异常明确失败。
 停止原因为越界取指。提交目标先于非法分类，因此最后一次合法提交造成的下一
 地址组合预取不会覆盖成功结果；下一次步进才会实际执行并报告越界。
 
-## 6. 输出与退出码
+## 6. 最小反汇编接口
+
+`disasm.h/.cpp` 提供与 DUT 状态无关的纯 C++17 接口：
+
+```cpp
+std::string dc_sim::disassemble(std::uint16_t instruction);
+```
+
+该接口覆盖 ISA v0.1 的 8 条指令，并执行与 RTL decoder 相同的规范字段
+检查。助记符和寄存器名使用大写，8 位立即数使用两位小写十六进制，例如
+`MOVI R1, #0x02`、`ADD R1, R2` 和 `JUMP #0x08`。保留 opcode 或未使用字段
+非零的非规范编码统一输出四位小写十六进制 `.word 0xXXXX`，不产生合法别名。
+
+步骤 3 只建立供后续 SDB 使用的接口，现有 `--trace`、summary 和错误输出不
+调用反汇编器，因而其文本契约保持不变。
+
+## 7. 输出与退出码
 
 trace 使用固定宽度小写十六进制，格式为：
 
@@ -155,7 +172,7 @@ summary commits=<n> cycles=<n> pc=0x00 r0=0x0000 r1=0x0000 r2=0x0000 r3=0x0000
 | 3 | 达到最大周期数 |
 | 4 | 最终寄存器或 PC 不匹配 |
 
-## 7. 构建配置边界
+## 8. 构建配置边界
 
 仿真器构建通过根目录 `Dconfig` 接收 `DC_SIM_SDB` 和 `DC_SIM_WAVE`，两项
 默认均为 `n`。当前步骤 1 只建立 `.config`、Make `auto.conf` 和 C++
@@ -166,12 +183,13 @@ summary commits=<n> cycles=<n> pc=0x00 r0=0x0000 r1=0x0000 r2=0x0000 r3=0x0000
 默认配置下 Verilator 仍以 `VM_TRACE=0` 构建。`--trace` 仍只是既有的逐提交
 文本输出参数，与尚未实现的 VCD 功能无关。
 
-## 8. 构建与回归入口
+## 9. 构建与回归入口
 
 ```bash
 make sim-build
 make sim IMG=<hex> [STEPS=<n>] [TRACE=1]
 make test-config
+make test-disasm
 make test-simulation
 make test-integration
 make test
@@ -183,9 +201,12 @@ package、decoder、ALU、regfile、core、wrapper 的顺序构建
 `build/verilator/Vsim_top`；项目 C++ 源采用 C++17，并执行
 `-Wall -Wextra -Wpedantic` 语法检查。
 
-`make test-simulation` 在独立 `build/verilator-test/` Mdir 中直接调用引擎，
+`make test-disasm` 使用纯 C++17 自检穷举全部 65,536 个指令字，其中 2,384 个
+规范编码必须生成精确汇编，其余编码必须生成精确 `.word`。该测试不创建或
+驱动 Verilator 模型。`make test-simulation` 在独立
+`build/verilator-test/` Mdir 中直接调用引擎，
 与正式 `build/verilator/Vsim_top` 隔离。`make test-integration` 的 19 个 CLI
 用例逐项比较精确退出码，并对 summary、trace、普通非法、越界、timeout 和
-状态失配执行精确文本断言。`make test` 依次运行配置、RTL lint/模块测试、
-Simulation 引擎自检和 CLI 集成测试。`make clean` 只允许删除仓库根目录的默认
-`build/`；本地 `.config` 由 `make clean` 保留。
+状态失配执行精确文本断言。`make test` 依次运行配置、反汇编、RTL
+lint/模块测试、Simulation 引擎自检和 CLI 集成测试。`make clean` 只允许删除
+仓库根目录的默认 `build/`；本地 `.config` 由 `make clean` 保留。

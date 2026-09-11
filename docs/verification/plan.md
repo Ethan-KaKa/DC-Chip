@@ -1,8 +1,8 @@
 # DC-Chip 初版验证计划
 
 - 版本：v0.1
-- 状态：初版 CPU 基线及仿真调试基础设施步骤 1–2
-- 更新日期：2026-09-10
+- 状态：初版 CPU 基线及仿真调试基础设施步骤 1–3
+- 更新日期：2026-09-11
 - ISA 规范：`docs/isa/isa.md` v0.1
 - 仿真器接口：[`simulator.md`](simulator.md)
 
@@ -23,6 +23,7 @@ Icarus 和 Verilator 的通过结果只标记为 behavioral simulation。lint、
 | E | 完整正负回归 | `make test-integration`；`make test`；`make clean && make test` | 精确退出码和干净重建 |
 | F | Dconfig 配置基础设施 | `make test-config`；`make test` | 隔离配置测试、四种配置值/头文件编译、既有回归兼容 |
 | G | 统一 Simulation 执行引擎 | `make test-simulation`；`make test-integration`；`make test` | 生命周期、周期/提交步进、停止优先级及 CLI 兼容 |
+| H | ISA v0.1 最小反汇编器 | `make test-disasm`；`make test` | 8 条指令格式、规范字段、全部 16 位编码及 batch 输出兼容 |
 
 阶段必须顺序完成。任一命令失败后立即停止，不运行当前阶段的后续命令，也不进入下一阶段。修复后先重跑失败项，再从阶段 A 起重跑截至当前阶段的所有累计门禁。
 
@@ -71,8 +72,8 @@ HEX 镜像、DPI-C 边界、命令行参数、运行生命周期和退出码的�
 - 超时必须为有限正整数；
 - 修复协议或时序问题时不得增加无规范依据的延时、脉冲或跳过比较；
 - 原始大日志、波形和生成物只进入 `/build/`，不得纳入版本管理；
-- `make test` 固定按 config、lint、unit、Simulation engine、CLI integration
-  顺序执行并在首个失败处停止。
+- `make test` 固定按 config、disassembler、lint、unit、Simulation engine、CLI
+  integration 顺序执行并在首个失败处停止。
 
 ## 7. 验证执行记录
 
@@ -182,6 +183,28 @@ SDB、VCD 波形、执行引擎、反汇编功能均未实现。Vivado 综合/�
 步骤 2 不实现或启用 SDB、断点恢复策略、反汇编或 VCD，也不修改 RTL、ISA、
 DPI 接口、HEX 格式或软件 ABI。Vivado 综合/实现、时序、资源、功耗和真实板卡
 仍未验证。
+
+### 阶段 H：仿真调试基础设施步骤 3
+
+步骤 3 新增与 DUT 状态无关的纯 C++17 最小反汇编接口。它覆盖 ISA v0.1 的
+8 条指令并重复执行规范字段检查；保留 opcode 和已分配 opcode 的非规范编码
+统一输出 `.word 0xXXXX`，不产生合法别名。该接口尚未接入 batch trace，原有
+CLI 文本和退出码保持不变。
+
+反汇编自检先逐项核对手册中的 8 个示例，再穷举全部 65,536 个 16 位指令字。
+其中 2,384 个规范编码必须生成精确汇编，其余 63,152 个编码必须生成精确
+`.word`。测试使用独立的 C++17 可执行文件，不创建或驱动 Verilator 模型。
+
+| 日期 | 命令 | 结果 | 环境或备注 |
+| --- | --- | --- | --- |
+| 2026-09-11 | `make test-disasm` | PASS | G++ 13.3.0；`-Wall -Wextra -Wpedantic`；8 个规范样例及全部 65,536 个编码通过 |
+| 2026-09-11 | `make test` | PASS | config、disassembler、RTL lint、4 个模块 testbench、Simulation engine 和 19 个 CLI 用例全部通过 |
+| 2026-09-11 | `make clean`；`make test` | PASS | 从空 `build/` 重建；反汇编穷举、两个隔离的 Verilator 构建及既有回归全部通过 |
+| 2026-09-11 | `git diff --check`；新文件独立 `--check` | PASS | 已跟踪 diff 和 3 个新增 C++ 文件均无 whitespace error |
+
+步骤 3 不实现或启用 SDB、断点恢复或 VCD，也不修改 RTL、ISA、DPI 接口、
+HEX 格式、batch trace、退出码或软件 ABI。Vivado 综合/实现、时序、资源、
+功耗和真实板卡仍未验证。
 
 ## 8. 后续验证
 
