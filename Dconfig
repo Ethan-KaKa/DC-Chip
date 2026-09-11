@@ -7,7 +7,7 @@ config DC_SIM_SDB
 	default n
 	help
 	  Build support for the compact interactive simulator debugger.
-	  The debugger itself is not implemented in configuration step 1.
+	  When enabled, the simulator enters SDB after reset unless --batch is used.
 
 config DC_SIM_WAVE
 	bool "Build VCD waveform support"

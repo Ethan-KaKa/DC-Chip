@@ -1,7 +1,7 @@
 # DC-Chip Verilator 仿真器使用与接口约定
 
 - 版本：v0.1
-- 状态：阶段 D–E 基线及仿真调试基础设施步骤 1–4 已实现
+- 状态：阶段 D–E 基线及仿真调试基础设施步骤 1–6 已实现
 - 更新日期：2026-09-11
 - ISA 规范：[`../isa/isa.md`](../isa/isa.md)
 - 验证计划：[`plan.md`](plan.md)
@@ -9,8 +9,8 @@
 ## 1. 适用范围
 
 本文记录当前 Verilator behavioral simulation 的稳定使用接口，包括 DPI-C
-取指边界、HEX 镜像格式、命令行参数、统一执行引擎、VCD 波形、运行生命周期
-和退出码。
+取指边界、HEX 镜像格式、命令行参数、统一执行引擎、SDB、VCD 波形、运行
+生命周期和退出码。
 实现位于 `sim/verilator/`，反汇编器、引擎自检与 CLI 集成用例位于
 `sim/tests/`。
 
@@ -70,7 +70,7 @@ DPI 返回值只使用低 16 位。已加载镜像之外的地址返回保留编
 ```text
 Vsim_top --image <path> [--steps <n>] [--max-cycles <n>] [--trace]
          [--expect r0=<value>] ... [--expect r3=<value>]
-         [--expect pc=<value>]
+         [--expect pc=<value>] [--batch]
 Vsim_top --help
 ```
 
@@ -81,12 +81,20 @@ Vsim_top --help
 | `--max-cycles <n>` | 正整数执行周期上限；默认 `steps+4` |
 | `--trace` | 每条合法提交打印一行；不得重复 |
 | `--expect <name=value>` | 可重复用于不同的 `r0`–`r3` 和 `pc`；同名不得重复 |
+| `--batch` | 显式选择原有非交互执行；只能出现一次 |
 | `--help` | 必须是唯一参数 |
 
 数值只接受无符号十进制或带 `0x`/`0X` 前缀的十六进制。寄存器期望值
 范围为 `0x0000`–`0xffff`，PC 范围为 `0x00`–`0xff`。负数、零步数、
 溢出、缺值、未知参数、未知 expectation、重复单值参数或重复 expectation
-均属于输入错误。
+均属于输入错误。严格无符号数解析由 `numeric.h/.cpp` 的纯 C++17
+`dc_sim::parse_unsigned()` 统一提供，不接受符号、空值、尾随字符或溢出。
+
+`CONFIG_DC_SIM_SDB=n` 时默认模式与 `--batch` 均执行原有 batch，参数、summary、
+trace、诊断及退出码保持一致。`CONFIG_DC_SIM_SDB=y` 时，不带 `--batch` 会在
+镜像加载和 reset 后进入 SDB；交互模式允许 `--max-cycles`，但拒绝 `--steps`、
+`--trace` 和 `--expect`，若同时出现则按上述三项顺序报告第一个冲突。SDB 的
+默认绝对周期上限为镜像有效字数加 4，保持有限超时。
 
 ## 5. Simulation 执行引擎
 
@@ -151,7 +159,7 @@ const std::string &wave_path() const;
 
 `set_wave_enabled(false)` 只跳过后续 dump，CPU 和仿真时间继续推进；恢复为
 `true` 后继续写同一文件，不关闭、分段或改名。该接口当前只供执行引擎及测试
-使用，不增加 CLI 参数，也不代表 SDB 已有 `wave` 命令。
+和启用 WAVE 的 SDB 使用。
 
 输出路径不依赖启动工作目录。Linux 构建从 `/proc/self/exe` 解析真实可执行
 文件，要求其位于 `<BUILD_DIR>/verilator*/<binary>`，并将唯一波形截断写入
@@ -175,10 +183,65 @@ std::string dc_sim::disassemble(std::uint16_t instruction);
 `MOVI R1, #0x02`、`ADD R1, R2` 和 `JUMP #0x08`。保留 opcode 或未使用字段
 非零的非规范编码统一输出四位小写十六进制 `.word 0xXXXX`，不产生合法别名。
 
-步骤 3 只建立供后续 SDB 使用的接口，现有 `--trace`、summary 和错误输出不
-调用反汇编器，因而其文本契约保持不变。
+SDB 的提交与状态输出调用该接口；现有 batch `--trace`、summary 和错误输出
+仍不调用反汇编器，因而其文本契约保持不变。
 
-## 8. 输出与退出码
+## 8. SDB 接口与命令契约
+
+只有 `CONFIG_DC_SIM_SDB=y` 时，正式仿真器才编译 `sdb.cpp`、`disasm.cpp` 并
+从 `sdb.h` 调用：
+
+```cpp
+dc_sim::RunResult dc_sim::run_sdb(
+    dc_sim::Simulation &simulation,
+    std::uint64_t max_cycles,
+    std::istream &input,
+    std::ostream &output,
+    std::ostream &errors);
+```
+
+每轮先向 `output` 写入并 flush 固定提示符 `(dc-sdb) `，包括 stdin 重定向和
+EOF。`q` 或 EOF 返回 `StopReason::quit`；实际非法、越界取指和 timeout 在输出
+停止状态、向 `errors` 复用 batch 精确诊断后返回对应 `RunResult`。`main.cpp`
+将三者映射为退出码 `2/2/3`。解析错误只写 `errors` 并继续命令循环。
+
+固定命令为：
+
+```text
+help                 Show this help
+q                    Quit the debugger
+c                    Continue execution
+si [N]               Step N committed instructions (default 1)
+sc [N]               Step N cycles (default 1)
+b <pc>               Set an execution-before breakpoint
+d <id>               Delete a breakpoint
+info r               Show registers and current instruction
+info b               Show breakpoints
+info wave            Show waveform state
+wave on              Resume waveform recording
+wave off             Pause waveform recording
+```
+
+最后三项只在 WAVE 构建中注册和显示。非 WAVE 构建把 `info wave` 作为未知 info
+目标，把 `wave` 作为未知命令。PC 接受十进制或带 `0x`/`0X` 前缀的十六进制，
+范围为 0–255；步数和断点 ID 必须为正 `uint64_t`。参数数量错误统一以
+`error: usage: <syntax>` 报告，未知命令以
+`error: unknown command '<token>'` 报告。
+
+断点表按单调 ID 排序，ID 从 1 开始且删除后不复用；同一 PC 去重并返回原 ID。
+断点在指令执行前命中。SDB 为刚命中的 PC 保留一次抑制状态，让下一条执行命令
+可以越过该断点；目标指令提交后立即恢复。自跳转回相同 PC 因而会再次命中；
+若一个周期尚未提交，抑制状态跨命令保留。所有 `c/si/sc` 都循环调用
+`Simulation::run_until()`，每次最多推进一个完整周期，所以沿用引擎的 timeout、
+非法及越界优先级。
+
+步进完成先打印 `stopped: commits complete` 或 `stopped: cycles complete`；最后
+周期若提交，再打印 `commit pc=... inst=... asm="..."`，最后打印包含当前指令、
+四个寄存器、周期、提交和时间的 `state`。断点、非法、越界和 timeout 也打印
+当前 `state`。WAVE 构建的波形状态固定为
+`wave=on|off path=<absolute-path> time=<N>`。
+
+## 9. 输出与退出码
 
 trace 使用固定宽度小写十六进制，格式为：
 
@@ -200,31 +263,36 @@ summary commits=<n> cycles=<n> pc=0x00 r0=0x0000 r1=0x0000 r2=0x0000 r3=0x0000
 | 3 | 达到最大周期数 |
 | 4 | 最终寄存器或 PC 不匹配 |
 
-## 9. 构建配置边界
+SDB 中 `q` 和 EOF 返回 0；实际非法或越界取指返回 2；timeout 返回 3。SDB
+命令解析错误不终止进程，因此没有独立退出码。
+
+## 10. 构建配置边界
 
 仿真器构建通过根目录 `Dconfig` 接收 `DC_SIM_SDB` 和 `DC_SIM_WAVE`，两项
 默认均为 `n`。`DC_SIM_WAVE=y` 选择本节的编译期 VCD 行为；
-`DC_SIM_SDB` 仍只生成配置宏，SDB 尚未实现。完整配置接口见
+`DC_SIM_SDB=y` 选择交互式 SDB 前端。完整配置接口见
 [`configuration.md`](configuration.md)。
 
 默认配置下 Verilator 仍以 `VM_TRACE=0` 构建。CLI `--trace` 始终只是既有的
 逐提交文本输出参数，与 VCD 编译期开关互相独立。
 
-## 10. 构建与回归入口
+## 11. 构建与回归入口
 
 ```bash
 make sim-build
-make sim IMG=<hex> [STEPS=<n>] [TRACE=1]
+make sim IMG=<hex> [STEPS=<n>] [TRACE=1] [BATCH=1]
 make test-config
 make test-disasm
 make test-simulation
 make test-integration
 make test-wave
+make test-sdb
 make test
 make clean
 ```
 
-`make sim` 要求 `IMG` 非空，`TRACE` 只能为空或 `1`。`make sim-build` 按
+`make sim` 要求 `IMG` 非空，`TRACE` 和 `BATCH` 都只能为空或 `1`；`BATCH=1`
+映射为 `--batch`。`make sim-build` 按
 package、decoder、ALU、regfile、core、wrapper 的顺序构建
 `build/verilator/Vsim_top`；项目 C++ 源采用 C++17，并执行
 `-Wall -Wextra -Wpedantic` 语法检查。
@@ -243,3 +311,8 @@ lint/模块测试、Simulation 引擎自检和 CLI 集成测试。`make clean` �
 编译宏与链接产物、固定输出路径、截断覆盖、VCD header、时间 0、reset 与正常
 执行双边沿、暂停间隙和状态等价，并在 WAVE-on 构建上复跑 19 个 CLI 用例及
 不可打开目标的错误路径。
+
+`make test-sdb` 使用 `build/test-fixtures/sdb/` 的隔离配置覆盖 SDB-off、
+SDB-only 和 SDB+WAVE。它检查条件编译、提示符与逐字命令输出、断点恢复、数值
+及用法错误、终止状态、19 个 batch CLI 用例、交互选项冲突、`BATCH=1` 传递，
+以及 SDB 波形暂停间隙和状态等价。

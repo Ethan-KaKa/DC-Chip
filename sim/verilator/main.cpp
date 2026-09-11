@@ -1,8 +1,11 @@
 #include "memory.h"
+#include "numeric.h"
 #include "simulation.h"
+#ifdef CONFIG_DC_SIM_SDB
+#include "sdb.h"
+#endif
 
 #include <array>
-#include <charconv>
 #include <cstdint>
 #include <iomanip>
 #include <iostream>
@@ -12,7 +15,6 @@
 #include <sstream>
 #include <string>
 #include <string_view>
-#include <system_error>
 
 namespace {
 
@@ -27,6 +29,8 @@ struct Options {
   std::optional<std::uint64_t> steps;
   std::optional<std::uint64_t> max_cycles;
   bool trace = false;
+  bool batch = false;
+  bool has_expectation = false;
   std::array<std::optional<std::uint16_t>, 4> expected_registers;
   std::optional<std::uint8_t> expected_pc;
 };
@@ -39,42 +43,8 @@ void print_usage(std::ostream &output) {
       << "  --max-cycles <positive-u64> Execution cycles (default: steps+4)\n"
       << "  --trace                     Print one line per committed instruction\n"
       << "  --expect <name=value>       Check r0, r1, r2, r3, or pc\n"
+      << "  --batch                     Use non-interactive batch execution\n"
       << "  --help                      Show this help (must be the only option)\n";
-}
-
-bool parse_unsigned(std::string_view text, std::uint64_t *value) {
-  if (text.empty()) {
-    return false;
-  }
-
-  int base = 10;
-  if (text.size() >= 2 && text[0] == '0' &&
-      (text[1] == 'x' || text[1] == 'X')) {
-    base = 16;
-    text.remove_prefix(2);
-    if (text.empty()) {
-      return false;
-    }
-  }
-
-  for (char character : text) {
-    const bool decimal_digit = character >= '0' && character <= '9';
-    const bool lowercase_hex = character >= 'a' && character <= 'f';
-    const bool uppercase_hex = character >= 'A' && character <= 'F';
-    if (!decimal_digit &&
-        (base != 16 || (!lowercase_hex && !uppercase_hex))) {
-      return false;
-    }
-  }
-
-  std::uint64_t parsed = 0;
-  const auto result =
-      std::from_chars(text.data(), text.data() + text.size(), parsed, base);
-  if (result.ec != std::errc() || result.ptr != text.data() + text.size()) {
-    return false;
-  }
-  *value = parsed;
-  return true;
 }
 
 bool take_value(int argc, char **argv, int *index, std::string_view option,
@@ -101,7 +71,7 @@ bool parse_expectation(std::string_view text, Options *options,
   const std::string_view name = text.substr(0, equals);
   const std::string_view value_text = text.substr(equals + 1);
   std::uint64_t value = 0;
-  if (!parse_unsigned(value_text, &value)) {
+  if (!dc_sim::parse_unsigned(value_text, &value)) {
     *error = "invalid numeric value in --expect '" + std::string(text) +
              "'";
     return false;
@@ -146,6 +116,7 @@ bool parse_options(int argc, char **argv, Options *options,
   bool saw_image = false;
   bool saw_steps = false;
   bool saw_max_cycles = false;
+  bool saw_batch = false;
 
   for (int index = 1; index < argc; ++index) {
     const std::string_view argument = argv[index];
@@ -182,7 +153,7 @@ bool parse_options(int argc, char **argv, Options *options,
         return false;
       }
       std::uint64_t parsed = 0;
-      if (!parse_unsigned(value, &parsed) || parsed == 0) {
+      if (!dc_sim::parse_unsigned(value, &parsed) || parsed == 0) {
         *error = "invalid positive integer for " + std::string(argument) +
                  ": '" + std::string(value) + "'";
         return false;
@@ -208,6 +179,16 @@ bool parse_options(int argc, char **argv, Options *options,
           !parse_expectation(value, options, error)) {
         return false;
       }
+      options->has_expectation = true;
+      continue;
+    }
+    if (argument == "--batch") {
+      if (saw_batch) {
+        *error = "duplicate option --batch";
+        return false;
+      }
+      options->batch = true;
+      saw_batch = true;
       continue;
     }
 
@@ -289,22 +270,44 @@ int main(int argc, char **argv) {
     print_usage(std::cerr);
     return kInputError;
   }
+#ifdef CONFIG_DC_SIM_SDB
+  if (!options.batch) {
+    if (options.steps.has_value()) {
+      std::cerr << "error: option --steps requires --batch when SDB is enabled\n";
+      return kInputError;
+    }
+    if (options.trace) {
+      std::cerr << "error: option --trace requires --batch when SDB is enabled\n";
+      return kInputError;
+    }
+    if (options.has_expectation) {
+      std::cerr << "error: option --expect requires --batch when SDB is enabled\n";
+      return kInputError;
+    }
+  }
+#endif
   if (!dc_sim::load_hex_image(options.image_path, &error)) {
     std::cerr << "error: " << error << '\n';
     return kInputError;
   }
 
-  const std::uint64_t steps =
-      options.steps.value_or(dc_sim::image_word_count());
+  const std::uint64_t image_words = dc_sim::image_word_count();
+  const std::uint64_t steps = options.steps.value_or(image_words);
   std::uint64_t max_cycles = 0;
   if (options.max_cycles.has_value()) {
     max_cycles = *options.max_cycles;
   } else {
-    if (steps > std::numeric_limits<std::uint64_t>::max() - 4U) {
+    const std::uint64_t default_base =
+#ifdef CONFIG_DC_SIM_SDB
+        options.batch ? steps : image_words;
+#else
+        steps;
+#endif
+    if (default_base > std::numeric_limits<std::uint64_t>::max() - 4U) {
       std::cerr << "error: default --max-cycles overflows steps+4\n";
       return kInputError;
     }
-    max_cycles = steps + 4U;
+    max_cycles = default_base + 4U;
   }
 
   std::unique_ptr<dc_sim::Simulation> simulation;
@@ -315,6 +318,20 @@ int main(int argc, char **argv) {
     std::cerr << "error: " << exception.what() << '\n';
     return kInputError;
   }
+#ifdef CONFIG_DC_SIM_SDB
+  if (!options.batch) {
+    const dc_sim::RunResult result = dc_sim::run_sdb(
+        *simulation, max_cycles, std::cin, std::cout, std::cerr);
+    if (result.reason == dc_sim::StopReason::illegal_instruction ||
+        result.reason == dc_sim::StopReason::out_of_bounds_fetch) {
+      return kIllegalInstruction;
+    }
+    if (result.reason == dc_sim::StopReason::timeout) {
+      return kTimeout;
+    }
+    return kSuccess;
+  }
+#endif
   for (std::uint64_t step = 0; step < steps; ++step) {
     const dc_sim::RunResult result =
         simulation->step_instruction(max_cycles);

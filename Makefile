@@ -32,8 +32,8 @@ SIM_RTL := $(CORE_RTL) \
 	sim/verilator/sim_top.sv
 SIM_ENGINE_CPP := sim/verilator/memory.cpp \
 	sim/verilator/simulation.cpp
-SIM_CLI_CPP := sim/verilator/main.cpp
-SIM_CPP := $(SIM_ENGINE_CPP) $(SIM_CLI_CPP)
+SIM_CLI_CPP := sim/verilator/numeric.cpp \
+	sim/verilator/main.cpp
 SIM_TEST_CPP := sim/tests/test_simulation.cpp
 DISASM_CPP := sim/verilator/disasm.cpp
 DISASM_TEST_CPP := sim/tests/test_disasm.cpp
@@ -53,6 +53,12 @@ ifneq ($(filter sim-build sim test-simulation test-integration test,$(MAKECMDGOA
 -include $(AUTO_CONF)
 endif
 
+ifeq ($(CONFIG_DC_SIM_SDB),y)
+SIM_CLI_CPP += sim/verilator/disasm.cpp \
+	sim/verilator/sdb.cpp
+endif
+SIM_CPP := $(SIM_ENGINE_CPP) $(SIM_CLI_CPP)
+
 ifeq ($(CONFIG_DC_SIM_WAVE),y)
 SIM_TRACE_FLAGS := --trace
 endif
@@ -61,7 +67,8 @@ endif
 
 .PHONY: check-tools help defconfig menuconfig config-show test-config \
 	lint-comb lint test-alu test-decoder test-regfile test-core test-unit \
-	test-disasm sim-build sim test-simulation test-integration test-wave test clean
+	test-disasm sim-build sim test-simulation test-integration test-wave \
+	test-sdb test clean
 
 check-tools:
 	@set -eu; \
@@ -177,7 +184,8 @@ test-disasm: $(DISASM_TEST_BIN)
 	$(DISASM_TEST_BIN)
 
 $(SIM_BIN): $(SIM_RTL) $(SIM_CPP) sim/verilator/memory.h \
-	sim/verilator/simulation.h Makefile \
+	sim/verilator/numeric.h sim/verilator/simulation.h \
+	$(if $(filter y,$(CONFIG_DC_SIM_SDB)),sim/verilator/sdb.h sim/verilator/disasm.h) Makefile \
 	$(CONFIG_H) $(AUTO_CONF)
 	mkdir -p $(SIM_DIR)
 	CCACHE_DISABLE=1 CXX="$(CXX)" $(VERILATOR) --cc --exe --build \
@@ -217,13 +225,18 @@ test-simulation: $(SIM_TEST_BIN)
 sim:
 	@set -eu; \
 	if [ -z '$(strip $(IMG))' ]; then \
-		printf '%s\n' 'error: IMG is required; use make sim IMG=<hex> [STEPS=<n>] [TRACE=1]' >&2; \
+		printf '%s\n' 'error: IMG is required; use make sim IMG=<hex> [STEPS=<n>] [TRACE=1] [BATCH=1]' >&2; \
 		exit 1; \
 	fi; \
 	case '$(TRACE)' in \
 		'') ;; \
 		1) ;; \
 		*) printf 'error: TRACE must be empty or 1, got: %s\n' '$(TRACE)' >&2; exit 1 ;; \
+	esac; \
+	case '$(BATCH)' in \
+		'') ;; \
+		1) ;; \
+		*) printf 'error: BATCH must be empty or 1, got: %s\n' '$(BATCH)' >&2; exit 1 ;; \
 	esac
 	$(MAKE) --no-print-directory sim-build
 	@set -eu; \
@@ -234,6 +247,9 @@ sim:
 	if [ '$(TRACE)' = 1 ]; then \
 		set -- "$$@" --trace; \
 	fi; \
+	if [ '$(BATCH)' = 1 ]; then \
+		set -- "$$@" --batch; \
+	fi; \
 	$(SIM_BIN) "$$@"
 
 test-integration: sim-build
@@ -243,6 +259,13 @@ test-integration: sim-build
 test-wave:
 	$(PYTHON) scripts/test_wave.py \
 		--fixture-root "$(abspath $(BUILD_DIR))/test-fixtures/wave" \
+		--make "$(MAKE)" --verilator "$(VERILATOR)" \
+		--iverilog "$(IVERILOG)" --vvp "$(VVP)" \
+		--cxx "$(CXX)" --python "$(PYTHON)"
+
+test-sdb:
+	$(PYTHON) scripts/test_sdb.py \
+		--fixture-root "$(abspath $(BUILD_DIR))/test-fixtures/sdb" \
 		--make "$(MAKE)" --verilator "$(VERILATOR)" \
 		--iverilog "$(IVERILOG)" --vvp "$(VVP)" \
 		--cxx "$(CXX)" --python "$(PYTHON)"
@@ -269,7 +292,7 @@ help:
 	@printf '%s\n' \
 		'DC-Chip build entry points' \
 		'' \
-		'Available through simulator waveform step 4:' \
+		'Available through simulator debugger step 6:' \
 		'  make check-tools  Check required tools, Python curses, and C++17' \
 		'  make help         Show this help without creating build output' \
 		'  make defconfig    Reset .config to configs/default_defconfig' \
@@ -285,20 +308,21 @@ help:
 		'  make test-unit    Run all four unit testbenches in order' \
 		'  make test-disasm  Test all 16-bit ISA disassemblies' \
 		'  make sim-build    Build the Verilator DPI-C simulator' \
-		'  make sim IMG=<hex> [STEPS=<n>] [TRACE=1]' \
+		'  make sim IMG=<hex> [STEPS=<n>] [TRACE=1] [BATCH=1]' \
 		'  make test-simulation  Test the reusable Simulation engine' \
 		'  make test-integration  Run positive and negative integration cases' \
 		'  make test-wave    Test isolated WAVE-off/on simulator builds' \
+		'  make test-sdb     Test isolated SDB-off/on and SDB+WAVE builds' \
 		'  make test         Run config, disasm, RTL, engine, and CLI regression' \
 		'  make clean        Remove only the repository-root build directory' \
 		'' \
 		'Configurable variables:' \
 		'  VERILATOR, IVERILOG, VVP, CXX, PYTHON, BUILD_DIR' \
-		'  IMG, STEPS and TRACE become active with make sim in stage D.' \
+		'  IMG, STEPS, TRACE and BATCH become active with make sim.' \
 		'' \
 		'Configuration files:' \
 		'  .config is local and preserved by make clean.' \
 		'  configs/default_defconfig is the tracked default.' \
 		'  Simulator targets generate build/config/auto.conf and config.h.' \
 		'  DC_SIM_WAVE=y enables build-time VCD output at build/dump.vcd.' \
-		'  DC_SIM_SDB defaults to n and is not active yet.'
+		'  DC_SIM_SDB=y makes SDB interactive mode the simulator default.'

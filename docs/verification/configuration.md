@@ -1,7 +1,7 @@
 # DC-Chip 构建配置说明
 
 - 版本：v0.1
-- 状态：配置步骤 1 已实现；波形步骤 4 已接入
+- 状态：配置步骤 1、波形步骤 4 与 SDB 步骤 5–6 已接入
 - 更新日期：2026-09-11
 - 配置规范：仓库根目录 `Dconfig`
 - 仿真器接口：[`simulator.md`](simulator.md)
@@ -12,11 +12,12 @@
 
 | 名称 | 默认值 | 当前状态 |
 | --- | --- | --- |
-| `DC_SIM_SDB` | `n` | 可配置、可生成宏；SDB 功能尚未实现 |
+| `DC_SIM_SDB` | `n` | `y` 时编译 SDB，reset 后默认进入交互模式 |
 | `DC_SIM_WAVE` | `n` | `y` 时编译并启用 VCD；`n` 时不编译 VCD 支持 |
 
 tracked `configs/default_defconfig` 显式关闭两个选项。本地选择保存在被 Git
-忽略的仓库根 `.config`。`DC_SIM_SDB=y` 仍只生成配置宏，不代表 SDB 可用。
+忽略的仓库根 `.config`。`DC_SIM_SDB=y` 时正式仿真器额外编译 SDB 与反汇编
+实现；`--batch` 可在该构建中恢复原有非交互执行。
 
 ## 2. 人工入口
 
@@ -82,6 +83,10 @@ Make 解析期间加载 `auto.conf`。`help`、lint 和独立 RTL 模块测试�
 `PYTHON=<python3>` 覆盖 Python 解释器；`make check-tools` 会检查 Python 3、
 标准库 `curses`、原有 HDL 工具和 C++17 支持。
 
+`make test-sdb` 自行在 `build/test-fixtures/sdb/` 下生成 SDB-off、SDB-only 和
+SDB+WAVE 三套隔离配置与构建，不读取或修改仓库根 `.config`。SDB 关闭时，
+正式仿真器的源文件和链接对象均不包含 `sdb.cpp` 或 SDB 所需的反汇编实现。
+
 ## 5. 波形构建行为
 
 `CONFIG_DC_SIM_WAVE=y` 时，Make 只为正式仿真器和独立 Simulation 引擎测试的
@@ -94,6 +99,10 @@ Verilator 命令增加 `--trace`，生成结果为 `VM_TRACE=1`、`VM_TRACE_VCD=
 [`simulator.md`](simulator.md)。`make test-wave` 使用
 `build/test-fixtures/wave/off/` 和 `on/` 下的隔离配置与构建目录，不修改仓库根
 `.config`。
+
+SDB 和 WAVE 同时启用时，`info wave`、`wave on` 与 `wave off` 只控制
+`Simulation` 中现有 VCD recorder；暂停不会改变 DUT 状态、周期、提交或仿真
+时间，也不会创建第二个波形文件。
 
 ## 6. 固定第三方实现
 

@@ -1,7 +1,7 @@
 # DC-Chip 初版验证计划
 
 - 版本：v0.1
-- 状态：初版 CPU 基线及仿真调试基础设施步骤 1–4
+- 状态：初版 CPU 基线及仿真调试基础设施步骤 1–6
 - 更新日期：2026-09-11
 - ISA 规范：`docs/isa/isa.md` v0.1
 - 仿真器接口：[`simulator.md`](simulator.md)
@@ -25,6 +25,7 @@ Icarus 和 Verilator 的通过结果只标记为 behavioral simulation。lint、
 | G | 统一 Simulation 执行引擎 | `make test-simulation`；`make test-integration`；`make test` | 生命周期、周期/提交步进、停止优先级及 CLI 兼容 |
 | H | ISA v0.1 最小反汇编器 | `make test-disasm`；`make test` | 8 条指令格式、规范字段、全部 16 位编码及 batch 输出兼容 |
 | I | 编译期 VCD 波形 | `make test-wave`；`make test` | WAVE-off 零 VCD 代码、WAVE-on 时间轴/路径/暂停、CLI 兼容与错误处理 |
+| J | 可配置 SDB 与 CLI 整合 | `make test-sdb`；`make test-wave`；`make test` | SDB-off batch 兼容、交互命令契约、断点恢复、SDB+WAVE 共用时间轴 |
 
 阶段必须顺序完成。任一命令失败后立即停止，不运行当前阶段的后续命令，也不进入下一阶段。修复后先重跑失败项，再从阶段 A 起重跑截至当前阶段的所有累计门禁。
 
@@ -54,6 +55,12 @@ HEX 镜像、DPI-C 边界、命令行参数、运行生命周期和退出码的�
 
 负向测试包括保留 opcode、非规范编码、文件不存在、空镜像、非法字符、非 4 位数据、超过 256 个有效字、超时、最终状态失配、重复 expectation、未知参数和缺失参数。
 
+SDB 定向测试另外覆盖提示符、帮助和 EOF，周期/提交步进，当前指令反汇编，
+断点设置/去重/删除/稳定 ID/执行前命中及自跳转恢复，严格无符号数错误，命令
+用法错误，非法/越界/timeout 状态，以及 WAVE 命令的幂等暂停和恢复。SDB-on
+构建必须用 `--batch` 重跑既有 19 个 CLI 用例；SDB-off 的默认 batch 与显式
+`--batch` 必须保持等价。
+
 ## 5. 退出码契约
 
 | 退出码 | 条件 |
@@ -63,6 +70,9 @@ HEX 镜像、DPI-C 边界、命令行参数、运行生命周期和退出码的�
 | 2 | 实际执行保留 opcode、非规范编码或越界取指返回的非法字 |
 | 3 | 最大周期数耗尽 |
 | 4 | 最终寄存器或 PC 不匹配 |
+
+SDB 的 `q` 或 stdin EOF 返回 0；非法和越界取指仍返回 2，timeout 仍返回 3。
+交互命令解析错误打印诊断后继续，不直接产生进程退出码。
 
 负向 runner 必须比较精确退出码，不能只判断“非零”。失败消息至少包含相关 PC、指令、输入路径、输入行号或参数名之一。
 
@@ -75,6 +85,8 @@ HEX 镜像、DPI-C 边界、命令行参数、运行生命周期和退出码的�
 - 原始大日志、波形和生成物只进入 `/build/`，不得纳入版本管理；
 - `make test` 固定按 config、disassembler、lint、unit、Simulation engine、CLI
   integration 顺序执行并在首个失败处停止。
+- `make test-sdb` 和 `make test-wave` 使用各自隔离配置矩阵，不修改根 `.config`；
+  二者作为配置专项回归独立执行。
 
 ## 7. 验证执行记录
 
@@ -232,6 +244,32 @@ HEX 格式、batch trace、退出码或软件 ABI。Vivado 综合/实现、时�
 步骤 4 不实现 SDB、断点恢复或 SDB `wave` 命令，也不修改 RTL、ISA、DPI、
 HEX 格式、batch 文本输出或软件 ABI。Vivado 综合/实现、时序、资源、功耗和
 真实板卡仍未验证。
+
+### 阶段 J：仿真调试基础设施步骤 5–6
+
+步骤 5–6 将配置期 SDB 接入正式仿真器。SDB、batch 和 VCD 复用统一
+`Simulation` 时间轴；SDB 只以单周期 `run_until()` 调用推进模型。执行前断点
+由按 ID 排序的表和 PC 去重索引维护，刚命中的 PC 在下一次执行命令中临时
+抑制，并在对应指令提交后立即恢复，因此 jump loop 返回相同 PC 时会再次命中。
+
+`make test-sdb` 在 `build/test-fixtures/sdb/` 中隔离构建 SDB-off、SDB-only 和
+SDB+WAVE。测试逐字检查提示符、帮助、状态、步进、断点和错误诊断；检查
+SDB-off 不编译或链接 SDB/反汇编对象；在 SDB-on 上以 `--batch` 重跑 19 个
+既有 CLI 用例；并验证 WAVE 命令幂等、暂停时间戳间隙和体系结构状态等价。
+
+| 日期 | 命令 | 结果 | 环境或备注 |
+| --- | --- | --- | --- |
+| 2026-09-11 | `make check-tools` | PASS | GNU Make 4.3；Verilator 5.041 devel；Icarus/vvp 13.0 devel；G++ 13.3.0；Python 3.12.3 |
+| 2026-09-11 | `make help` | PASS | 列出 SDB、`BATCH=1` 及隔离测试入口 |
+| 2026-09-11 | `make test-sdb` | PASS | 三种隔离构建及 SDB 命令、CLI、断点、波形用例全部通过 |
+| 2026-09-11 | `make test-wave` | PASS | WAVE-off/on 专项回归及 19 个既有 CLI 用例通过 |
+| 2026-09-11 | `make test` | PASS | 默认 SDB/WAVE 均关闭；配置、反汇编、RTL、引擎和 19 个 CLI 用例通过 |
+| 2026-09-11 | `make clean`；`make test` | PASS | 从空 `build/` 完整重建默认配置并通过 |
+| 2026-09-11 | `git diff --check` | PASS | 本步骤源码、测试、Make、Dconfig 与正式文档无 whitespace error |
+
+步骤 5–6 不实现 watchpoint、表达式、内存扫描、寄存器修改、readline、命令
+别名、ftrace、difftest 或新 ISA 指令，也不修改 RTL、DPI、HEX、存储映射或
+软件 ABI。Vivado 综合/实现、时序、资源、功耗和真实板卡仍未验证。
 
 ## 8. 后续验证
 
