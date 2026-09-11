@@ -45,17 +45,18 @@ void ReferenceModel::load_irom(const std::vector<std::uint32_t> &words) {
 }
 
 void ReferenceModel::load_from_sim_memory() {
-  for (std::size_t i = 0; i < 256; ++i) {
-    irom_[i] = read_irom_word(i);
+  for (std::size_t i = 0; i < irom_.size(); ++i) {
+    irom_[i] = ::dc_sim::read_irom_word(i);
   }
-  for (std::size_t i = 0; i < 1024; ++i) {
-    const std::uint32_t word = read_dram_word(i);
+  for (std::size_t i = 0; i < dram_.size() / 4; ++i) {
+    const std::uint32_t word = ::dc_sim::read_dram_word(i);
     dram_[i * 4 + 0] = static_cast<std::uint8_t>(word & 0xffU);
     dram_[i * 4 + 1] = static_cast<std::uint8_t>((word >> 8U) & 0xffU);
     dram_[i * 4 + 2] = static_cast<std::uint8_t>((word >> 16U) & 0xffU);
     dram_[i * 4 + 3] = static_cast<std::uint8_t>((word >> 24U) & 0xffU);
   }
 }
+
 
 void ReferenceModel::write_dram_byte(std::uint32_t addr, std::uint8_t byte_val) {
   if (addr >= kDramBase && addr < kDramBase + kDramBytes) {

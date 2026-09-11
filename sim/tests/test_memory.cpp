@@ -85,22 +85,23 @@ void test_hex_loading(const std::filesystem::path &fixture_dir) {
             "error diagnostic mismatch for non-hex character: " + error);
   }
 
-  // 1.5 Capacity overflow: 257 words (limit is 256)
+  // 1.5 Capacity overflow: 16385 words (limit is 16384)
   {
     const auto p = fixture_dir / "overflow.hex";
     std::ostringstream oss;
-    for (int i = 0; i < 257; ++i) {
+    for (int i = 0; i < 16385; ++i) {
       oss << "00000013  # nop " << i << "\n";
     }
     write_file(p, oss.str());
     std::string error;
     require(!dc_sim::load_hex_image(p.string(), &error),
-            "loader should fail on > 256 words");
-    require(error.find(":257:") != std::string::npos,
-            "error should point to line 257: " + error);
-    require(error.find("exceeds the 256-word") != std::string::npos,
+            "loader should fail on > 16384 words");
+    require(error.find(":16385:") != std::string::npos,
+            "error should point to line 16385: " + error);
+    require(error.find("exceeds the 16384-word") != std::string::npos,
             "error diagnostic mismatch for capacity overflow: " + error);
   }
+
 
   // 1.6 Valid 8-char hex with mixed case, comments, spaces
   {
@@ -215,13 +216,14 @@ void test_irom_protocol() {
   dut->eval();
   require(dut->imem_rsp_rdata == 0xdeadbeef, "IROM word 2 rdata mismatch");
 
-  // 2.4 Out of bounds read: >= 1024 (0x400)
-  dut->imem_req_addr = 0x00000400;
+  // 2.4 Out of bounds read: >= 65536 (0x10000)
+  dut->imem_req_addr = 0x00010000;
   dut->eval();
   require(dut->imem_req_ready == 1, "IROM OOB req_ready should be 1");
   require(dut->imem_rsp_valid == 1, "IROM OOB rsp_valid should be 1");
   require(dut->imem_rsp_error == 1, "IROM OOB rsp_error should be 1");
   require(dut->imem_rsp_rdata == 0, "IROM OOB rdata should be 0");
+
 
   // 2.5 Unaligned instruction address
   dut->imem_req_addr = 0x00000002;
@@ -246,9 +248,9 @@ void test_dram_read_write_protocol() {
   dc_sim::reset_memory();
 
   // 3.1 Synchronous 1-cycle latency write
-  // Address 0x1000 (word 0 of DRAM), data 0xaabbccdd, wstrb 4'b1111 (SW)
+  // Address 0x20000000 (word 0 of DRAM), data 0xaabbccdd, wstrb 4'b1111 (SW)
   dut->dmem_req_valid = 1;
-  dut->dmem_req_addr = 0x00001000;
+  dut->dmem_req_addr = 0x20000000;
   dut->dmem_req_write = 1;
   dut->dmem_req_size = 2;  // word
   dut->dmem_req_wdata = 0xaabbccdd;
@@ -279,9 +281,9 @@ void test_dram_read_write_protocol() {
           "DRAM word 0 was not written correctly");
 
   // 3.2 Synchronous 1-cycle latency read
-  // Read back from 0x1000
+  // Read back from 0x20000000
   dut->dmem_req_valid = 1;
-  dut->dmem_req_addr = 0x00001000;
+  dut->dmem_req_addr = 0x20000000;
   dut->dmem_req_write = 0;
   dut->dmem_req_size = 2;
   dut->dmem_req_wdata = 0;
@@ -304,7 +306,7 @@ void test_dram_read_write_protocol() {
   // Current word 0 is 0xaabbccdd (little-endian bytes: dd, cc, bb, aa)
   // Modify byte 0 (lane 0) to 0x11
   dut->dmem_req_valid = 1;
-  dut->dmem_req_addr = 0x00001000;
+  dut->dmem_req_addr = 0x20000000;
   dut->dmem_req_write = 1;
   dut->dmem_req_size = 0;  // byte
   dut->dmem_req_wdata = 0x00000011;
@@ -320,7 +322,7 @@ void test_dram_read_write_protocol() {
 
   // Modify byte 2 (lane 2) to 0x22
   dut->dmem_req_valid = 1;
-  dut->dmem_req_addr = 0x00001002;
+  dut->dmem_req_addr = 0x20000002;
   dut->dmem_req_write = 1;
   dut->dmem_req_size = 0;
   dut->dmem_req_wdata = 0x00220000;
@@ -332,6 +334,7 @@ void test_dram_read_write_protocol() {
   tb.tick();
   require(dc_sim::read_dram_word(0) == 0xaa22cc11,
           "wstrb=0100 byte 2 update mismatch");
+
 
   std::cout << "[test_memory] DRAM read/write protocol tests: PASS"
             << std::endl;
@@ -345,16 +348,16 @@ void test_dram_read_first_and_backpressure() {
   auto *dut = tb.dut();
   dc_sim::reset_memory();
 
-  // Set initial content at 0x1004 (word 1) = 0x12345678
-  dc_sim::write_dram_byte(0x1004, 0x78);
-  dc_sim::write_dram_byte(0x1005, 0x56);
-  dc_sim::write_dram_byte(0x1006, 0x34);
-  dc_sim::write_dram_byte(0x1007, 0x12);
+  // Set initial content at 0x20000004 (word 1) = 0x12345678
+  dc_sim::write_dram_byte(0x20000004, 0x78);
+  dc_sim::write_dram_byte(0x20000005, 0x56);
+  dc_sim::write_dram_byte(0x20000006, 0x34);
+  dc_sim::write_dram_byte(0x20000007, 0x12);
   require(dc_sim::read_dram_word(1) == 0x12345678, "initial setup mismatch");
 
-  // 4.1 Read-first: issue write to 0x1004 with new data 0x99999999
+  // 4.1 Read-first: issue write to 0x20000004 with new data 0x99999999
   dut->dmem_req_valid = 1;
-  dut->dmem_req_addr = 0x00001004;
+  dut->dmem_req_addr = 0x20000004;
   dut->dmem_req_write = 1;
   dut->dmem_req_size = 2;
   dut->dmem_req_wdata = 0x99999999;
@@ -376,7 +379,8 @@ void test_dram_read_first_and_backpressure() {
 
   // 4.2 Backpressure: keep dmem_rsp_ready = 0 for 3 cycles
   dut->dmem_req_valid = 1;
-  dut->dmem_req_addr = 0x00001008;  // word 2
+  dut->dmem_req_addr = 0x20000008;  // word 2
+
   dut->dmem_req_write = 1;
   dut->dmem_req_size = 2;
   dut->dmem_req_wdata = 0x55555555;
@@ -505,7 +509,7 @@ void test_unmapped_and_reset_protocol() {
   auto *dut = tb.dut();
   dc_sim::reset_memory();
 
-  // 6.1 Unmapped address in hole: 0x00000800
+  // 6.1 Harvard cross-access protection: LSU write to IROM space 0x00000800 must fail
   dut->dmem_req_valid = 1;
   dut->dmem_req_addr = 0x00000800;
   dut->dmem_req_write = 1;
@@ -517,13 +521,13 @@ void test_unmapped_and_reset_protocol() {
   tb.tick();
 
   dut->dmem_req_valid = 0;
-  require(dut->dmem_rsp_valid == 1, "unmapped access response valid");
-  require(dut->dmem_rsp_error == 1, "unmapped access must return error=1");
+  require(dut->dmem_rsp_valid == 1, "cross-access response valid");
+  require(dut->dmem_rsp_error == 1, "LSU access to IROM must return error=1");
   tb.tick();
 
-  // 6.2 Unmapped address past DRAM: 0x00002000
+  // 6.2 Unmapped address past DRAM: 0x20010000
   dut->dmem_req_valid = 1;
-  dut->dmem_req_addr = 0x00002000;
+  dut->dmem_req_addr = 0x20010000;
   dut->dmem_req_write = 0;
   dut->dmem_rsp_ready = 1;
   dut->eval();
@@ -535,7 +539,7 @@ void test_unmapped_and_reset_protocol() {
 
   // 6.3 Reset flushes in-flight transaction
   dut->dmem_req_valid = 1;
-  dut->dmem_req_addr = 0x00001000;
+  dut->dmem_req_addr = 0x20000000;
   dut->dmem_req_write = 1;
   dut->dmem_req_size = 2;
   dut->dmem_req_wdata = 0x77777777;
@@ -564,6 +568,107 @@ void test_unmapped_and_reset_protocol() {
             << std::endl;
 }
 
+void test_binary_loading(const std::filesystem::path &fixture_dir) {
+  std::cout << "[test_memory] Running binary loader tests..." << std::endl;
+
+  // 7.1 Non-existent binary
+  {
+    std::string error;
+    require(!dc_sim::load_binary_image((fixture_dir / "nonexistent.bin").string(),
+                                       dc_sim::MemoryRegion::kIrom, &error),
+            "binary loader should fail on non-existent file");
+    require(error.find("unable to open image") != std::string::npos,
+            "error diagnostic mismatch for non-existent binary: " + error);
+  }
+
+  // 7.2 Empty binary
+  {
+    const auto p = fixture_dir / "empty.bin";
+    {
+      std::ofstream out(p, std::ios::binary);
+    }
+    std::string error;
+    require(!dc_sim::load_binary_image(p.string(), dc_sim::MemoryRegion::kIrom, &error),
+            "binary loader should fail on empty file");
+    require(error.find("image contains no data") != std::string::npos,
+            "error diagnostic mismatch for empty binary: " + error);
+  }
+
+  // 7.3 Oversized binary (> 64 KiB)
+  {
+    const auto p = fixture_dir / "overflow.bin";
+    {
+      std::ofstream out(p, std::ios::binary);
+      std::vector<char> big(65537, 0);
+      out.write(big.data(), big.size());
+    }
+    std::string error;
+    require(!dc_sim::load_binary_image(p.string(), dc_sim::MemoryRegion::kIrom, &error),
+            "binary loader should fail on > 64 KiB");
+    require(error.find("exceeds the 65536-byte capacity") != std::string::npos,
+            "error diagnostic mismatch for capacity overflow: " + error);
+  }
+
+  // 7.4 Valid binary with 4-byte padding check
+  {
+    const auto p = fixture_dir / "valid_unaligned.bin";
+    {
+      std::ofstream out(p, std::ios::binary);
+      const char data[] = {'\x13', '\x00', '\x10', '\x00', '\x33', '\x81', '\x20'};
+      out.write(data, sizeof(data));
+    }
+    std::string error;
+    require(dc_sim::load_binary_image(p.string(), dc_sim::MemoryRegion::kIrom, &error),
+            "binary loader should succeed and pad to 4 bytes: " + error);
+    require(dc_sim::image_word_count() == 2, "7 bytes should pad to 2 words");
+    require(dc_sim::read_irom_word(0) == 0x00100013, "word 0 mismatch");
+    require(dc_sim::read_irom_word(1) == 0x00208133, "word 1 padded mismatch");
+  }
+
+  // 7.5 Valid DRAM binary
+  {
+    const auto p = fixture_dir / "data.bin";
+    {
+      std::ofstream out(p, std::ios::binary);
+      const char data[] = {'\xdd', '\xcc', '\xbb', '\xaa', '\x78', '\x56', '\x34', '\x12'};
+      out.write(data, sizeof(data));
+    }
+    std::string error;
+    require(dc_sim::load_binary_image(p.string(), dc_sim::MemoryRegion::kDram, &error),
+            "binary loader should succeed for DRAM: " + error);
+    require(dc_sim::read_dram_word(0) == 0xaabbccdd, "DRAM word 0 mismatch");
+    require(dc_sim::read_dram_word(1) == 0x12345678, "DRAM word 1 mismatch");
+  }
+
+  // 7.6 Dual image loading via load_image
+  {
+    const auto p_inst = fixture_dir / "dual_inst.bin";
+    const auto p_data = fixture_dir / "dual_data.bin";
+    {
+      std::ofstream out(p_inst, std::ios::binary);
+      const char data[] = {'\x93', '\x00', '\x10', '\x00'};
+      out.write(data, sizeof(data));
+    }
+    {
+      std::ofstream out(p_data, std::ios::binary);
+      const char data[] = {'\xef', '\xbe', '\xad', '\xde'};
+      out.write(data, sizeof(data));
+    }
+    std::string error;
+    dc_sim::reset_memory();
+    require(dc_sim::load_image(p_inst.string(), dc_sim::MemoryRegion::kIrom,
+                               dc_sim::ImageFormat::kAuto, &error),
+            "dual load inst failed: " + error);
+    require(dc_sim::load_image(p_data.string(), dc_sim::MemoryRegion::kDram,
+                               dc_sim::ImageFormat::kAuto, &error),
+            "dual load data failed: " + error);
+    require(dc_sim::read_irom_word(0) == 0x00100093, "dual IROM word mismatch");
+    require(dc_sim::read_dram_word(0) == 0xdeadbeef, "dual DRAM word mismatch");
+  }
+
+  std::cout << "[test_memory] binary loader tests: PASS" << std::endl;
+}
+
 }  // namespace
 
 int main(int argc, char **argv) {
@@ -572,6 +677,7 @@ int main(int argc, char **argv) {
 
   try {
     test_hex_loading(fixture_dir);
+    test_binary_loading(fixture_dir);
     test_irom_protocol();
     test_dram_read_write_protocol();
     test_dram_read_first_and_backpressure();

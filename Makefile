@@ -5,7 +5,9 @@ CXX       ?= c++
 PYTHON    ?= python3
 RISCV_GCC     ?= riscv64-linux-gnu-gcc
 RISCV_OBJDUMP ?= riscv64-linux-gnu-objdump
+RISCV_OBJCOPY ?= riscv64-linux-gnu-objcopy
 BUILD_DIR ?= build
+
 UNIT_DIR  := $(BUILD_DIR)/unit
 SIM_DIR   := $(BUILD_DIR)/verilator
 SIM_BIN   := $(SIM_DIR)/Vsim_top
@@ -100,6 +102,7 @@ check-tools:
 	check_tool "$(PYTHON)"; \
 	check_tool "$(RISCV_GCC)"; \
 	check_tool "$(RISCV_OBJDUMP)"; \
+	check_tool "$(RISCV_OBJCOPY)"; \
 	version_output=$$(mktemp); \
 	trap 'rm -f "$$version_output"' EXIT; \
 	printf 'GNU Make %s\n' '$(MAKE_VERSION)'; \
@@ -114,6 +117,8 @@ check-tools:
 	CCACHE_DISABLE=1 $(RISCV_GCC) --version >"$$version_output" 2>&1; \
 	sed -n '1p' "$$version_output"; \
 	$(RISCV_OBJDUMP) --version >"$$version_output" 2>&1; \
+	sed -n '1p' "$$version_output"; \
+	$(RISCV_OBJCOPY) --version >"$$version_output" 2>&1; \
 	sed -n '1p' "$$version_output"; \
 	$(PYTHON) -c 'import curses; print("Python curses import: PASS")'; \
 	printf 'int main() { return 0; }\n' | \
@@ -316,7 +321,7 @@ test-difftest: $(DIFF_TEST_BIN)
 sim:
 	@set -eu; \
 	if [ -z '$(strip $(IMG))' ]; then \
-		printf '%s\n' 'error: IMG is required; use make sim IMG=<hex> [STEPS=<n>] [TRACE=1] [BATCH=1]' >&2; \
+		printf '%s\n' 'error: IMG is required; use make sim IMG=<path> [DATA_IMG=<path>] [STEPS=<n>] [TRACE=1] [BATCH=1]' >&2; \
 		exit 1; \
 	fi; \
 	case '$(TRACE)' in \
@@ -332,6 +337,9 @@ sim:
 	$(MAKE) --no-print-directory sim-build
 	@set -eu; \
 	set -- --image '$(IMG)'; \
+	if [ -n '$(strip $(DATA_IMG))' ]; then \
+		set -- "$$@" --image-data '$(DATA_IMG)'; \
+	fi; \
 	if [ -n '$(strip $(STEPS))' ]; then \
 		set -- "$$@" --steps '$(STEPS)'; \
 	fi; \
@@ -342,6 +350,7 @@ sim:
 		set -- "$$@" --batch; \
 	fi; \
 	$(SIM_BIN) "$$@"
+
 
 test-integration: sim-build
 	TEST_FIXTURE_DIR="$(abspath $(BUILD_DIR))/test-fixtures" \

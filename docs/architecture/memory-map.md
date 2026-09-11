@@ -1,7 +1,7 @@
 # DC-Chip v0.2 地址与存储模型
 
 - 版本：v0.2
-- 状态：只冻结地址、字节序、访问宽度和 fault；区域分配仍为 `TODO`
+- 状态：阶段 2 冻结 IROM 与 DRAM 区域及权限契约；MMIO 仍为 `TODO`
 - 更新日期：2026-09-11
 - ISA 规范：`docs/isa/isa.md` v0.2
 
@@ -31,7 +31,7 @@ v0.2 使用统一的 32 位 byte-addressed 地址值，取值范围为
 ## 3. 访问宽度与对齐
 
 | 操作 | 宽度 | 合法地址 | 数据行为 |
-| --- | ---: | --- | --- |
+| --- | --- | ---: | --- |
 | instruction fetch | 4 byte | `addr[1:0] == 2'b00` | 返回一条 32 位指令 |
 | `lw` | 4 byte | `addr[1:0] == 2'b00` | 小端读取 32 位 |
 | `lbu` | 1 byte | 任意 | 读取目标 lane 并零扩展到 32 位 |
@@ -62,18 +62,20 @@ bit 1，若为一则在 `jalr` 上报告 instruction address misaligned，不发
 
 ## 5. 正式区域表
 
-下列项目尚未确定，均保持 `TODO`：
+阶段 2 正式冻结 IROM 与 DRAM 的基地址、容量与访问权限，确立逻辑隔离的 Harvard 架构模型：
 
-| 区域/属性 | 地址 | 容量 | 权限/副作用 | 物理实现 |
-| --- | --- | --- | --- | --- |
-| IROM | `TODO` | `TODO` | `TODO` | `TODO` |
-| DRAM/片上 RAM | `TODO` | `TODO` | `TODO` | `TODO` |
-| MMIO 总区域 | `TODO` | `TODO` | `TODO` | `TODO` |
-| timer/GPIO/UART/sensor | `TODO` | `TODO` | `TODO` | `TODO` |
+| 区域/属性 | 地址范围 | 基线容量 | 权限与访问模型 | 错误行为 | 物理实现 |
+| --- | --- | ---: | --- | --- | --- |
+| **IROM** | `0x00000000`--`0x0000ffff` | 64 KiB | **只读/可执行**（仅允许 IFU 取指，四字节对齐） | LSU 读写触发 load/store access fault；未对齐取指触发 instruction misaligned | 片上 BRAM / 仿真 IROM 数组 |
+| **DRAM** | `0x20000000`--`0x2000ffff` | 64 KiB | **可读/可写**（仅允许 LSU 访存，仿真支持扩展至 256 KiB） | IFU 取指触发 instruction access fault；未对齐 word 触发 misaligned | 片上 BRAM / 仿真 DRAM 数组 |
+| MMIO 总区域 | `TODO` | `TODO` | `TODO` | `TODO` | `TODO` |
+| timer/GPIO/UART/sensor | `TODO` | `TODO` | `TODO` | `TODO` | `TODO` |
 
-板卡、器件、容量、权限、地址译码和链接布局确定前，不得把任何临时地址写入
-RTL、软件头文件或链接脚本。加入区域时必须同步更新本文件、SoC RTL、软件 ABI
-和验证。
+### 5.1 Harvard 访问隔离与 Fault 契约
+
+- **IFU 专属 IROM**：取指请求地址必须处于 `[0x00000000, 0x00010000)` 内且四字节对齐。若 IFU 尝试对 DRAM 区域（`0x20000000` 起）或任何未映射空间取指，存储子系统返回错误，核心产生粘滞的 `instruction access fault`（`fault_cause = 3'd2`）；
+- **LSU 专属 DRAM 与 tohost**：数据请求地址必须处于 `[0x20000000, 0x20010000)` 内或等于私有 `0xfffffff0`（`tohost`）。若 LSU 尝试对 IROM 区域（`0x00000000` 起）执行 load/store，或访问未映射空间，存储子系统返回错误，核心产生粘滞的 `load access fault`（`fault_cause = 3'd5`）或 `store access fault`（`fault_cause = 3'd7`）；
+- 跨区域非法访问不会产生任何局部数据写入或寄存器写回，故障状态保持至复位。
 
 ## 6. 仿真私有机制边界
 
@@ -81,8 +83,6 @@ behavioral simulation 可以使用私有镜像布局、终止地址或 host 交�
 不是正式 SoC 地址映射，不在本文件分配地址。此类目标契约记录在
 `docs/verification/simulator.md`，并必须与未来真实 MMIO 分配隔离。
 
-截至 2026-09-11，核心 RTL 与仿真存储子系统（`sim_mem.sv`，包含
-`0x00000000`--`0x000003ff` 1 KiB IROM、`0x00001000`--`0x00001fff` 4 KiB
-scratch DRAM 与 `0xfffffff0` 私有 `tohost`）已使用上述 32 位 byte address 和
-访问宽度契约并通过 `make test-memory`；Verilator wrapper (`sim_top.sv`)、
-Simulation 引擎与 SDB 仍留待步骤 2.5 原位迁移，尚不能作为端到端执行证据。
+阶段 2 采用上述正式内存映射：IROM `0x00000000`（64 KiB）、DRAM `0x20000000`（64 KiB）
+与 `0xfffffff0` 私有 `tohost`。仿真器支持从命令行同时加载指令镜像与数据镜像，
+支持 raw binary (`.bin`) 与 32 位 8 字符 HEX 格式。

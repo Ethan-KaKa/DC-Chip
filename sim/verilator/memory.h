@@ -8,17 +8,33 @@
 namespace dc_sim {
 
 constexpr std::uint32_t kIromBase = 0x00000000U;
-constexpr std::size_t kIromCapacityBytes = 1024U;
-constexpr std::size_t kIromCapacityWords = 256U;
+constexpr std::size_t kIromCapacityBytes = 65536U;
+constexpr std::size_t kIromCapacityWords = 16384U;
 
-constexpr std::uint32_t kDramBase = 0x00001000U;
-constexpr std::size_t kDramCapacityBytes = 4096U;
-constexpr std::size_t kDramCapacityWords = 1024U;
+constexpr std::uint32_t kDramBase = 0x20000000U;
+constexpr std::size_t kDramCapacityBytes = 65536U;
+constexpr std::size_t kDramCapacityWords = 16384U;
 
 constexpr std::uint32_t kTohostAddr = 0xfffffff0U;
 
+enum class MemoryRegion {
+  kIrom,
+  kDram,
+};
+
+enum class ImageFormat {
+  kAuto,
+  kHex,
+  kBin,
+};
+
 bool load_hex_image(const std::string &path, std::string *error);
+bool load_binary_image(const std::string &path, MemoryRegion region, std::string *error);
+bool load_image(const std::string &path, MemoryRegion region, ImageFormat format, std::string *error);
+
 std::size_t image_word_count();
+std::size_t irom_loaded_bytes();
+std::size_t dram_loaded_bytes();
 void reset_memory();
 
 std::uint32_t read_irom_word(std::size_t word_index);

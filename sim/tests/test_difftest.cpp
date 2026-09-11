@@ -93,7 +93,7 @@ void test_directed(const std::string &temp_dir) {
       enc_addi(1, 0, 100),       // addi x1, x0, 100
       enc_addi(2, 0, -50),       // addi x2, x0, -50
       enc_add(3, 1, 2),          // add  x3, x1, x2 => 50
-      enc_lui(4, 1),             // lui  x4, 1 => 0x1000
+      enc_lui(4, 0x20000),       // lui  x4, 0x20000 => 0x20000000 (DRAM base)
       enc_sw(3, 4, 0),           // sw   x3, 0(x4) => DRAM[0..3] = 50
       enc_lw(5, 4, 0),           // lw   x5, 0(x4) => 50
       enc_addi(6, 0, 0x7f),      // addi x6, x0, 0x7f
@@ -112,8 +112,8 @@ void test_randomized(const std::string &temp_dir) {
   std::mt19937 rng(0xDC320001U); // Fixed seed from verification plan!
 
   std::vector<std::uint32_t> insts;
-  // Initialize base address pointer: x1 = 0x1000 (DRAM base)
-  insts.push_back(enc_lui(1, 1));
+  // Initialize base address pointer: x1 = 0x20000000 (DRAM base)
+  insts.push_back(enc_lui(1, 0x20000));
 
   // Generate 60 randomized computational / memory instructions
   for (int i = 0; i < 60; ++i) {
@@ -168,10 +168,71 @@ void test_fault_difftest(const std::string &temp_dir) {
   {
     const std::string hex_file = temp_dir + "/test_fault_misalign.hex";
     std::vector<std::uint32_t> insts = {
-        enc_lui(1, 1),
-        enc_lw(2, 1, 1), // 0x1001 misaligned
+        enc_lui(1, 0x20000),
+        enc_lw(2, 1, 1), // 0x20000001 misaligned
     };
     run_test_vector(hex_file, insts, 2);
+  }
+}
+
+void test_binary_difftest(const std::string &temp_dir) {
+  const std::string inst_bin = temp_dir + "/test_bin_inst.bin";
+  const std::string data_bin = temp_dir + "/test_bin_data.bin";
+
+  // Instruction image:
+  // lui  x1, 0x20000       # DRAM base
+  // lw   x2, 0(x1)         # read data from DRAM[0]
+  // addi x3, x2, 42        # x3 = x2 + 42
+  // sw   x3, 1, 4          # write to DRAM[4]
+  // lui  x8, 0xfffff
+  // addi x8, x8, -16       # 0xfffffff0
+  // sw   x0, 8, 0          # tohost exit 0
+  std::vector<std::uint32_t> insts = {
+      enc_lui(1, 0x20000),
+      enc_lw(2, 1, 0),
+      enc_addi(3, 2, 42),
+      enc_sw(3, 1, 4),
+      enc_lui(8, 0xfffff),
+      enc_addi(8, 8, -16),
+      enc_sw(0, 8, 0),
+  };
+
+  std::vector<std::uint8_t> data = {100, 0, 0, 0};
+
+  {
+    std::ofstream out(inst_bin, std::ios::binary);
+    require(out.is_open(), "failed to open " + inst_bin);
+    for (std::uint32_t word : insts) {
+      char bytes[4];
+      bytes[0] = static_cast<char>(word & 0xff);
+      bytes[1] = static_cast<char>((word >> 8) & 0xff);
+      bytes[2] = static_cast<char>((word >> 16) & 0xff);
+      bytes[3] = static_cast<char>((word >> 24) & 0xff);
+      out.write(bytes, 4);
+    }
+  }
+
+  {
+    std::ofstream out(data_bin, std::ios::binary);
+    require(out.is_open(), "failed to open " + data_bin);
+    out.write(reinterpret_cast<const char *>(data.data()), static_cast<std::streamsize>(data.size()));
+  }
+
+  std::string error;
+  require(dc_sim::load_binary_image(inst_bin, dc_sim::MemoryRegion::kIrom, &error), error);
+  require(dc_sim::load_binary_image(data_bin, dc_sim::MemoryRegion::kDram, &error), error);
+
+  dc_sim::Simulation dut;
+  dut.reset();
+
+  dc_sim::ReferenceModel ref;
+  ref.load_from_sim_memory();
+
+  dc_sim::Difftest difftest(dut, ref);
+  dc_sim::DifftestMismatch mismatch;
+  for (std::uint64_t i = 0; i < insts.size(); ++i) {
+    bool ok = difftest.step_and_compare(1000, &mismatch);
+    require(ok, mismatch.message);
   }
 }
 
@@ -183,6 +244,7 @@ int main(int argc, char **argv) {
     test_directed(temp_dir);
     test_randomized(temp_dir);
     test_fault_difftest(temp_dir);
+    test_binary_difftest(temp_dir);
     std::cout << "test_difftest: PASS (all cases matched)\n";
     return 0;
   } catch (const std::exception &e) {

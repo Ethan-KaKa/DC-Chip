@@ -425,9 +425,9 @@ def verify_cli_modes(
         ["bash", str(INTEGRATION_SCRIPT), str(simulator), "--batch"],
         environment={"TEST_FIXTURE_DIR": str(build_dir / "integration")},
     )
-    expect_success(integration, "SDB-on 22-case batch integration")
+    expect_success(integration, "SDB-on 32-case batch integration")
     require(
-        "run_integration: PASS (22 cases)" in integration.stdout,
+        "run_integration: PASS (32 cases)" in integration.stdout,
         "SDB-on batch integration omitted cases",
     )
     batch_with_stdin = cli(

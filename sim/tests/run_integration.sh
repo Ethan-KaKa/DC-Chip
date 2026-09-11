@@ -69,12 +69,32 @@ expect_output() {
   printf 'integration: PASS %s output\n' "$name"
 }
 
+riscv_gcc=${RISCV_GCC:-riscv64-linux-gnu-gcc}
+riscv_objcopy=${RISCV_OBJCOPY:-riscv64-linux-gnu-objcopy}
+
+"$riscv_gcc" -march=rv32e -mabi=ilp32e -nostdlib -Wl,-T,"$script_dir/link.ld" \
+  "$script_dir/bin_smoke.S" -o "$fixture_dir/bin_smoke.elf"
+"$riscv_objcopy" -S -O binary -j .text "$fixture_dir/bin_smoke.elf" "$fixture_dir/bin_smoke.inst.bin"
+"$riscv_objcopy" -S -O binary -j .data "$fixture_dir/bin_smoke.elf" "$fixture_dir/bin_smoke.data.bin"
+
+"$riscv_gcc" -march=rv32e -mabi=ilp32e -nostdlib -Wl,-T,"$script_dir/link.ld" \
+  "$script_dir/cross_fetch.S" -o "$fixture_dir/cross_fetch.elf"
+"$riscv_objcopy" -S -O binary -j .text "$fixture_dir/cross_fetch.elf" "$fixture_dir/cross_fetch.inst.bin"
+
+"$riscv_gcc" -march=rv32e -mabi=ilp32e -nostdlib -Wl,-T,"$script_dir/link.ld" \
+  "$script_dir/cross_load.S" -o "$fixture_dir/cross_load.elf"
+"$riscv_objcopy" -S -O binary -j .text "$fixture_dir/cross_load.elf" "$fixture_dir/cross_load.inst.bin"
+
+"$riscv_gcc" -march=rv32e -mabi=ilp32e -nostdlib -Wl,-T,"$script_dir/link.ld" \
+  "$script_dir/cross_store.S" -o "$fixture_dir/cross_store.elf"
+"$riscv_objcopy" -S -O binary -j .text "$fixture_dir/cross_store.elf" "$fixture_dir/cross_store.inst.bin"
+
+python3 -c 'import sys; sys.stdout.buffer.write(b"\x00" * 65537)' > "$fixture_dir/bin_too_large.bin"
+
 too_many_image="$fixture_dir/too_many.hex"
 missing_image="$fixture_dir/does-not-exist.hex"
 rm -f -- "$missing_image"
-for ((address = 0; address < 257; ++address)); do
-  printf '00000000\n'
-done >"$too_many_image"
+python3 -c 'print("00000000\n" * 16385, end="")' >"$too_many_image"
 
 expect_exit help 0 \
   run_simulator --help
@@ -83,7 +103,7 @@ expect_exit isa_smoke 0 \
   run_simulator --image "$script_dir/isa_smoke.hex" \
   --expect x1=0x00000002 --expect x8=0x00000005 --expect pc=0x00000034
 expect_output isa_smoke \
-  'summary commits=13 cycles=23 pc=0x00000034 x0=0x00000000 x1=0x00000002 x2=0x00000002 x3=0x00000004 x4=0x00001000 x5=0x00000004 x6=0x00000001 x7=0x00000001 x8=0x00000005 x9=0xfffffff0 x10=0x00000000 x11=0x00000000 x12=0x00000000 x13=0x00000000 x14=0x00000000 x15=0x00000000'
+  'summary commits=13 cycles=23 pc=0x00000034 x0=0x00000000 x1=0x00000002 x2=0x00000002 x3=0x00000004 x4=0x20000000 x5=0x00000004 x6=0x00000001 x7=0x00000001 x8=0x00000005 x9=0xfffffff0 x10=0x00000000 x11=0x00000000 x12=0x00000000 x13=0x00000000 x14=0x00000000 x15=0x00000000'
 
 expect_exit jump_loop 0 \
   run_simulator --image "$script_dir/jump_loop.hex" --steps 5 \
@@ -169,4 +189,47 @@ expect_exit missing_argument_value 1 \
 expect_exit missing_required_image 1 \
   run_simulator --steps 1
 
-printf 'run_integration: PASS (%s cases)\n' 22
+expect_exit bin_smoke_dual 0 \
+  run_simulator --image-inst "$fixture_dir/bin_smoke.inst.bin" \
+  --image-data "$fixture_dir/bin_smoke.data.bin" \
+  --expect x2=100 --expect x3=142 --expect x5=85 --expect x6=227
+
+expect_exit bin_smoke_single 0 \
+  run_simulator --image "$fixture_dir/bin_smoke.inst.bin" \
+  --expect x2=0 --expect x3=42
+
+expect_exit bin_cross_fetch_fault 2 \
+  run_simulator --image "$fixture_dir/cross_fetch.inst.bin"
+expect_output bin_cross_fetch_fault \
+  'error: instruction access fault at pc=0x20000000'
+
+expect_exit bin_cross_load_fault 2 \
+  run_simulator --image "$fixture_dir/cross_load.inst.bin"
+expect_output bin_cross_load_fault \
+  'error: load access fault at pc=0x00000004 inst=0x0000a103'
+
+expect_exit bin_cross_store_fault 2 \
+  run_simulator --image "$fixture_dir/cross_store.inst.bin"
+expect_output bin_cross_store_fault \
+  'error: store access fault at pc=0x00000004 inst=0x0010a023'
+
+expect_exit bin_missing_data_image 1 \
+  run_simulator --image "$fixture_dir/bin_smoke.inst.bin" \
+  --image-data "$fixture_dir/does_not_exist.bin"
+
+expect_exit bin_too_large 1 \
+  run_simulator --image "$fixture_dir/bin_too_large.bin"
+
+expect_exit bin_format_explicit 0 \
+  run_simulator --format bin --image "$fixture_dir/bin_smoke.inst.bin" \
+  --image-data "$fixture_dir/bin_smoke.data.bin" \
+  --expect x2=100
+
+expect_exit bin_format_invalid 1 \
+  run_simulator --format bogus --image "$fixture_dir/bin_smoke.inst.bin"
+
+expect_exit conflicting_images 1 \
+  run_simulator --image "$fixture_dir/bin_smoke.inst.bin" \
+  --image-inst "$fixture_dir/bin_smoke.inst.bin"
+
+printf 'run_integration: PASS (%s cases)\n' 32

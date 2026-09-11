@@ -341,12 +341,32 @@ SDB-only 和 SDB+WAVE。它检查条件编译、提示符与逐字命令输出�
 - 私有 `tohost_exit` 与 32 位 `guest_exit_code`；
 - 当前 `fetch_pc` 与 `fetch_inst`（fault 时优先保持故障现场指令）。
 
-### 12.2 32 位 8 字符 HEX 镜像格式
+### 12.2 镜像格式与加载契约
 
+仿真器支持 32 位 8 字符 HEX 文本格式与原生二进制 (`.bin`) 格式，且支持同时加载指令镜像与数据镜像：
+
+#### 12.2.1 32 位 8 字符 HEX 镜像格式
 `sim/verilator/memory.cpp` 中的 `load_hex_image()` 支持每行恰好 8 个十六进制字符的 32 位指令：
 - 支持 `#` 注释和空白字符；
-- 指令按 4 字节连续映射至 IROM 空间（容量 1024 字节，最多 256 条指令）；
-- 超过 256 条、空文件、畸变字符或行长度不等于 8 均在模型创建前报错退出（exit code 1）。
+- 指令按 4 字节连续映射至 IROM 空间（基址 `0x00000000`，容量 64 KiB，最多 16,384 条指令）；
+- 超过容量、空文件、畸变字符或行长度不等于 8 均在模型创建前报错退出（exit code 1）。
+
+#### 12.2.2 原生二进制 (`.bin`) 镜像格式
+`sim/verilator/memory.cpp` 中的 `load_binary_image()` 支持将 GNU 工具链生成的小端 raw binary 直接载入内存：
+- **指令镜像 (IROM)**：从 `0x00000000` 起载入。若文件字节数不是 4 的倍数，自动在末尾以零字节补齐至 4 字节边界；文件大小不得超过 `65536` 字节；
+- **数据镜像 (DRAM)**：从 `0x20000000` 起载入。载入覆盖 `[0x20000000, 0x20000000 + size)`，剩余 DRAM 空间自动零初始化；文件大小不得超过 `65536` 字节；
+- 文件不存在、空文件或文件大小超过区域容量时均报错退出（exit code 1）。
+
+#### 12.2.3 命令行参数约定
+```text
+Vsim_top [--image <path> | --image-inst <path>] [--image-data <path>]
+         [--format <auto|hex|bin>] [--steps <n>] [--max-cycles <n>]
+         [--trace] [--expect <name=value>] [--batch]
+```
+- `--image <path>`：默认指令镜像（向后兼容阶段 1，支持 `.hex` 与 `.bin`）；
+- `--image-inst <path>`：显式指定指令镜像（与 `--image` 互斥）；
+- `--image-data <path>`：可选，指定数据镜像；
+- `--format <auto|hex|bin>`：格式显式指定；默认 `auto`（以 `.hex` 结尾判为 HEX，其余判为 raw binary）。
 
 ### 12.3 私有 `tohost` 终止机制
 

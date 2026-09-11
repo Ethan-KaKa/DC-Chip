@@ -148,6 +148,9 @@ core BFM 覆盖请求背压、请求接受当周期响应、延迟响应、四�
 | tohost/镜像 | 8 字符 HEX 加载、`tohost=0xfffffff0` 退出码捕获 | **已完成**：`make test-memory`、`make test-integration` 覆盖 0 与非 0 退出 |
 | 程序 | 八指令 smoke、load/store lane、JALR loop、fault 负向镜像 | **已完成**：Verilator 22 项 CLI 集成与波形测试（`make test-integration`、`make test-wave`） |
 | 参考模型 | 与 RTL 独立实现，逐提交比较 PC/寄存器/内存副作用/fault | **已完成**：C++ 独立参考模型与 lockstep difftest（`make test-reference`、`make test-difftest`） |
+| **阶段 2 二进制加载** | raw binary (`.bin`) 小端载入 IROM/DRAM、非 4 字节补零对齐、超限拦截 | **进行中**：`test_memory` 单元测试与 CLI 二进制集成测试 |
+| **阶段 2 双镜像协同** | `--image-inst` 与 `--image-data` 协同装载、DRAM 变量读写与退出码校验 | **进行中**：汇编测试夹具与端到端 CLI 集成测试 |
+| **阶段 2 Harvard 隔离** | IFU 访问 DRAM 报 cause 2；LSU 访问 IROM 报 cause 5/7 | **进行中**：存储协议 BFM、参考模型自检与 CLI 负向集成测试 |
 
 ## 4. 模块与协议测试要求
 

@@ -26,7 +26,9 @@ constexpr int kStateMismatch = 4;
 constexpr int kGuestFailure = 5;
 
 struct Options {
-  std::string image_path;
+  std::string inst_image_path;
+  std::string data_image_path;
+  dc_sim::ImageFormat format = dc_sim::ImageFormat::kAuto;
   std::optional<std::uint64_t> steps;
   std::optional<std::uint64_t> max_cycles;
   bool trace = false;
@@ -38,8 +40,11 @@ struct Options {
 
 void print_usage(std::ostream &output) {
   output
-      << "Usage: Vsim_top --image <path> [options]\n"
-      << "  --image <path>              HEX instruction image (required)\n"
+      << "Usage: Vsim_top [--image <path> | --image-inst <path>] [options]\n"
+      << "  --image <path>              Instruction image (.hex or .bin)\n"
+      << "  --image-inst <path>         Instruction image (.hex or .bin, alias for --image)\n"
+      << "  --image-data <path>         Data image (.bin or .hex, loaded to DRAM)\n"
+      << "  --format <auto|hex|bin>     Force image format (default: auto)\n"
       << "  --steps <positive-u64>      Commits to execute (default: run until tohost/fault)\n"
       << "  --max-cycles <positive-u64> Execution cycles (default: 100000)\n"
       << "  --trace                     Print one line per committed instruction\n"
@@ -47,6 +52,7 @@ void print_usage(std::ostream &output) {
       << "  --batch                     Use non-interactive batch execution\n"
       << "  --help                      Show this help (must be the only option)\n";
 }
+
 
 bool take_value(int argc, char **argv, int *index, std::string_view option,
                 std::string_view *value, std::string *error) {
@@ -113,7 +119,9 @@ bool parse_expectation(std::string_view text, Options *options,
 
 bool parse_options(int argc, char **argv, Options *options,
                    std::string *error) {
-  bool saw_image = false;
+  bool saw_inst_image = false;
+  bool saw_data_image = false;
+  bool saw_format = false;
   bool saw_steps = false;
   bool saw_max_cycles = false;
   bool saw_batch = false;
@@ -126,20 +134,57 @@ bool parse_options(int argc, char **argv, Options *options,
       *error = "--help must be the only argument";
       return false;
     }
-    if (argument == "--image") {
-      if (saw_image) {
-        *error = "duplicate option --image";
+    if (argument == "--image" || argument == "--image-inst") {
+      if (saw_inst_image) {
+        *error = "duplicate option " + std::string(argument);
         return false;
       }
       if (!take_value(argc, argv, &index, argument, &value, error)) {
         return false;
       }
       if (value.empty()) {
-        *error = "empty value for --image";
+        *error = "empty value for " + std::string(argument);
         return false;
       }
-      options->image_path = value;
-      saw_image = true;
+      options->inst_image_path = value;
+      saw_inst_image = true;
+      continue;
+    }
+    if (argument == "--image-data") {
+      if (saw_data_image) {
+        *error = "duplicate option --image-data";
+        return false;
+      }
+      if (!take_value(argc, argv, &index, argument, &value, error)) {
+        return false;
+      }
+      if (value.empty()) {
+        *error = "empty value for --image-data";
+        return false;
+      }
+      options->data_image_path = value;
+      saw_data_image = true;
+      continue;
+    }
+    if (argument == "--format") {
+      if (saw_format) {
+        *error = "duplicate option --format";
+        return false;
+      }
+      if (!take_value(argc, argv, &index, argument, &value, error)) {
+        return false;
+      }
+      if (value == "auto") {
+        options->format = dc_sim::ImageFormat::kAuto;
+      } else if (value == "hex") {
+        options->format = dc_sim::ImageFormat::kHex;
+      } else if (value == "bin") {
+        options->format = dc_sim::ImageFormat::kBin;
+      } else {
+        *error = "invalid format '" + std::string(value) + "'; expected auto, hex, or bin";
+        return false;
+      }
+      saw_format = true;
       continue;
     }
     if (argument == "--steps" || argument == "--max-cycles") {
@@ -196,12 +241,13 @@ bool parse_options(int argc, char **argv, Options *options,
     return false;
   }
 
-  if (!saw_image) {
+  if (!saw_inst_image) {
     *error = "missing required option --image";
     return false;
   }
   return true;
 }
+
 
 std::string hex_value(std::uint64_t value, int width) {
   std::ostringstream output;
@@ -286,10 +332,18 @@ int main(int argc, char **argv) {
     }
   }
 #endif
-  if (!dc_sim::load_hex_image(options.image_path, &error)) {
+  dc_sim::reset_memory();
+  if (!dc_sim::load_image(options.inst_image_path, dc_sim::MemoryRegion::kIrom, options.format, &error)) {
     std::cerr << "error: " << error << '\n';
     return kInputError;
   }
+  if (!options.data_image_path.empty()) {
+    if (!dc_sim::load_image(options.data_image_path, dc_sim::MemoryRegion::kDram, options.format, &error)) {
+      std::cerr << "error: " << error << '\n';
+      return kInputError;
+    }
+  }
+
 
   std::uint64_t max_cycles = 100000U;
   if (options.max_cycles.has_value()) {

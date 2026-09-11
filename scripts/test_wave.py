@@ -303,10 +303,10 @@ def run_tests(args: argparse.Namespace) -> None:
         cwd=launch_dir,
         environment={"TEST_FIXTURE_DIR": str(integration_dir)},
     )
-    expect_success(integration, "22-case WAVE-on CLI integration regression")
+    expect_success(integration, "32-case WAVE-on CLI integration regression")
     require(
-        "run_integration: PASS (22 cases)" in integration.stdout,
-        "WAVE-on integration regression did not report all 22 cases",
+        "run_integration: PASS (32 cases)" in integration.stdout,
+        "WAVE-on integration regression did not report all 32 cases",
     )
 
     wave_path.unlink(missing_ok=True)

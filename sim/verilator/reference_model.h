@@ -68,8 +68,9 @@ class ReferenceModel {
  private:
   std::uint32_t pc_ = 0;
   std::array<std::uint32_t, 16> regs_{};
-  std::array<std::uint32_t, 256> irom_{};    // 1 KiB = 256 words
-  std::array<std::uint8_t, 4096> dram_{};    // 4 KiB
+  std::array<std::uint32_t, 16384> irom_{};    // 64 KiB = 16384 words
+  std::array<std::uint8_t, 65536> dram_{};     // 64 KiB
+
   bool in_fault_ = false;
   std::uint8_t fault_cause_ = 0;
   std::uint32_t fault_pc_ = 0;

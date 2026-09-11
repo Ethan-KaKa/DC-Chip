@@ -78,7 +78,7 @@ void test_arithmetic() {
 void test_memory_access() {
   dc_sim::ReferenceModel model;
   model.load_irom({
-      enc_lui(1, 1),            // lui x1, 1 => 0x00001000 (DRAM base)
+      enc_lui(1, 0x20000),      // lui x1, 0x20000 => 0x20000000 (DRAM base)
       enc_addi(2, 0, 0x5a),     // addi x2, x0, 0x5a
       enc_sb(2, 1, 3),          // sb x2, 3(x1) => DRAM[3] = 0x5a
       enc_lbu(3, 1, 3),         // lbu x3, 3(x1) => 0x5a
@@ -90,20 +90,21 @@ void test_memory_access() {
   model.step(); // lui
   model.step(); // addi x2
   auto r_sb = model.step();
-  require(r_sb.committed && r_sb.mem_access && r_sb.mem_write && r_sb.mem_addr == 0x1003, "sb failed");
-  require(model.read_dram_byte(0x1003) == 0x5a, "sb memory byte mismatch");
+  require(r_sb.committed && r_sb.mem_access && r_sb.mem_write && r_sb.mem_addr == 0x20000003, "sb failed");
+  require(model.read_dram_byte(0x20000003) == 0x5a, "sb memory byte mismatch");
 
   auto r_lbu = model.step();
   require(r_lbu.committed && model.reg(3) == 0x5a, "lbu failed");
 
   model.step(); // addi x4
   auto r_sw = model.step();
-  require(r_sw.committed && r_sw.mem_access && r_sw.mem_write && r_sw.mem_addr == 0x1004, "sw failed");
-  require(model.read_dram_word(0x1004) == 1234, "sw memory word mismatch");
+  require(r_sw.committed && r_sw.mem_access && r_sw.mem_write && r_sw.mem_addr == 0x20000004, "sw failed");
+  require(model.read_dram_word(0x20000004) == 1234, "sw memory word mismatch");
 
   auto r_lw = model.step();
   require(r_lw.committed && model.reg(5) == 1234, "lw failed");
 }
+
 
 void test_control_and_tohost() {
   dc_sim::ReferenceModel model;
@@ -143,8 +144,8 @@ void test_faults() {
   {
     dc_sim::ReferenceModel model;
     model.load_irom({
-        enc_lui(1, 1),
-        enc_lw(2, 1, 1), // addr = 0x1001 (misaligned)
+        enc_lui(1, 0x20000),
+        enc_lw(2, 1, 1), // addr = 0x20000001 (misaligned)
     });
     model.step();
     auto r = model.step();
@@ -155,8 +156,8 @@ void test_faults() {
   {
     dc_sim::ReferenceModel model;
     model.load_irom({
-        enc_lui(1, 1),
-        enc_sw(0, 1, 2), // addr = 0x1002 (misaligned)
+        enc_lui(1, 0x20000),
+        enc_sw(0, 1, 2), // addr = 0x20000002 (misaligned)
     });
     model.step();
     auto r = model.step();
@@ -178,10 +179,11 @@ void test_faults() {
   // 5. Instruction access fault (out of bounds)
   {
     dc_sim::ReferenceModel model;
-    model.reset(0x400); // 1024 is out of 1 KiB IROM
+    model.reset(0x10000); // 64 KiB is out of 64 KiB IROM
     auto r = model.step();
     require(r.faulted && r.fault_cause == 2 && !r.fault_inst_valid, "instruction access fault failed");
   }
+
 
   // 6. Load access fault (out of DRAM)
   {

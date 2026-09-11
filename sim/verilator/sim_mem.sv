@@ -8,10 +8,11 @@
 
 module sim_mem #(
   parameter logic [31:0] IROM_BASE    = 32'h0000_0000,
-  parameter int unsigned IROM_BYTES   = 1024,
-  parameter logic [31:0] DRAM_BASE    = 32'h0000_1000,
-  parameter int unsigned DRAM_BYTES   = 4096,
+  parameter int unsigned IROM_BYTES   = 65536,
+  parameter logic [31:0] DRAM_BASE    = 32'h2000_0000,
+  parameter int unsigned DRAM_BYTES   = 65536,
   parameter logic [31:0] TOHOST_ADDR  = 32'hffff_fff0
+
 ) (
   input  logic        clk,
   input  logic        rst,
