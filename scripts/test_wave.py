@@ -272,10 +272,15 @@ def run_tests(args: argparse.Namespace) -> None:
         "1",
     )
     expect_success(one_step, "WAVE-on simulator launched from another directory")
+    expected_one_step_summary = (
+        "summary commits=1 cycles=1 pc=0x00000004 "
+        "x0=0x00000000 x1=0x00000002 x2=0x00000000 x3=0x00000000 "
+        "x4=0x00000000 x5=0x00000000 x6=0x00000000 x7=0x00000000 "
+        "x8=0x00000000 x9=0x00000000 x10=0x00000000 x11=0x00000000 "
+        "x12=0x00000000 x13=0x00000000 x14=0x00000000 x15=0x00000000\n"
+    )
     require(
-        one_step.stdout
-        == "summary commits=1 cycles=1 pc=0x01 r0=0x0000 "
-        "r1=0x0002 r2=0x0000 r3=0x0000\n",
+        one_step.stdout == expected_one_step_summary,
         "WAVE-on changed batch output",
     )
     cli_contents, cli_timestamps = read_vcd(wave_path)
@@ -298,10 +303,10 @@ def run_tests(args: argparse.Namespace) -> None:
         cwd=launch_dir,
         environment={"TEST_FIXTURE_DIR": str(integration_dir)},
     )
-    expect_success(integration, "19-case WAVE-on CLI integration regression")
+    expect_success(integration, "22-case WAVE-on CLI integration regression")
     require(
-        "run_integration: PASS (19 cases)" in integration.stdout,
-        "WAVE-on integration regression did not report all 19 cases",
+        "run_integration: PASS (22 cases)" in integration.stdout,
+        "WAVE-on integration regression did not report all 22 cases",
     )
 
     wave_path.unlink(missing_ok=True)

@@ -73,46 +73,61 @@ too_many_image="$fixture_dir/too_many.hex"
 missing_image="$fixture_dir/does-not-exist.hex"
 rm -f -- "$missing_image"
 for ((address = 0; address < 257; ++address)); do
-  printf '0000\n'
+  printf '00000000\n'
 done >"$too_many_image"
 
 expect_exit help 0 \
   run_simulator --help
 
 expect_exit isa_smoke 0 \
-  run_simulator --image "$script_dir/isa_smoke.hex" --steps 8 \
-  --expect r0=0x0000 --expect r1=0x0002 --expect r2=0x0002 \
-  --expect r3=0x0000 --expect pc=0x08
+  run_simulator --image "$script_dir/isa_smoke.hex" \
+  --expect x1=0x00000002 --expect x8=0x00000005 --expect pc=0x00000034
 expect_output isa_smoke \
-  'summary commits=8 cycles=8 pc=0x08 r0=0x0000 r1=0x0002 r2=0x0002 r3=0x0000'
+  'summary commits=13 cycles=23 pc=0x00000034 x0=0x00000000 x1=0x00000002 x2=0x00000002 x3=0x00000004 x4=0x00001000 x5=0x00000004 x6=0x00000001 x7=0x00000001 x8=0x00000005 x9=0xfffffff0 x10=0x00000000 x11=0x00000000 x12=0x00000000 x13=0x00000000 x14=0x00000000 x15=0x00000000'
 
 expect_exit jump_loop 0 \
   run_simulator --image "$script_dir/jump_loop.hex" --steps 5 \
-  --expect r0=0x0000 --expect r1=0x0003 --expect r2=0x0000 \
-  --expect r3=0x0000 --expect pc=0x01
+  --expect x1=0x00000003 --expect pc=0x00000008
 
 expect_exit single_step_trace 0 \
   run_simulator --image "$script_dir/isa_smoke.hex" --steps 1 --trace
 expect_output single_step_trace \
-  $'cycle=1 commit=1 pc=0x00 inst=0x0402 r0=0x0000 r1=0x0002 r2=0x0000 r3=0x0000\nsummary commits=1 cycles=1 pc=0x01 r0=0x0000 r1=0x0002 r2=0x0000 r3=0x0000'
+  $'cycle=1 commit=1 pc=0x00000000 inst=0x00200093 x0=0x00000000 x1=0x00000002 x2=0x00000000 x3=0x00000000 x4=0x00000000 x5=0x00000000 x6=0x00000000 x7=0x00000000 x8=0x00000000 x9=0x00000000 x10=0x00000000 x11=0x00000000 x12=0x00000000 x13=0x00000000 x14=0x00000000 x15=0x00000000\nsummary commits=1 cycles=1 pc=0x00000004 x0=0x00000000 x1=0x00000002 x2=0x00000000 x3=0x00000000 x4=0x00000000 x5=0x00000000 x6=0x00000000 x7=0x00000000 x8=0x00000000 x9=0x00000000 x10=0x00000000 x11=0x00000000 x12=0x00000000 x13=0x00000000 x14=0x00000000 x15=0x00000000'
 
 expect_exit jump_loop_trace 0 \
   run_simulator --image "$script_dir/jump_loop.hex" --steps 5 --trace
 expect_output jump_loop_trace \
-  $'cycle=1 commit=1 pc=0x00 inst=0x0401 r0=0x0000 r1=0x0001 r2=0x0000 r3=0x0000\ncycle=2 commit=2 pc=0x01 inst=0x2401 r0=0x0000 r1=0x0002 r2=0x0000 r3=0x0000\ncycle=3 commit=3 pc=0x02 inst=0x7001 r0=0x0000 r1=0x0002 r2=0x0000 r3=0x0000\ncycle=4 commit=4 pc=0x01 inst=0x2401 r0=0x0000 r1=0x0003 r2=0x0000 r3=0x0000\ncycle=5 commit=5 pc=0x02 inst=0x7001 r0=0x0000 r1=0x0003 r2=0x0000 r3=0x0000\nsummary commits=5 cycles=5 pc=0x01 r0=0x0000 r1=0x0003 r2=0x0000 r3=0x0000'
+  $'cycle=1 commit=1 pc=0x00000000 inst=0x00100093 x0=0x00000000 x1=0x00000001 x2=0x00000000 x3=0x00000000 x4=0x00000000 x5=0x00000000 x6=0x00000000 x7=0x00000000 x8=0x00000000 x9=0x00000000 x10=0x00000000 x11=0x00000000 x12=0x00000000 x13=0x00000000 x14=0x00000000 x15=0x00000000\ncycle=2 commit=2 pc=0x00000004 inst=0x00108093 x0=0x00000000 x1=0x00000002 x2=0x00000000 x3=0x00000000 x4=0x00000000 x5=0x00000000 x6=0x00000000 x7=0x00000000 x8=0x00000000 x9=0x00000000 x10=0x00000000 x11=0x00000000 x12=0x00000000 x13=0x00000000 x14=0x00000000 x15=0x00000000\ncycle=3 commit=3 pc=0x00000008 inst=0x00400113 x0=0x00000000 x1=0x00000002 x2=0x00000004 x3=0x00000000 x4=0x00000000 x5=0x00000000 x6=0x00000000 x7=0x00000000 x8=0x00000000 x9=0x00000000 x10=0x00000000 x11=0x00000000 x12=0x00000000 x13=0x00000000 x14=0x00000000 x15=0x00000000\ncycle=4 commit=4 pc=0x0000000c inst=0x00010067 x0=0x00000000 x1=0x00000002 x2=0x00000004 x3=0x00000000 x4=0x00000000 x5=0x00000000 x6=0x00000000 x7=0x00000000 x8=0x00000000 x9=0x00000000 x10=0x00000000 x11=0x00000000 x12=0x00000000 x13=0x00000000 x14=0x00000000 x15=0x00000000\ncycle=5 commit=5 pc=0x00000004 inst=0x00108093 x0=0x00000000 x1=0x00000003 x2=0x00000004 x3=0x00000000 x4=0x00000000 x5=0x00000000 x6=0x00000000 x7=0x00000000 x8=0x00000000 x9=0x00000000 x10=0x00000000 x11=0x00000000 x12=0x00000000 x13=0x00000000 x14=0x00000000 x15=0x00000000\nsummary commits=5 cycles=5 pc=0x00000008 x0=0x00000000 x1=0x00000003 x2=0x00000004 x3=0x00000000 x4=0x00000000 x5=0x00000000 x6=0x00000000 x7=0x00000000 x8=0x00000000 x9=0x00000000 x10=0x00000000 x11=0x00000000 x12=0x00000000 x13=0x00000000 x14=0x00000000 x15=0x00000000'
 
 expect_exit illegal_reserved 2 \
   run_simulator --image "$script_dir/illegal_reserved.hex" --steps 1
 expect_output illegal_reserved \
-  'error: illegal instruction at pc=0x00 inst=0x8000'
+  'error: illegal instruction at pc=0x00000000 inst=0x80000000'
 
 expect_exit illegal_noncanonical 2 \
   run_simulator --image "$script_dir/illegal_noncanonical.hex" --steps 1
+expect_output illegal_noncanonical \
+  'error: illegal instruction at pc=0x00000000 inst=0x00100813'
 
-expect_exit out_of_bounds 2 \
-  run_simulator --image "$script_dir/isa_smoke.hex" --steps 9
-expect_output out_of_bounds \
-  'error: executed out-of-bounds instruction fetch at pc=0x08 inst=0x8000'
+expect_exit fault_load_misalign 2 \
+  run_simulator --image "$script_dir/fault_load_misalign.hex"
+expect_output fault_load_misalign \
+  'error: load address misaligned at pc=0x00000004 inst=0x0010a103'
+
+expect_exit fault_store_misalign 2 \
+  run_simulator --image "$script_dir/fault_store_misalign.hex"
+expect_output fault_store_misalign \
+  'error: store address misaligned at pc=0x00000004 inst=0x0000a123'
+
+expect_exit fault_jalr_misalign 2 \
+  run_simulator --image "$script_dir/fault_jalr_misalign.hex"
+expect_output fault_jalr_misalign \
+  'error: instruction address misaligned at pc=0x00000004 inst=0x00008067'
+
+expect_exit guest_fail 5 \
+  run_simulator --image "$script_dir/guest_fail.hex"
+expect_output guest_fail \
+  $'summary commits=4 cycles=6 pc=0x00000010 x0=0x00000000 x1=0xfffffff0 x2=0x0000002a x3=0x00000000 x4=0x00000000 x5=0x00000000 x6=0x00000000 x7=0x00000000 x8=0x00000000 x9=0x00000000 x10=0x00000000 x11=0x00000000 x12=0x00000000 x13=0x00000000 x14=0x00000000 x15=0x00000000\nerror: guest exit code: 42'
 
 expect_exit missing_image 1 \
   run_simulator --image "$missing_image"
@@ -136,14 +151,14 @@ expect_output timeout \
   'error: timeout after 2 cycles and 2 commits'
 
 expect_exit state_mismatch 4 \
-  run_simulator --image "$script_dir/isa_smoke.hex" --steps 8 \
-  --expect r1=0
+  run_simulator --image "$script_dir/isa_smoke.hex" --steps 1 \
+  --expect x1=0
 expect_output state_mismatch \
-  $'summary commits=8 cycles=8 pc=0x08 r0=0x0000 r1=0x0002 r2=0x0002 r3=0x0000\nerror: r1 expected 0x0000 but got 0x0002'
+  $'summary commits=1 cycles=1 pc=0x00000004 x0=0x00000000 x1=0x00000002 x2=0x00000000 x3=0x00000000 x4=0x00000000 x5=0x00000000 x6=0x00000000 x7=0x00000000 x8=0x00000000 x9=0x00000000 x10=0x00000000 x11=0x00000000 x12=0x00000000 x13=0x00000000 x14=0x00000000 x15=0x00000000\nerror: x1 expected 0x00000000 but got 0x00000002'
 
 expect_exit duplicate_expectation 1 \
   run_simulator --image "$script_dir/isa_smoke.hex" \
-  --expect r1=2 --expect r1=2
+  --expect x1=2 --expect x1=2
 
 expect_exit unknown_argument 1 \
   run_simulator --image "$script_dir/isa_smoke.hex" --unknown
@@ -154,4 +169,4 @@ expect_exit missing_argument_value 1 \
 expect_exit missing_required_image 1 \
   run_simulator --steps 1
 
-printf 'run_integration: PASS (%s cases)\n' 19
+printf 'run_integration: PASS (%s cases)\n' 22

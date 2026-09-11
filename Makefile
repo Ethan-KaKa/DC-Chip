@@ -11,6 +11,10 @@ SIM_DIR   := $(BUILD_DIR)/verilator
 SIM_BIN   := $(SIM_DIR)/Vsim_top
 SIM_TEST_DIR := $(BUILD_DIR)/verilator-test
 SIM_TEST_BIN := $(SIM_TEST_DIR)/test_simulation
+REF_TEST_DIR := $(BUILD_DIR)/reference-test
+REF_TEST_BIN := $(REF_TEST_DIR)/test_reference
+DIFF_TEST_DIR := $(BUILD_DIR)/difftest-test
+DIFF_TEST_BIN := $(DIFF_TEST_DIR)/test_difftest
 DISASM_TEST_DIR := $(BUILD_DIR)/disasm-test
 DISASM_TEST_BIN := $(DISASM_TEST_DIR)/test_disasm
 MEM_TEST_DIR := $(BUILD_DIR)/memory-test
@@ -32,17 +36,22 @@ UNIT_TBS := sim/tb/tb_alu.sv \
 	sim/tb/tb_decoder.sv \
 	sim/tb/tb_regfile.sv \
 	sim/tb/tb_cpu_core.sv
+MEM_RTL := sim/verilator/sim_mem.sv
+MEM_TEST_CPP := sim/tests/test_memory.cpp
 SIM_RTL := $(CORE_RTL) \
+	$(MEM_RTL) \
 	sim/verilator/sim_top.sv
 SIM_ENGINE_CPP := sim/verilator/memory.cpp \
 	sim/verilator/simulation.cpp
 SIM_CLI_CPP := sim/verilator/numeric.cpp \
 	sim/verilator/main.cpp
 SIM_TEST_CPP := sim/tests/test_simulation.cpp
+REF_CPP := sim/verilator/reference_model.cpp sim/verilator/memory.cpp
+REF_TEST_CPP := sim/tests/test_reference.cpp
+DIFF_CPP := sim/verilator/difftest.cpp $(REF_CPP)
+DIFF_TEST_CPP := sim/tests/test_difftest.cpp
 DISASM_CPP := sim/verilator/disasm.cpp
 DISASM_TEST_CPP := sim/tests/test_disasm.cpp
-MEM_RTL := sim/verilator/sim_mem.sv
-MEM_TEST_CPP := sim/tests/test_memory.cpp
 SIM_CONFIG_CXXFLAGS := -I$(abspath $(CONFIG_DIR)) \
 	-I$(abspath sim/verilator) \
 	-include $(abspath $(CONFIG_H))
@@ -55,7 +64,7 @@ CONFIG_CMD = $(PYTHON) scripts/config.py \
 	--config "$(abspath $(CONFIG_FILE))" \
 	--output-dir "$(abspath $(CONFIG_DIR))"
 
-ifneq ($(filter sim-build sim test-simulation test-integration test,$(MAKECMDGOALS)),)
+ifneq ($(filter sim-build sim test-simulation test-reference test-difftest test-integration test,$(MAKECMDGOALS)),)
 -include $(AUTO_CONF)
 endif
 
@@ -73,8 +82,8 @@ endif
 
 .PHONY: check-tools help defconfig menuconfig config-show test-config \
 	lint-isa lint-comb lint lint-mem test-isa test-alu test-decoder test-regfile test-core test-unit \
-	test-disasm test-memory sim-build sim test-simulation test-integration test-wave \
-	test-sdb test clean
+	test-disasm test-memory test-reference sim-build sim test-simulation test-difftest \
+	test-integration test-wave test-sdb test clean
 
 check-tools:
 	@set -eu; \
@@ -274,6 +283,36 @@ $(SIM_TEST_BIN): $(SIM_RTL) $(SIM_ENGINE_CPP) $(SIM_TEST_CPP) \
 test-simulation: $(SIM_TEST_BIN)
 	$(SIM_TEST_BIN) "$(abspath sim/tests)"
 
+$(REF_TEST_BIN): $(REF_CPP) $(REF_TEST_CPP) sim/verilator/reference_model.h Makefile \
+	$(CONFIG_H) $(AUTO_CONF)
+	mkdir -p $(REF_TEST_DIR)
+	CCACHE_DISABLE=1 $(CXX) $(SIM_CXXFLAGS) -I$(REF_TEST_DIR) -o $@ $(REF_CPP) $(REF_TEST_CPP)
+
+test-reference: $(REF_TEST_BIN)
+	$(REF_TEST_BIN)
+
+$(DIFF_TEST_BIN): $(SIM_RTL) $(SIM_ENGINE_CPP) $(DIFF_CPP) $(DIFF_TEST_CPP) \
+	sim/verilator/memory.h sim/verilator/simulation.h \
+	sim/verilator/reference_model.h sim/verilator/difftest.h Makefile \
+	$(CONFIG_H) $(AUTO_CONF)
+	mkdir -p $(DIFF_TEST_DIR)
+	CCACHE_DISABLE=1 CXX="$(CXX)" $(VERILATOR) --cc --exe --build \
+		--language 1800-2012 -Wall --top-module sim_top \
+		$(SIM_TRACE_FLAGS) \
+		--Mdir $(DIFF_TEST_DIR) -o test_difftest \
+		-CFLAGS "-std=c++17 $(SIM_CONFIG_CXXFLAGS)" \
+		$(SIM_RTL) $(SIM_ENGINE_CPP) $(DIFF_CPP) $(DIFF_TEST_CPP)
+	@verilator_root=$$($(VERILATOR) --getenv VERILATOR_ROOT); \
+	CCACHE_DISABLE=1 $(CXX) $(SIM_CXXFLAGS) -fsyntax-only \
+		-I$(DIFF_TEST_DIR) -Isim/verilator \
+		-isystem "$$verilator_root/include" \
+		-isystem "$$verilator_root/include/vltstd" \
+		$(SIM_ENGINE_CPP) $(DIFF_CPP) $(DIFF_TEST_CPP)
+
+test-difftest: $(DIFF_TEST_BIN)
+	@mkdir -p "$(abspath $(BUILD_DIR))/test-fixtures/difftest"
+	$(DIFF_TEST_BIN) "$(abspath $(BUILD_DIR))/test-fixtures/difftest"
+
 sim:
 	@set -eu; \
 	if [ -z '$(strip $(IMG))' ]; then \
@@ -324,10 +363,17 @@ test-sdb:
 
 test:
 	$(MAKE) --no-print-directory test-config
+	$(MAKE) --no-print-directory test-isa
 	$(MAKE) --no-print-directory test-disasm
+	$(MAKE) --no-print-directory lint-isa
+	$(MAKE) --no-print-directory lint-comb
 	$(MAKE) --no-print-directory lint
+	$(MAKE) --no-print-directory lint-mem
 	$(MAKE) --no-print-directory test-unit
+	$(MAKE) --no-print-directory test-memory
+	$(MAKE) --no-print-directory test-reference
 	$(MAKE) --no-print-directory test-simulation
+	$(MAKE) --no-print-directory test-difftest
 	$(MAKE) --no-print-directory test-integration
 
 clean:
@@ -363,13 +409,15 @@ help:
 		'  make test-unit    Run all four unit testbenches in order' \
 		'  make test-disasm  Test directed v0.2 ISA disassemblies' \
 		'  make test-memory  Run self-checking simulation memory tests' \
+		'  make test-reference Run self-checking C++ reference model tests' \
 		'  make sim-build    Build the Verilator DPI-C simulator' \
 		'  make sim IMG=<hex> [STEPS=<n>] [TRACE=1] [BATCH=1]' \
 		'  make test-simulation  Test the reusable Simulation engine' \
+		'  make test-difftest    Run lockstep differential testing' \
 		'  make test-integration  Run positive and negative integration cases' \
 		'  make test-wave    Test isolated WAVE-off/on simulator builds' \
 		'  make test-sdb     Test isolated SDB-off/on and SDB+WAVE builds' \
-		'  make test         Run config, disasm, RTL, engine, and CLI regression' \
+		'  make test         Run all config, disasm, RTL, ref, difftest, and CLI regression' \
 		'  make clean        Remove only the repository-root build directory' \
 		'' \
 		'Configurable variables:' \

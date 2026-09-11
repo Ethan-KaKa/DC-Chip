@@ -139,8 +139,8 @@ module sim_mem #(
   assign req_is_tohost = tohost_legal_sw;
   assign req_is_error  = !(req_is_dram || req_is_tohost);
 
-  // Ready to accept new request if no pending response or response handshakes now
-  assign dmem_req_ready = !rst && (!rsp_valid_q || dmem_rsp_fire);
+  // Ready to accept new request if no pending response
+  assign dmem_req_ready = !rst && !rsp_valid_q;
 
   assign dmem_req_fire = dmem_req_valid && dmem_req_ready;
   assign dmem_rsp_fire = rsp_valid_q && dmem_rsp_ready;

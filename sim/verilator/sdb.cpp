@@ -41,55 +41,60 @@ void print_help(std::ostream &output) {
 }
 
 void print_state(const ArchitecturalState &state, std::ostream &output) {
-  output << "state pc=" << hex_value(state.fetch_pc, 2)
-         << " inst=" << hex_value(state.fetch_inst, 4) << " asm=\""
+  output << "state pc=" << hex_value(state.fetch_pc, 8)
+         << " inst=" << hex_value(state.fetch_inst, 8) << " asm=\""
          << disassemble(state.fetch_inst) << '"';
   for (std::size_t index = 0; index < state.registers.size(); ++index) {
-    output << " r" << index << '=' << hex_value(state.registers[index], 4);
+    output << " x" << index << '=' << hex_value(state.registers[index], 8);
   }
   output << " cycles=" << state.cycles << " commits=" << state.commits
          << " time=" << state.time << '\n';
 }
 
 void print_commit(const StepEvent &event, std::ostream &output) {
-  output << "commit pc=" << hex_value(event.commit_pc, 2)
-         << " inst=" << hex_value(event.commit_inst, 4) << " asm=\""
+  output << "commit pc=" << hex_value(event.commit_pc, 8)
+         << " inst=" << hex_value(event.commit_inst, 8) << " asm=\""
          << disassemble(event.commit_inst) << "\"\n";
 }
 
-const char *stop_text(StopReason reason) {
-  switch (reason) {
+std::string stop_text(const RunResult &result) {
+  switch (result.reason) {
     case StopReason::cycles_complete:
       return "cycles complete";
     case StopReason::commits_complete:
       return "commits complete";
-    case StopReason::illegal_instruction:
-      return "illegal instruction";
-    case StopReason::out_of_bounds_fetch:
-      return "out-of-bounds fetch";
+    case StopReason::program_exit:
+      return "program exit (code " + std::to_string(result.event.guest_exit_code) + ")";
+    case StopReason::fault:
+      return fault_cause_string(result.event.fault_cause);
     case StopReason::timeout:
       return "timeout";
     case StopReason::breakpoint:
+      return "breakpoint";
     case StopReason::quit:
-      break;
+      return "quit";
   }
   return "unknown";
 }
 
 void print_terminal_error(const RunResult &result, std::ostream &errors) {
-  if (result.reason == StopReason::out_of_bounds_fetch) {
-    errors << "error: executed out-of-bounds instruction fetch at pc=";
-  } else if (result.reason == StopReason::illegal_instruction) {
-    errors << "error: illegal instruction at pc=";
+  if (result.reason == StopReason::fault) {
+    if (result.event.fault_inst_valid) {
+      errors << "error: " << fault_cause_string(result.event.fault_cause)
+             << " at pc=" << hex_value(result.event.fault_pc, 8)
+             << " inst=" << hex_value(result.event.fault_inst, 8) << '\n';
+    } else {
+      errors << "error: " << fault_cause_string(result.event.fault_cause)
+             << " at pc=" << hex_value(result.event.fault_pc, 8) << '\n';
+    }
+  } else if (result.reason == StopReason::program_exit) {
+    if (result.event.guest_exit_code != 0) {
+      errors << "error: guest exit code: " << result.event.guest_exit_code << '\n';
+    }
   } else if (result.reason == StopReason::timeout) {
     errors << "error: timeout after " << result.state.cycles
            << " cycles and " << result.state.commits << " commits\n";
-    return;
-  } else {
-    return;
   }
-  errors << hex_value(result.state.fetch_pc, 2)
-         << " inst=" << hex_value(result.state.fetch_inst, 4) << '\n';
 }
 
 bool parse_positive(std::string_view text, std::string_view type,
@@ -153,7 +158,7 @@ class Debugger {
           continue;
         }
         const RunTarget target = command == "si" ? RunTarget::commits
-                                                   : RunTarget::cycles;
+                                                 : RunTarget::cycles;
         const std::optional<RunResult> result = execute(target, count);
         if (result.has_value()) {
           return *result;
@@ -202,8 +207,8 @@ class Debugger {
     return false;
   }
 
-  std::set<std::uint8_t> active_breakpoints() const {
-    std::set<std::uint8_t> result;
+  std::set<std::uint32_t> active_breakpoints() const {
+    std::set<std::uint32_t> result;
     for (const auto &[pc, id] : breakpoint_ids_) {
       static_cast<void>(id);
       if (!suppressed_pc_.has_value() || pc != *suppressed_pc_) {
@@ -236,10 +241,10 @@ class Debugger {
         suppressed_pc_.reset();
       }
 
-      if (result.reason == StopReason::illegal_instruction ||
-          result.reason == StopReason::out_of_bounds_fetch ||
+      if (result.reason == StopReason::program_exit ||
+          result.reason == StopReason::fault ||
           result.reason == StopReason::timeout) {
-        output_ << "stopped: " << stop_text(result.reason) << '\n';
+        output_ << "stopped: " << stop_text(result) << '\n';
         print_state(result.state, output_);
         print_terminal_error(result, errors_);
         return result;
@@ -255,7 +260,7 @@ class Debugger {
         const StopReason reason = target == RunTarget::cycles
                                       ? StopReason::cycles_complete
                                       : StopReason::commits_complete;
-        output_ << "stopped: " << stop_text(reason) << '\n';
+        output_ << "stopped: " << (reason == StopReason::cycles_complete ? "cycles complete" : "commits complete") << '\n';
         if (result.event.committed) {
           print_commit(result.event, output_);
         }
@@ -275,21 +280,25 @@ class Debugger {
       errors_ << "error: invalid pc '" << words[1] << "'\n";
       return;
     }
-    if (parsed > std::numeric_limits<std::uint8_t>::max()) {
-      errors_ << "error: pc '" << words[1] << "' is outside 0..255\n";
+    if (parsed > 0xffffffffULL) {
+      errors_ << "error: pc '" << words[1] << "' is outside 0..0xffffffff\n";
       return;
     }
-    const std::uint8_t pc = static_cast<std::uint8_t>(parsed);
+    if ((parsed & 3ULL) != 0) {
+      errors_ << "error: pc '" << words[1] << "' is not 4-byte aligned\n";
+      return;
+    }
+    const std::uint32_t pc = static_cast<std::uint32_t>(parsed);
     const auto existing = breakpoint_ids_.find(pc);
     if (existing != breakpoint_ids_.end()) {
       output_ << "breakpoint id=" << existing->second
-              << " already set at pc=" << hex_value(pc, 2) << '\n';
+              << " already set at pc=" << hex_value(pc, 8) << '\n';
       return;
     }
     const std::uint64_t id = next_breakpoint_id_++;
     breakpoints_.emplace(id, pc);
     breakpoint_ids_.emplace(pc, id);
-    output_ << "breakpoint id=" << id << " set at pc=" << hex_value(pc, 2)
+    output_ << "breakpoint id=" << id << " set at pc=" << hex_value(pc, 8)
             << '\n';
   }
 
@@ -306,7 +315,7 @@ class Debugger {
       errors_ << "error: breakpoint id=" << id << " not found\n";
       return;
     }
-    const std::uint8_t pc = found->second;
+    const std::uint32_t pc = found->second;
     breakpoint_ids_.erase(pc);
     breakpoints_.erase(found);
     if (suppressed_pc_.has_value() && *suppressed_pc_ == pc) {
@@ -333,7 +342,7 @@ class Debugger {
         output_ << "no breakpoints\n";
       } else {
         for (const auto &[id, pc] : breakpoints_) {
-          output_ << "breakpoint id=" << id << " pc=" << hex_value(pc, 2)
+          output_ << "breakpoint id=" << id << " pc=" << hex_value(pc, 8)
                   << '\n';
         }
       }
@@ -373,9 +382,9 @@ class Debugger {
   std::istream &input_;
   std::ostream &output_;
   std::ostream &errors_;
-  std::map<std::uint64_t, std::uint8_t> breakpoints_;
-  std::unordered_map<std::uint8_t, std::uint64_t> breakpoint_ids_;
-  std::optional<std::uint8_t> suppressed_pc_;
+  std::map<std::uint64_t, std::uint32_t> breakpoints_;
+  std::unordered_map<std::uint32_t, std::uint64_t> breakpoint_ids_;
+  std::optional<std::uint32_t> suppressed_pc_;
   std::uint64_t next_breakpoint_id_ = 1;
 };
 

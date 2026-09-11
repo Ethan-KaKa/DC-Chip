@@ -5,16 +5,30 @@
 #include <cstdint>
 #include <memory>
 #include <set>
+#include <string>
 #ifdef CONFIG_DC_SIM_WAVE
 #include <string>
 #endif
 
 namespace dc_sim {
 
+enum class FaultCause : std::uint8_t {
+  none = 0,
+  illegal_instruction = 1,
+  instruction_access = 2,
+  instruction_misaligned = 3,
+  load_misaligned = 4,
+  load_access = 5,
+  store_misaligned = 6,
+  store_access = 7,
+};
+
+const char *fault_cause_string(std::uint8_t cause);
+
 struct ArchitecturalState {
-  std::uint8_t fetch_pc = 0;
-  std::uint16_t fetch_inst = 0;
-  std::array<std::uint16_t, 4> registers{};
+  std::uint32_t fetch_pc = 0;
+  std::uint32_t fetch_inst = 0;
+  std::array<std::uint32_t, 16> registers{};
   std::uint64_t cycles = 0;
   std::uint64_t commits = 0;
   std::uint64_t time = 0;
@@ -22,18 +36,23 @@ struct ArchitecturalState {
 
 struct StepEvent {
   bool committed = false;
-  std::uint8_t commit_pc = 0;
-  std::uint16_t commit_inst = 0;
-  bool entered_illegal = false;
-  bool executed_out_of_bounds_fetch = false;
+  std::uint32_t commit_pc = 0;
+  std::uint32_t commit_inst = 0;
+  bool tohost_exit = false;
+  std::uint32_t guest_exit_code = 0;
+  bool entered_fault = false;
+  std::uint8_t fault_cause = 0;
+  std::uint32_t fault_pc = 0;
+  bool fault_inst_valid = false;
+  std::uint32_t fault_inst = 0;
 };
 
 enum class StopReason {
   cycles_complete,
   commits_complete,
   breakpoint,
-  illegal_instruction,
-  out_of_bounds_fetch,
+  fault,
+  program_exit,
   timeout,
   quit,
 };
@@ -66,7 +85,7 @@ class Simulation {
   RunResult step_instruction(std::uint64_t max_cycles);
   RunResult run_until(RunTarget target, std::uint64_t count,
                       std::uint64_t max_cycles,
-                      const std::set<std::uint8_t> &breakpoints = {});
+                      const std::set<std::uint32_t> &breakpoints = {});
   ArchitecturalState snapshot() const;
 
 #ifdef CONFIG_DC_SIM_WAVE

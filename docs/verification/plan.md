@@ -1,7 +1,7 @@
 # DC-Chip 验证计划
 
 - 版本：v0.2
-- 状态：v0.2 验收契约已冻结；ISA 公共层与核心 RTL 专项已迁移
+- 状态：v0.2 阶段 1 核心与仿真全链路已完成迁移与验证闭环
 - 更新日期：2026-09-11
 - ISA 规范：`docs/isa/isa.md` v0.2
 - 仿真器接口：[`simulator.md`](simulator.md)
@@ -12,23 +12,21 @@
 控制流、数据访问、stall、提交与 fault 行为一致，并让所有成功和失败路径可由
 结构化结果及进程状态自动判断。
 
-当前仓库处于有意的迁移窗口：
+当前仓库状态：
 
 | 层次 | 状态 | 能作为何种证据 |
 | --- | --- | --- |
-| v0.2 ISA/微架构/存储规格 | 已冻结 | 后续实现的验收依据 |
+| v0.2 ISA/微架构/存储规格 | 已冻结 | 正式规格源与验收依据 |
 | ISA package、decoder、编码器、反汇编器 | 已迁移至 v0.2 | `make test-isa` 的公共层专项证据 |
 | ALU、regfile、core | 已迁移至 v0.2 | `make lint` 与 `make test-unit` 的模块级 behavioral simulation 证据 |
 | 仿真存储与 32 位 HEX loader | 已迁移至 v0.2 | `make lint-mem` 与 `make test-memory` 的存储子系统证据 |
-| Verilator wrapper、Simulation、SDB | 仍为 v0.1 接口，迁移中不可构建 | 等待步骤 2.5，当前无 v0.2 端到端执行证据 |
-| v0.2 功能回归、参考模型、difftest | 未实现 | 不能宣称 v0.2 已通过 |
+| Verilator wrapper、Simulation、SDB | 已迁移至 v0.2 | `make sim-build`、`make test-simulation`、`make test-wave`、`make test-sdb` |
+| v0.2 独立参考模型与 lockstep difftest | 已迁移至 v0.2 | `make test-reference` 与 `make test-difftest` 独立验证证据 |
+| v0.2 CLI 22 项集成与全回归 | 已迁移至 v0.2 | `make test-integration` 与 `make test` 端到端闭环证据 |
 | Vivado、时序、资源、功耗、上板 | 未验证 | 不能从 behavioral simulation 推断 |
 
-步骤 2.2 已使旧完整回归不再适用于当前工作树。步骤 2.4 完成后，
-`make test-isa`、RTL lint、`make test-unit` 以及 `make test-memory` 能列为
-v0.2 专项证据；迁移前 `make test` PASS 仍只属于 commit `9bfb9a9` 的 v0.1
-behavioral simulation 记录。步骤 2.5 完成前不得宣称 v0.2 端到端执行或完整
-回归可用。
+步骤 2.5 完成后，`make test` 恢复为全部测试的最高层累计回归入口；
+已建立涵盖编码、模块、存储、独立参考模型、difftest 和端到端 CLI 的完整证据闭环。
 
 ## 2. v0.1 迁移前冻结记录
 
@@ -114,33 +112,42 @@ core BFM 覆盖请求背压、请求接受当周期响应、延迟响应、四�
 | 2026-09-11 | `make test-memory` | PASS | 32 位 8 字符 HEX 解析、IROM 同周期读/越界、DRAM 1-cycle 同步读/read-first/4-bit strobe/背压保持、`tohost=0xfffffff0` 退出与 reset 冲刷 |
 | 2026-09-11 | `git diff --check` | PASS | 本步骤存储源码、测试和文档无 whitespace error |
 
-本步骤证明了 32 位 8 字符 HEX 加载器及 `sim_mem.sv` 在各种正反向总线时序、
-背压、read-first、byte-enable、未映射 fault 和 `tohost` 退出码捕获上的正确性。
-wrapper 顶层、Simulation 引擎、SDB 与逐提交 difftest 留待步骤 2.5。
+### 2.7 v0.2 仿真器、SDB、参考模型与 Difftest 迁移记录
+
+| 日期 | 命令 | 结果 | 证据边界 |
+| --- | --- | --- | --- |
+| 2026-09-11 | `make test-reference` | PASS | C++17 独立参考模型算术、访存、control/tohost 与七类 fault 单元测试 |
+| 2026-09-11 | `make test-simulation` | PASS | Simulation 驱动引擎 16 寄存器快照、tohost 判定与 fault 采样自检 |
+| 2026-09-11 | `make test-difftest` | PASS | RTL 与参考模型 lockstep 差分测试（定向测试、固定 seed 伪随机与 fault 比对） |
+| 2026-09-11 | `make test-integration` | PASS | 22 项端到端 CLI 集成测试（覆盖退出码 0, 1, 2, 3, 4, 5 及全部错误诊断） |
+| 2026-09-11 | `make test-wave` | PASS | WAVE-off/on 编译隔离、VCD 时间轴一致性与 CLI 回归 |
+| 2026-09-11 | `make test-sdb` | PASS | SDB-off/on/wave 模式、交互命令、断点、非法指令停机与 CLI 回归 |
+| 2026-09-11 | `make test` | PASS | config、ISA、disasm、lint、unit、memory、ref、sim、difftest、integration 全回归 |
+| 2026-09-11 | `git diff --check` | PASS | 本步骤源码、测试与文档无 whitespace error |
+
+本步骤证明了端到端仿真器、SDB 调试器、C++ 独立参考模型与 lockstep difftest 的完整实现。
 
 ## 3. v0.2 验收矩阵
 
-下表未标明已完成的项目在对应代码和测试完成前均为 **未实现/未验证**：
-
 | 类别 | 必测内容 | 主要方法 |
 | --- | --- | --- |
-| 编码 | 八条指令的标准 `opcode/funct3/funct7` 与格式；其他编码非法 | **已完成公共层专项**：decoder 定向与功能码空间枚举 |
-| 寄存器 | `x0` 恒零并忽略写；`x1`--`x15` 读写/reset | **已完成模块级专项**：regfile 全寄存器与 core `rd=x0` 访问 |
-| RV32E 上界 | 实际 `rd/rs1/rs2` 使用 `x16`--`x31` 时非法 | **已完成公共层专项**：decoder/反汇编逐字段拒绝 |
-| `lui` 特例 | 只检查 `rd`；立即数中与 `rs1/rs2` 重叠的位不得误判 | **已完成公共层定向测试** |
-| 立即数 | I/S 拼接、`-2048/-1/0/2047`，U 型最低 12 位清零 | **已完成模块级专项**：decoder、编码器与 core 边界执行 |
-| 算术 | `add/addi` 只保留低 32 位，正负溢出均不 fault | **已完成模块级专项**：ALU 边界与 core 写回；参考模型待实现 |
-| load | `lw` 小端与四字节对齐；`lbu` 任意 lane、零扩展；`rd=x0` 仍访问 | **核心与仿真存储专项已完成**：32 位小端、LBU 零扩展、DRAM 1-cycle 同步读与 read-first |
-| store | `sw` 四 lane；`sb` 单 lane；错误响应无部分副作用 | **核心与仿真存储专项已完成**：4 位 byte-enable、握手沿生效、未映射无副作用 |
-| `jalr` | 旧 `rs1`、`rd==rs1`、`pc+4`、清 bit 0、bit 1 对齐 fault | **已完成 core 定向测试** |
-| 取指 | 32 位 byte PC、每次 `+4`、四字节对齐、访问错误 | **已完成 core 取指 BFM 与 IROM 协议自检** |
-| fault | 七种 cause、PC/指令字段、无提交/写回、粘滞、reset 恢复 | **已完成 core fault 注入与存储 access fault 验证** |
-| stall | 请求/响应任意背压、payload 稳定、无丢失/重复、最多一个在途 | **核心与仿真存储专项已完成**：背压保持、存储在握手沿写入 |
-| reset | 未握手请求取消、已握手旧响应冲刷、不接收迟到响应 | **核心与存储模型冲刷已完成**：在途事务撤销与未完成 store 丢弃 |
-| trace/debug | 32 位 PC/指令、每条成功指令一次提交、索引读取 16×32 位状态 | **基础 core trace/debug 已完成**；扩展提交字段待步骤 2.5 |
-| tohost/镜像 | 8 字符 HEX 加载、`tohost=0xfffffff0` 退出码捕获 | **已完成存储专项**：`make test-memory` 涵盖正反用例 |
-| 程序 | 八指令 smoke、load/store lane、JALR loop、fault 负向镜像 | Verilator 集成测试（待步骤 2.5） |
-| 参考模型 | 与 RTL 独立实现，逐提交比较 PC/寄存器/内存副作用/fault | difftest（待步骤 2.5） |
+| 编码 | 八条指令的标准 `opcode/funct3/funct7` 与格式；其他编码非法 | **已完成**：decoder 定向与功能码空间枚举（`make test-isa`） |
+| 寄存器 | `x0` 恒零并忽略写；`x1`--`x15` 读写/reset | **已完成**：regfile 全寄存器与 core `rd=x0` 访问（`make test-regfile`） |
+| RV32E 上界 | 实际 `rd/rs1/rs2` 使用 `x16`--`x31` 时非法 | **已完成**：decoder/反汇编逐字段拒绝（`make test-decoder`） |
+| `lui` 特例 | 只检查 `rd`；立即数中与 `rs1/rs2` 重叠的位不得误判 | **已完成**：公共层定向测试（`make test-isa`） |
+| 立即数 | I/S 拼接、`-2048/-1/0/2047`，U 型最低 12 位清零 | **已完成**：decoder、编码器与 core 边界执行（`make test-unit`） |
+| 算术 | `add/addi` 只保留低 32 位，正负溢出均不 fault | **已完成**：ALU 边界、core 写回与参考模型（`make test-alu`、`make test-reference`） |
+| load | `lw` 小端与四字节对齐；`lbu` 任意 lane、零扩展；`rd=x0` 仍访问 | **已完成**：32 位小端、LBU 零扩展、DRAM 同步读与 read-first（`make test-memory`） |
+| store | `sw` 四 lane；`sb` 单 lane；错误响应无部分副作用 | **已完成**：4 位 byte-enable、握手沿生效、未映射无副作用（`make test-memory`） |
+| `jalr` | 旧 `rs1`、`rd==rs1`、`pc+4`、清 bit 0、bit 1 对齐 fault | **已完成**：core 定向测试与 difftest 比对（`make test-core`、`make test-difftest`） |
+| 取指 | 32 位 byte PC、每次 `+4`、四字节对齐、访问错误 | **已完成**：core 取指 BFM 与 IROM 协议自检（`make test-core`、`make test-memory`） |
+| fault | 七种 cause、PC/指令字段、无提交/写回、粘滞、reset 恢复 | **已完成**：core fault 注入、存储 access fault 与 CLI 报告（`make test-unit`、`make test-integration`） |
+| stall | 请求/响应任意背压、payload 稳定、无丢失/重复、最多一个在途 | **已完成**：背压保持、存储在握手沿写入（`make test-memory`） |
+| reset | 未握手请求取消、已握手旧响应冲刷、不接收迟到响应 | **已完成**：在途事务撤销与未完成 store 丢弃（`make test-core`、`make test-memory`） |
+| trace/debug | 32 位 PC/指令、每条成功指令一次提交、索引读取 16×32 位状态 | **已完成**：32 位 trace 捕获、debug regfile 读取（`make test-simulation`） |
+| tohost/镜像 | 8 字符 HEX 加载、`tohost=0xfffffff0` 退出码捕获 | **已完成**：`make test-memory`、`make test-integration` 覆盖 0 与非 0 退出 |
+| 程序 | 八指令 smoke、load/store lane、JALR loop、fault 负向镜像 | **已完成**：Verilator 22 项 CLI 集成与波形测试（`make test-integration`、`make test-wave`） |
+| 参考模型 | 与 RTL 独立实现，逐提交比较 PC/寄存器/内存副作用/fault | **已完成**：C++ 独立参考模型与 lockstep difftest（`make test-reference`、`make test-difftest`） |
 
 ## 4. 模块与协议测试要求
 

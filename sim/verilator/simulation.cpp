@@ -61,10 +61,10 @@ class Simulation::Impl {
     ArchitecturalState state;
     state.fetch_pc = top->fetch_pc;
     state.fetch_inst = top->fetch_inst;
-    const std::uint64_t packed = top->debug_regs;
     for (std::size_t index = 0; index < state.registers.size(); ++index) {
-      state.registers[index] = static_cast<std::uint16_t>(
-          (packed >> (index * 16U)) & 0xffffU);
+      top->debug_reg_addr = static_cast<uint8_t>(index);
+      top->eval();
+      state.registers[index] = top->debug_reg_data;
     }
     state.cycles = cycles;
     state.commits = commits;
@@ -117,6 +117,28 @@ class Simulation::Impl {
   bool reset_done = false;
 };
 
+const char *fault_cause_string(std::uint8_t cause) {
+  switch (static_cast<FaultCause>(cause)) {
+    case FaultCause::illegal_instruction:
+      return "illegal instruction";
+    case FaultCause::instruction_access:
+      return "instruction access fault";
+    case FaultCause::instruction_misaligned:
+      return "instruction address misaligned";
+    case FaultCause::load_misaligned:
+      return "load address misaligned";
+    case FaultCause::load_access:
+      return "load access fault";
+    case FaultCause::store_misaligned:
+      return "store address misaligned";
+    case FaultCause::store_access:
+      return "store access fault";
+    case FaultCause::none:
+    default:
+      return "none";
+  }
+}
+
 Simulation::Simulation() : Simulation(0, nullptr) {}
 
 Simulation::Simulation(int argc, char **argv)
@@ -150,8 +172,7 @@ StepEvent Simulation::step_cycle() {
         "Simulation::step_cycle() requires reset() first");
   }
 
-  const bool was_illegal = impl_->top->illegal_inst != 0;
-  const std::uint8_t executed_pc = impl_->top->fetch_pc;
+  const bool was_fault = impl_->top->fault_valid != 0;
 
   impl_->advance_half_cycle(1);
   ++impl_->cycles;
@@ -163,10 +184,17 @@ StepEvent Simulation::step_cycle() {
     event.commit_pc = impl_->top->trace_pc;
     event.commit_inst = impl_->top->trace_inst;
   }
-  event.entered_illegal = !was_illegal && impl_->top->illegal_inst != 0;
-  event.executed_out_of_bounds_fetch =
-      event.entered_illegal && fetch_out_of_bounds() &&
-      first_oob_address() == executed_pc;
+  event.tohost_exit = impl_->top->tohost_exit != 0;
+  event.guest_exit_code = impl_->top->guest_exit_code;
+
+  const bool is_fault = impl_->top->fault_valid != 0;
+  event.entered_fault = !was_fault && is_fault;
+  if (is_fault) {
+    event.fault_cause = static_cast<std::uint8_t>(impl_->top->fault_cause);
+    event.fault_pc = impl_->top->fault_pc;
+    event.fault_inst_valid = impl_->top->fault_inst_valid != 0;
+    event.fault_inst = impl_->top->fault_inst;
+  }
 
   impl_->advance_half_cycle(0);
   return event;
@@ -178,7 +206,7 @@ RunResult Simulation::step_instruction(std::uint64_t max_cycles) {
 
 RunResult Simulation::run_until(
     RunTarget target, std::uint64_t count, std::uint64_t max_cycles,
-    const std::set<std::uint8_t> &breakpoints) {
+    const std::set<std::uint32_t> &breakpoints) {
   if (!impl_->reset_done) {
     throw std::logic_error(
         "Simulation::run_until() requires reset() first");
@@ -199,19 +227,29 @@ RunResult Simulation::run_until(
     }
 
     const StepEvent event = step_cycle();
+
+    // Priority 1: tohost program exit
+    if (event.tohost_exit) {
+      return {StopReason::program_exit, event, snapshot()};
+    }
+
+    // Priority 2: fault
+    if (event.entered_fault || impl_->top->fault_valid != 0) {
+      return {StopReason::fault, event, snapshot()};
+    }
+
+    // Priority 3: commits target reached
     if (target == RunTarget::commits &&
         impl_->commits - start_commits >= count) {
       return {StopReason::commits_complete, event, snapshot()};
     }
-    if (event.entered_illegal) {
-      const StopReason reason = event.executed_out_of_bounds_fetch
-                                    ? StopReason::out_of_bounds_fetch
-                                    : StopReason::illegal_instruction;
-      return {reason, event, snapshot()};
-    }
+
+    // Priority 4: timeout
     if (impl_->cycles >= max_cycles) {
       return {StopReason::timeout, event, snapshot()};
     }
+
+    // Priority 5: cycles target reached
     if (target == RunTarget::cycles &&
         impl_->cycles - start_cycles >= count) {
       return {StopReason::cycles_complete, event, snapshot()};

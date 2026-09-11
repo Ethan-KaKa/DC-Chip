@@ -146,12 +146,12 @@ def state(
     pc: str,
     inst: str,
     assembly: str,
-    registers: tuple[str, str, str, str],
+    registers: tuple[str, ...],
     cycles: int,
     commits: int,
     time: int,
 ) -> str:
-    register_text = " ".join(f"r{index}={value}" for index, value in enumerate(registers))
+    register_text = " ".join(f"x{index}={value}" for index, value in enumerate(registers))
     return (
         f'state pc={pc} inst={inst} asm="{assembly}" {register_text} '
         f"cycles={cycles} commits={commits} time={time}\n"
@@ -196,10 +196,15 @@ def verify_sdb_off(
     expect_success(explicit, "SDB-off explicit batch")
     require(default.stdout == explicit.stdout, "--batch changed SDB-off stdout")
     require(default.stderr == explicit.stderr, "--batch changed SDB-off stderr")
+    expected_summary = (
+        "summary commits=1 cycles=1 pc=0x00000004 "
+        "x0=0x00000000 x1=0x00000002 x2=0x00000000 x3=0x00000000 "
+        "x4=0x00000000 x5=0x00000000 x6=0x00000000 x7=0x00000000 "
+        "x8=0x00000000 x9=0x00000000 x10=0x00000000 x11=0x00000000 "
+        "x12=0x00000000 x13=0x00000000 x14=0x00000000 x15=0x00000000\n"
+    )
     require(
-        default.stdout
-        == "summary commits=1 cycles=1 pc=0x01 r0=0x0000 "
-        "r1=0x0002 r2=0x0000 r3=0x0000\n",
+        default.stdout == expected_summary,
         "SDB-off batch output changed",
     )
     return build_dir, config_path, simulator
@@ -230,37 +235,37 @@ def verify_help_and_quit(simulator: Path) -> None:
 
 def verify_state_and_steps(simulator: Path) -> None:
     reset_state = state(
-        "0x00",
-        "0x0401",
-        "MOVI R1, #0x01",
-        ("0x0000", "0x0000", "0x0000", "0x0000"),
+        "0x00000000",
+        "0x00100093",
+        "addi x1, x0, 1",
+        ("0x00000000",) * 16,
         0,
         0,
         4,
     )
     after_one = state(
-        "0x01",
-        "0x2401",
-        "ADDI R1, #0x01",
-        ("0x0000", "0x0001", "0x0000", "0x0000"),
+        "0x00000004",
+        "0x00108093",
+        "addi x1, x1, 1",
+        ("0x00000000", "0x00000001") + ("0x00000000",) * 14,
         1,
         1,
         6,
     )
     after_three = state(
-        "0x01",
-        "0x2401",
-        "ADDI R1, #0x01",
-        ("0x0000", "0x0002", "0x0000", "0x0000"),
+        "0x0000000c",
+        "0x00010067",
+        "jalr x0, 0(x2)",
+        ("0x00000000", "0x00000002", "0x00000004") + ("0x00000000",) * 13,
         3,
         3,
         10,
     )
     after_five = state(
-        "0x01",
-        "0x2401",
-        "ADDI R1, #0x01",
-        ("0x0000", "0x0003", "0x0000", "0x0000"),
+        "0x00000008",
+        "0x00400113",
+        "addi x2, x0, 4",
+        ("0x00000000", "0x00000003", "0x00000004") + ("0x00000000",) * 13,
         5,
         5,
         14,
@@ -274,13 +279,13 @@ def verify_state_and_steps(simulator: Path) -> None:
     expected = (
         f"(dc-sdb) {reset_state}"
         "(dc-sdb) stopped: commits complete\n"
-        'commit pc=0x00 inst=0x0401 asm="MOVI R1, #0x01"\n'
+        'commit pc=0x00000000 inst=0x00100093 asm="addi x1, x0, 1"\n'
         f"{after_one}"
         "(dc-sdb) stopped: cycles complete\n"
-        'commit pc=0x02 inst=0x7001 asm="JUMP #0x01"\n'
+        'commit pc=0x00000008 inst=0x00400113 asm="addi x2, x0, 4"\n'
         f"{after_three}"
         "(dc-sdb) stopped: commits complete\n"
-        'commit pc=0x02 inst=0x7001 asm="JUMP #0x01"\n'
+        'commit pc=0x00000004 inst=0x00108093 asm="addi x1, x1, 1"\n'
         f"{after_five}"
         "(dc-sdb) "
     )
@@ -293,19 +298,19 @@ def verify_breakpoints(simulator: Path) -> None:
         "jump_loop.hex",
         arguments=("--max-cycles", "10"),
         commands=(
-            "info b\nb 1\nb 0X01\nb 2\nd 1\nb 1\ninfo b\nd 99\n"
+            "info b\nb 4\nb 0X04\nb 8\nd 1\nb 4\ninfo b\nd 99\n"
             "c\nsc\nc\nc\nq\n"
         ),
     )
     require(result.returncode == 0, "breakpoint scenario failed")
     expected_fragments = (
         "(dc-sdb) no breakpoints\n",
-        "breakpoint id=1 set at pc=0x01\n",
-        "breakpoint id=1 already set at pc=0x01\n",
-        "breakpoint id=2 set at pc=0x02\n",
+        "breakpoint id=1 set at pc=0x00000004\n",
+        "breakpoint id=1 already set at pc=0x00000004\n",
+        "breakpoint id=2 set at pc=0x00000008\n",
         "breakpoint id=1 deleted\n",
-        "breakpoint id=3 set at pc=0x01\n",
-        "breakpoint id=2 pc=0x02\nbreakpoint id=3 pc=0x01\n",
+        "breakpoint id=3 set at pc=0x00000004\n",
+        "breakpoint id=2 pc=0x00000008\nbreakpoint id=3 pc=0x00000004\n",
         "stopped: breakpoint id=3\n",
         "stopped: cycles complete\n",
         "stopped: breakpoint id=2\n",
@@ -329,7 +334,7 @@ def verify_command_errors(simulator: Path) -> None:
         "b\nb 1 2\nd\nd 1 2\ninfo\ninfo r extra\ninfo x\ninfo wave\n"
         "wave off\nsi 0\nsi -1\nsi 18446744073709551616\nsi 0x\n"
         "d 0\nd -1\nd 18446744073709551616\n"
-        "b -1\nb 0x\nb 0xgg\nb 256\ninfo b\nq\n"
+        "b -1\nb 0x\nb 0xgg\nb 1\nb 4294967296\ninfo b\nq\n"
     )
     result = cli(simulator, "jump_loop.hex", commands=commands)
     require(result.returncode == 0, "command-error scenario did not reach q")
@@ -359,7 +364,8 @@ def verify_command_errors(simulator: Path) -> None:
         "error: invalid pc '-1'\n"
         "error: invalid pc '0x'\n"
         "error: invalid pc '0xgg'\n"
-        "error: pc '256' is outside 0..255\n"
+        "error: pc '1' is not 4-byte aligned\n"
+        "error: pc '4294967296' is outside 0..0xffffffff\n"
     )
     require(result.stderr == expected_errors, "SDB command diagnostics changed")
     require("no breakpoints\n" in result.stdout, "failed commands partially set a breakpoint")
@@ -368,10 +374,10 @@ def verify_command_errors(simulator: Path) -> None:
 def verify_terminal_stops(simulator: Path) -> None:
     illegal = cli(simulator, "illegal_reserved.hex", commands="c\n")
     illegal_state = state(
-        "0x00",
-        "0x8000",
-        ".word 0x8000",
-        ("0x0000", "0x0000", "0x0000", "0x0000"),
+        "0x00000000",
+        "0x80000000",
+        ".word 0x80000000",
+        ("0x00000000",) * 16,
         1,
         0,
         6,
@@ -381,23 +387,18 @@ def verify_terminal_stops(simulator: Path) -> None:
         "SDB illegal stop",
         returncode=2,
         stdout=f"(dc-sdb) stopped: illegal instruction\n{illegal_state}",
-        stderr="error: illegal instruction at pc=0x00 inst=0x8000\n",
+        stderr="error: illegal instruction at pc=0x00000000 inst=0x80000000\n",
     )
 
-    out_of_bounds = cli(simulator, "isa_smoke.hex", commands="c\n")
-    require(out_of_bounds.returncode == 2, "SDB out-of-bounds exit code changed")
+    guest_fail = cli(simulator, "guest_fail.hex", commands="c\n")
+    require(guest_fail.returncode == 5, "SDB guest fail exit code changed")
     require(
-        "(dc-sdb) stopped: out-of-bounds fetch\n" in out_of_bounds.stdout,
-        "SDB out-of-bounds stop text changed",
+        "(dc-sdb) stopped: program exit (code 42)\n" in guest_fail.stdout,
+        "SDB guest fail stop text changed",
     )
     require(
-        'state pc=0x08 inst=0x8000 asm=".word 0x8000"' in out_of_bounds.stdout,
-        "SDB out-of-bounds state omitted current instruction",
-    )
-    require(
-        out_of_bounds.stderr
-        == "error: executed out-of-bounds instruction fetch at pc=0x08 inst=0x8000\n",
-        "SDB out-of-bounds diagnostic changed",
+        guest_fail.stderr == "error: guest exit code: 42\n",
+        "SDB guest fail diagnostic changed",
     )
 
     timeout = cli(
@@ -424,9 +425,9 @@ def verify_cli_modes(
         ["bash", str(INTEGRATION_SCRIPT), str(simulator), "--batch"],
         environment={"TEST_FIXTURE_DIR": str(build_dir / "integration")},
     )
-    expect_success(integration, "SDB-on 19-case batch integration")
+    expect_success(integration, "SDB-on 22-case batch integration")
     require(
-        "run_integration: PASS (19 cases)" in integration.stdout,
+        "run_integration: PASS (22 cases)" in integration.stdout,
         "SDB-on batch integration omitted cases",
     )
     batch_with_stdin = cli(
@@ -435,21 +436,26 @@ def verify_cli_modes(
         commands="q\n",
         arguments=("--steps", "1", "--batch"),
     )
+    expected_step1_summary = (
+        "summary commits=1 cycles=1 pc=0x00000004 "
+        "x0=0x00000000 x1=0x00000002 x2=0x00000000 x3=0x00000000 "
+        "x4=0x00000000 x5=0x00000000 x6=0x00000000 x7=0x00000000 "
+        "x8=0x00000000 x9=0x00000000 x10=0x00000000 x11=0x00000000 "
+        "x12=0x00000000 x13=0x00000000 x14=0x00000000 x15=0x00000000\n"
+    )
     require(
-        batch_with_stdin.stdout
-        == "summary commits=1 cycles=1 pc=0x01 r0=0x0000 "
-        "r1=0x0002 r2=0x0000 r3=0x0000\n",
+        batch_with_stdin.stdout == expected_step1_summary,
         "SDB-on --batch read debugger commands from stdin",
     )
 
     conflicts = (
         (
-            ("--expect", "r1=0", "--trace", "--steps", "1"),
+            ("--expect", "x1=0", "--trace", "--steps", "1"),
             "error: option --steps requires --batch when SDB is enabled\n",
         ),
         (("--trace",), "error: option --trace requires --batch when SDB is enabled\n"),
         (
-            ("--expect", "r1=0"),
+            ("--expect", "x1=0"),
             "error: option --expect requires --batch when SDB is enabled\n",
         ),
     )
