@@ -13,6 +13,8 @@ SIM_TEST_DIR := $(BUILD_DIR)/verilator-test
 SIM_TEST_BIN := $(SIM_TEST_DIR)/test_simulation
 DISASM_TEST_DIR := $(BUILD_DIR)/disasm-test
 DISASM_TEST_BIN := $(DISASM_TEST_DIR)/test_disasm
+MEM_TEST_DIR := $(BUILD_DIR)/memory-test
+MEM_TEST_BIN := $(MEM_TEST_DIR)/test_memory
 CONFIG_FILE := .config
 CONFIG_DIR  := $(BUILD_DIR)/config
 AUTO_CONF   := $(CONFIG_DIR)/auto.conf
@@ -39,6 +41,8 @@ SIM_CLI_CPP := sim/verilator/numeric.cpp \
 SIM_TEST_CPP := sim/tests/test_simulation.cpp
 DISASM_CPP := sim/verilator/disasm.cpp
 DISASM_TEST_CPP := sim/tests/test_disasm.cpp
+MEM_RTL := sim/verilator/sim_mem.sv
+MEM_TEST_CPP := sim/tests/test_memory.cpp
 SIM_CONFIG_CXXFLAGS := -I$(abspath $(CONFIG_DIR)) \
 	-I$(abspath sim/verilator) \
 	-include $(abspath $(CONFIG_H))
@@ -68,8 +72,8 @@ endif
 .DEFAULT_GOAL := help
 
 .PHONY: check-tools help defconfig menuconfig config-show test-config \
-	lint-isa lint-comb lint test-isa test-alu test-decoder test-regfile test-core test-unit \
-	test-disasm sim-build sim test-simulation test-integration test-wave \
+	lint-isa lint-comb lint lint-mem test-isa test-alu test-decoder test-regfile test-core test-unit \
+	test-disasm test-memory sim-build sim test-simulation test-integration test-wave \
 	test-sdb test clean
 
 check-tools:
@@ -151,6 +155,10 @@ lint:
 	$(VERILATOR) --lint-only --language 1800-2012 -Wall \
 		--top-module cpu_core $(CORE_RTL)
 
+lint-mem:
+	$(VERILATOR) --lint-only --language 1800-2012 -Wall \
+		--top-module sim_mem $(MEM_RTL)
+
 $(UNIT_DIR):
 	mkdir -p $@
 
@@ -208,6 +216,24 @@ test-isa:
 	$(MAKE) --no-print-directory lint-isa
 	$(MAKE) --no-print-directory test-decoder
 	$(MAKE) --no-print-directory test-disasm
+
+$(MEM_TEST_BIN): $(MEM_RTL) sim/verilator/memory.cpp $(MEM_TEST_CPP) \
+	sim/verilator/memory.h Makefile
+	mkdir -p $(MEM_TEST_DIR)
+	CCACHE_DISABLE=1 CXX="$(CXX)" $(VERILATOR) --cc --exe --build \
+		--language 1800-2012 -Wall --top-module sim_mem \
+		--Mdir $(MEM_TEST_DIR) -o test_memory \
+		-CFLAGS "-std=c++17 -I$(abspath sim/verilator)" \
+		$(MEM_RTL) sim/verilator/memory.cpp $(MEM_TEST_CPP)
+	@verilator_root=$$($(VERILATOR) --getenv VERILATOR_ROOT); \
+	CCACHE_DISABLE=1 $(CXX) -std=c++17 -Wall -Wextra -Wpedantic -fsyntax-only \
+		-I$(MEM_TEST_DIR) -Isim/verilator \
+		-isystem "$$verilator_root/include" \
+		-isystem "$$verilator_root/include/vltstd" \
+		sim/verilator/memory.cpp $(MEM_TEST_CPP)
+
+test-memory: $(MEM_TEST_BIN)
+	$(MEM_TEST_BIN) "$(abspath $(BUILD_DIR)/test-fixtures/memory)"
 
 $(SIM_BIN): $(SIM_RTL) $(SIM_CPP) sim/verilator/memory.h \
 	sim/verilator/numeric.h sim/verilator/simulation.h \
@@ -331,10 +357,12 @@ help:
 		'  make test-alu     Run the self-checking ALU testbench' \
 		'  make test-decoder Run the self-checking decoder testbench' \
 		'  make lint         Lint the complete CPU core' \
+		'  make lint-mem     Lint the simulation memory subsystem' \
 		'  make test-regfile Run the self-checking register-file testbench' \
 		'  make test-core    Run the self-checking CPU-core testbench' \
 		'  make test-unit    Run all four unit testbenches in order' \
 		'  make test-disasm  Test directed v0.2 ISA disassemblies' \
+		'  make test-memory  Run self-checking simulation memory tests' \
 		'  make sim-build    Build the Verilator DPI-C simulator' \
 		'  make sim IMG=<hex> [STEPS=<n>] [TRACE=1] [BATCH=1]' \
 		'  make test-simulation  Test the reusable Simulation engine' \

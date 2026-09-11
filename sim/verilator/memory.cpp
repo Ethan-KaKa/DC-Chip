@@ -1,5 +1,6 @@
 #include "memory.h"
 
+#include <array>
 #include <fstream>
 #include <string_view>
 #include <utility>
@@ -7,10 +8,10 @@
 
 namespace {
 
-constexpr std::size_t kInstructionCapacity = 256;
-constexpr std::uint32_t kOutOfBoundsInstruction = 0x00008000U;
+std::array<std::uint32_t, dc_sim::kIromCapacityWords> irom_storage{};
+std::array<std::uint32_t, dc_sim::kDramCapacityWords> dram_storage{};
+std::size_t loaded_word_count = 0;
 
-std::vector<std::uint16_t> image;
 bool saw_out_of_bounds = false;
 std::uint32_t first_out_of_bounds_address = 0;
 
@@ -53,6 +54,13 @@ std::string location(const std::string &path, std::size_t line_number) {
 
 namespace dc_sim {
 
+void reset_memory() {
+  irom_storage.fill(0);
+  dram_storage.fill(0);
+  loaded_word_count = 0;
+  clear_fetch_status();
+}
+
 bool load_hex_image(const std::string &path, std::string *error) {
   std::ifstream input(path);
   if (!input.is_open()) {
@@ -62,7 +70,7 @@ bool load_hex_image(const std::string &path, std::string *error) {
     return false;
   }
 
-  std::vector<std::uint16_t> parsed_image;
+  std::vector<std::uint32_t> parsed_image;
   std::string line;
   std::size_t line_number = 0;
   while (std::getline(input, line)) {
@@ -76,15 +84,15 @@ bool load_hex_image(const std::string &path, std::string *error) {
     if (word.empty()) {
       continue;
     }
-    if (word.size() != 4) {
+    if (word.size() != 8) {
       if (error != nullptr) {
         *error = location(path, line_number) +
-                 "instruction word must contain exactly 4 hex digits";
+                 "instruction word must contain exactly 8 hex digits";
       }
       return false;
     }
 
-    std::uint16_t value = 0;
+    std::uint32_t value = 0;
     for (char character : word) {
       if (!is_ascii_hex(character)) {
         if (error != nullptr) {
@@ -93,15 +101,13 @@ bool load_hex_image(const std::string &path, std::string *error) {
         }
         return false;
       }
-      value = static_cast<std::uint16_t>(
-          (static_cast<unsigned int>(value) << 4U) |
-          hex_digit_value(character));
+      value = (value << 4U) | hex_digit_value(character);
     }
 
-    if (parsed_image.size() == kInstructionCapacity) {
+    if (parsed_image.size() == kIromCapacityWords) {
       if (error != nullptr) {
         *error = location(path, line_number) +
-                 "image exceeds the 256-word instruction capacity";
+                 "image exceeds the 256-word (1 KiB) instruction capacity";
       }
       return false;
     }
@@ -121,12 +127,40 @@ bool load_hex_image(const std::string &path, std::string *error) {
     return false;
   }
 
-  image = std::move(parsed_image);
-  clear_fetch_status();
+  reset_memory();
+  for (std::size_t index = 0; index < parsed_image.size(); ++index) {
+    irom_storage[index] = parsed_image[index];
+  }
+  loaded_word_count = parsed_image.size();
   return true;
 }
 
-std::size_t image_word_count() { return image.size(); }
+std::size_t image_word_count() { return loaded_word_count; }
+
+std::uint32_t read_irom_word(std::size_t word_index) {
+  if (word_index < kIromCapacityWords) {
+    return irom_storage[word_index];
+  }
+  return 0;
+}
+
+std::uint32_t read_dram_word(std::size_t word_index) {
+  if (word_index < kDramCapacityWords) {
+    return dram_storage[word_index];
+  }
+  return 0;
+}
+
+void write_dram_byte(std::uint32_t byte_addr, std::uint8_t byte_val) {
+  if (byte_addr >= kDramBase &&
+      byte_addr < (kDramBase + kDramCapacityBytes)) {
+    const std::size_t word_index = (byte_addr - kDramBase) >> 2U;
+    const std::size_t lane = byte_addr & 3U;
+    const std::uint32_t shift = static_cast<std::uint32_t>(lane * 8U);
+    dram_storage[word_index] = (dram_storage[word_index] & ~(0xffU << shift)) |
+                               (static_cast<std::uint32_t>(byte_val) << shift);
+  }
+}
 
 void clear_fetch_status() {
   saw_out_of_bounds = false;
@@ -141,13 +175,50 @@ std::uint32_t first_oob_address() {
 
 }  // namespace dc_sim
 
-extern "C" std::uint32_t sim_imem_read(std::uint32_t word_addr) {
-  if (word_addr < image.size()) {
-    return image[word_addr];
+extern "C" {
+
+void sim_irom_read(std::uint32_t addr, std::uint32_t *data) {
+  if (data == nullptr) {
+    return;
   }
-  if (!saw_out_of_bounds) {
-    saw_out_of_bounds = true;
-    first_out_of_bounds_address = word_addr;
+  if (addr < dc_sim::kIromCapacityBytes && (addr & 3U) == 0) {
+    const std::size_t word_index = addr >> 2U;
+    *data = irom_storage[word_index];
+  } else {
+    *data = 0;
   }
-  return kOutOfBoundsInstruction;
+}
+
+void sim_dram_read(std::uint32_t addr, std::uint32_t *data) {
+  if (data == nullptr) {
+    return;
+  }
+  if (addr >= dc_sim::kDramBase &&
+      addr < (dc_sim::kDramBase + dc_sim::kDramCapacityBytes)) {
+    const std::size_t word_index = (addr - dc_sim::kDramBase) >> 2U;
+    *data = dram_storage[word_index];
+  } else {
+    *data = 0;
+  }
+}
+
+void sim_dram_write(std::uint32_t addr, std::uint32_t data, std::uint32_t wstrb) {
+  if (addr >= dc_sim::kDramBase &&
+      addr < (dc_sim::kDramBase + dc_sim::kDramCapacityBytes)) {
+    const std::size_t word_index = (addr - dc_sim::kDramBase) >> 2U;
+    for (std::size_t lane = 0; lane < 4; ++lane) {
+      if ((wstrb >> lane) & 1U) {
+        const std::uint32_t shift = static_cast<std::uint32_t>(lane * 8U);
+        const std::uint32_t byte_val = (data >> shift) & 0xffU;
+        dram_storage[word_index] =
+            (dram_storage[word_index] & ~(0xffU << shift)) | (byte_val << shift);
+      }
+    }
+  }
+}
+
+std::uint32_t sim_imem_read(std::uint32_t word_addr) {
+  return dc_sim::read_irom_word(word_addr);
+}
+
 }

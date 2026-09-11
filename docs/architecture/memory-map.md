@@ -81,6 +81,8 @@ behavioral simulation 可以使用私有镜像布局、终止地址或 host 交�
 不是正式 SoC 地址映射，不在本文件分配地址。此类目标契约记录在
 `docs/verification/simulator.md`，并必须与未来真实 MMIO 分配隔离。
 
-截至 2026-09-11，核心 RTL 已使用上述 32 位 byte address 和访问宽度契约；
-Verilator wrapper 与存储模型仍是冻结的 v0.1 接口且当前不可构建，尚不能作为
-v0.2 仿真存储或端到端执行证据。
+截至 2026-09-11，核心 RTL 与仿真存储子系统（`sim_mem.sv`，包含
+`0x00000000`--`0x000003ff` 1 KiB IROM、`0x00001000`--`0x00001fff` 4 KiB
+scratch DRAM 与 `0xfffffff0` 私有 `tohost`）已使用上述 32 位 byte address 和
+访问宽度契约并通过 `make test-memory`；Verilator wrapper (`sim_top.sv`)、
+Simulation 引擎与 SDB 仍留待步骤 2.5 原位迁移，尚不能作为端到端执行证据。

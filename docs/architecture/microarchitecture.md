@@ -1,7 +1,7 @@
 # DC-Chip RV32E 过渡子集微架构
 
 - 版本：v0.2
-- 状态：阶段 1 核心 RTL 已实现；仿真存储与 wrapper 尚未迁移
+- 状态：阶段 1 核心 RTL 与仿真存储已实现；Verilator wrapper 与 SDB 尚未迁移
 - 更新日期：2026-09-11
 - ISA 规范：`docs/isa/isa.md` v0.2
 
@@ -15,10 +15,12 @@ v0.2 核心采用顺序、单发射、非流水模型：同一时刻最多处理
 的周期数，也不要求零等待存储。实现可以在没有 stall 时优化周期数，但不得改变
 可见顺序或副作用边界。
 
-截至 2026-09-11，`cpu_core` 已实现下述 32 位接口、16×32-bit regfile、
-单 outstanding 取指/数据控制器和结构化 fault，并通过 lint 与模块级 behavioral
-simulation。Verilator wrapper、仿真存储和端到端执行仍待步骤 2.4--2.5，当前
-结果不代表 Simulation、difftest、综合或 FPGA 已验证。
+截至 2026-09-11，`cpu_core` 与仿真存储子系统 `sim_mem.sv` 已实现下述 32 位
+接口、16×32-bit regfile、单 outstanding 取指/数据控制器、结构化 fault、
+异步 IROM、单口同步 read-first DRAM、byte-strobe 与私有 `tohost`，并通过
+`make lint`、`make lint-mem`、`make test-unit` 与 `make test-memory`。
+Verilator wrapper (`sim_top.sv`)、Simulation 引擎与端到端执行仍待步骤 2.5，
+当前结果不代表 Simulation、difftest、综合或 FPGA 已验证。
 
 ## 2. 目标数据通路
 

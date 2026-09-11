@@ -19,14 +19,16 @@
 | v0.2 ISA/微架构/存储规格 | 已冻结 | 后续实现的验收依据 |
 | ISA package、decoder、编码器、反汇编器 | 已迁移至 v0.2 | `make test-isa` 的公共层专项证据 |
 | ALU、regfile、core | 已迁移至 v0.2 | `make lint` 与 `make test-unit` 的模块级 behavioral simulation 证据 |
-| Verilator wrapper、loader、Simulation、SDB | 仍为 v0.1 接口，迁移中不可构建 | 等待步骤 2.4--2.5，当前无 v0.2 端到端执行证据 |
+| 仿真存储与 32 位 HEX loader | 已迁移至 v0.2 | `make lint-mem` 与 `make test-memory` 的存储子系统证据 |
+| Verilator wrapper、Simulation、SDB | 仍为 v0.1 接口，迁移中不可构建 | 等待步骤 2.5，当前无 v0.2 端到端执行证据 |
 | v0.2 功能回归、参考模型、difftest | 未实现 | 不能宣称 v0.2 已通过 |
 | Vivado、时序、资源、功耗、上板 | 未验证 | 不能从 behavioral simulation 推断 |
 
-步骤 2.2 已使旧完整回归不再适用于当前工作树。步骤 2.3 完成后，只有
-`make test-isa`、RTL lint 和模块级 `make test-unit` 能列为 v0.2 证据；迁移前
-`make test` PASS 仍只属于 commit `9bfb9a9` 的 v0.1 behavioral simulation
-记录。步骤 2.4--2.5 完成前不得宣称 v0.2 端到端执行或完整回归可用。
+步骤 2.2 已使旧完整回归不再适用于当前工作树。步骤 2.4 完成后，
+`make test-isa`、RTL lint、`make test-unit` 以及 `make test-memory` 能列为
+v0.2 专项证据；迁移前 `make test` PASS 仍只属于 commit `9bfb9a9` 的 v0.1
+behavioral simulation 记录。步骤 2.5 完成前不得宣称 v0.2 端到端执行或完整
+回归可用。
 
 ## 2. v0.1 迁移前冻结记录
 
@@ -101,8 +103,20 @@ Simulation、SDB、difftest、综合或 FPGA。
 
 core BFM 覆盖请求背压、请求接受当周期响应、延迟响应、四个 byte lane、I/S/U
 立即数边界、`jalr rd==rs1`、错误响应、fault 粘滞和 reset 取消。store 的真实
-内存副作用、仿真镜像、程序执行、SDB 和 difftest 仍待步骤 2.4--2.5；本记录只
-属于 lint 与模块级 behavioral simulation。
+内存副作用与仿真镜像已由步骤 2.4 补全；程序执行、SDB 和 difftest 仍待步骤 2.5；
+本记录只属于 lint 与模块级 behavioral simulation。
+
+### 2.6 v0.2 仿真存储与 tohost 迁移记录
+
+| 日期 | 命令 | 结果 | 证据边界 |
+| --- | --- | --- | --- |
+| 2026-09-11 | `make lint-mem` | PASS | `sim_mem.sv` 仿真存储 RTL 通过 Verilator lint 检查 |
+| 2026-09-11 | `make test-memory` | PASS | 32 位 8 字符 HEX 解析、IROM 同周期读/越界、DRAM 1-cycle 同步读/read-first/4-bit strobe/背压保持、`tohost=0xfffffff0` 退出与 reset 冲刷 |
+| 2026-09-11 | `git diff --check` | PASS | 本步骤存储源码、测试和文档无 whitespace error |
+
+本步骤证明了 32 位 8 字符 HEX 加载器及 `sim_mem.sv` 在各种正反向总线时序、
+背压、read-first、byte-enable、未映射 fault 和 `tohost` 退出码捕获上的正确性。
+wrapper 顶层、Simulation 引擎、SDB 与逐提交 difftest 留待步骤 2.5。
 
 ## 3. v0.2 验收矩阵
 
@@ -116,16 +130,17 @@ core BFM 覆盖请求背压、请求接受当周期响应、延迟响应、四�
 | `lui` 特例 | 只检查 `rd`；立即数中与 `rs1/rs2` 重叠的位不得误判 | **已完成公共层定向测试** |
 | 立即数 | I/S 拼接、`-2048/-1/0/2047`，U 型最低 12 位清零 | **已完成模块级专项**：decoder、编码器与 core 边界执行 |
 | 算术 | `add/addi` 只保留低 32 位，正负溢出均不 fault | **已完成模块级专项**：ALU 边界与 core 写回；参考模型待实现 |
-| load | `lw` 小端与四字节对齐；`lbu` 任意 lane、零扩展；`rd=x0` 仍访问 | **核心专项已完成**；真实仿真存储待步骤 2.4 |
-| store | `sw` 四 lane；`sb` 单 lane；错误响应无部分副作用 | **核心请求/提交专项已完成**；存储副作用记分板待步骤 2.4 |
+| load | `lw` 小端与四字节对齐；`lbu` 任意 lane、零扩展；`rd=x0` 仍访问 | **核心与仿真存储专项已完成**：32 位小端、LBU 零扩展、DRAM 1-cycle 同步读与 read-first |
+| store | `sw` 四 lane；`sb` 单 lane；错误响应无部分副作用 | **核心与仿真存储专项已完成**：4 位 byte-enable、握手沿生效、未映射无副作用 |
 | `jalr` | 旧 `rs1`、`rd==rs1`、`pc+4`、清 bit 0、bit 1 对齐 fault | **已完成 core 定向测试** |
-| 取指 | 32 位 byte PC、每次 `+4`、四字节对齐、访问错误 | **已完成 core 取指 BFM** |
-| fault | 七种 cause、PC/指令字段、无提交/写回、粘滞、reset 恢复 | **已完成 core fault 注入与断言** |
-| stall | 请求/响应任意背压、payload 稳定、无丢失/重复、最多一个在途 | **核心定向背压已完成**；随机存储 BFM 待步骤 2.4/2.5 |
-| reset | 未握手请求取消、已握手旧响应冲刷、不接收迟到响应 | **核心取消/忽略已完成**；存储模型冲刷待步骤 2.4 |
+| 取指 | 32 位 byte PC、每次 `+4`、四字节对齐、访问错误 | **已完成 core 取指 BFM 与 IROM 协议自检** |
+| fault | 七种 cause、PC/指令字段、无提交/写回、粘滞、reset 恢复 | **已完成 core fault 注入与存储 access fault 验证** |
+| stall | 请求/响应任意背压、payload 稳定、无丢失/重复、最多一个在途 | **核心与仿真存储专项已完成**：背压保持、存储在握手沿写入 |
+| reset | 未握手请求取消、已握手旧响应冲刷、不接收迟到响应 | **核心与存储模型冲刷已完成**：在途事务撤销与未完成 store 丢弃 |
 | trace/debug | 32 位 PC/指令、每条成功指令一次提交、索引读取 16×32 位状态 | **基础 core trace/debug 已完成**；扩展提交字段待步骤 2.5 |
-| 程序 | 八指令 smoke、load/store lane、JALR loop、fault 负向镜像 | Verilator 集成测试 |
-| 参考模型 | 与 RTL 独立实现，逐提交比较 PC/寄存器/内存副作用/fault | difftest |
+| tohost/镜像 | 8 字符 HEX 加载、`tohost=0xfffffff0` 退出码捕获 | **已完成存储专项**：`make test-memory` 涵盖正反用例 |
+| 程序 | 八指令 smoke、load/store lane、JALR loop、fault 负向镜像 | Verilator 集成测试（待步骤 2.5） |
+| 参考模型 | 与 RTL 独立实现，逐提交比较 PC/寄存器/内存副作用/fault | difftest（待步骤 2.5） |
 
 ## 4. 模块与协议测试要求
 
