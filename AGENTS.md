@@ -18,11 +18,10 @@
 ## 当前状态（2026-09-11）
 
 - 当前目录已初始化为 Git 仓库，默认分支为 `main`。
-- 已冻结 RV32E 过渡子集 v0.2 的 ISA、微架构、地址模型和验证目标；它使用 32 位标准编码、32 位 byte-addressed PC、`x0`--`x15` 以及 `add/addi/lui/lw/lbu/sw/sb/jalr`。这只是目标规格，不是完整 RV32E。
-- 阶段 1 已完成八指令基线全链路迁移；阶段 2 已完成 64 KiB IROM（`0x00000000`）与 64 KiB DRAM（`0x20000000`）的 Harvard 架构隔离与双 `.bin` 镜像装载；阶段 3 已完成仓库内自包含的 AM-like 裸机中间层（`sw/am/`）、`scripts/check_isa_subset.py` 8 指令子集自动化审计工具、6 项定向软件测试套件（`sw/tests/`）以及软硬件仿真/差分回归闭环。
-- 构建系统与回归闭环已全面恢复并扩充：`make sim-build`、`make test-reference`、`make test-simulation`、`make sw`、`make test-sw`、`make test-difftest`、`make test-integration`、`make test-wave`、`make test-sdb` 以及最高层 `make test` 全面 PASS，端到端仿真执行与回归闭环已建立。
-- v0.1 可执行基线冻结在 commit `9bfb9a97153be05de34c6d2311c09f41cb6f43ab`；不提供双 ISA 开关，旧语义只由 Git 历史和迁移前验证记录保留。
-- 完整 RV32E、正式 MMIO 地址（timer/UART 等）、板卡具体型号/封装、时钟频率、板级复位极性和演示传感器仍未定稿。
+- 阶段 1 已完成八指令基线全链路迁移；阶段 2 已完成 64 KiB IROM（`0x00000000`）与 64 KiB DRAM（`0x20000000`）的 Harvard 架构隔离与双 `.bin` 镜像装载；阶段 3 已完成仓库内自包含的 AM-like 裸机中间层（`sw/am/`）、`scripts/check_isa_subset.py` 自动化审计工具与 6 项定向软件测试套件；阶段 4 已全面补全 RV32E v1.0（37 条标准基础整数指令、`x0`--`x15` 严格边界）、`sw/am/` 自包含 `klib`（含 `memset/memcpy/memcmp/strlen/strcmp/strcpy/strcat/check`）、12 项 `am-kernels` 基准测试（总计 18 项软件回归测试）以及软硬件仿真/差分全闭环。
+- 构建系统与回归闭环已全面扩充：`make test-unit`、`make test-isa`、`make test-disasm`、`make test-memory`、`make test-reference`、`make test-simulation`、`make sw`、`make test-sw`、`make test-difftest`、`make test-integration`、`make test-wave`、`make test-sdb` 以及最高层 `make test` 全面 PASS，端到端仿真执行与回归闭环已建立。
+- v0.1 可执行基线冻结在 commit `9bfb9a97153be05de34c6d2311c09f41cb6f43ab`；不提供双 ISA 开关，旧语义只由 Git历史和迁移前验证记录保留。
+- 正式 MMIO 地址（timer/UART 等）、板卡具体型号/封装、时钟频率、板级复位极性和演示传感器仍未定稿（属于阶段 5 SoC 扩展）。
 - 在对应规格落盘前，不得把上述未决项当成既定事实写入 RTL 或测试。
 
 ## 设计原则

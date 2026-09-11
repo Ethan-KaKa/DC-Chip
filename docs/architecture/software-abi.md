@@ -1,16 +1,16 @@
 # DC-Chip 软件 ABI 与运行时规范
 
-- 版本：v0.2
+- 版本：v1.0 (阶段 4)
 - 状态：已正式冻结
 - 日期：2026-09-11
-- ISA 规范：`docs/isa/isa.md` v0.2
+- ISA 规范：`docs/isa/isa.md` v1.0
 - 地址规范：`docs/architecture/memory-map.md` v0.2
 
 ---
 
 ## 1. 概述
 
-本文档定义 DC-Chip 面向 RV32E 过渡子集（8 条标准指令：`add`, `addi`, `lui`, `lw`, `lbu`, `sw`, `sb`, `jalr`）的裸机软件应用二进制接口（ABI）、存储段布局、启动与终止协议，以及基于 Abstract Machine（AM）的 Turing Machine（TRM）运行时契约。
+本文档定义 DC-Chip 面向 RV32E 基础整数指令集（37 条标准指令，包括分支、跳转、算术逻辑、移位、半字及字节访存）的裸机软件应用二进制接口（ABI）、存储段布局、启动与终止协议，以及基于 Abstract Machine（AM）的 Turing Machine（TRM）运行时契约。
 
 ---
 
@@ -108,13 +108,13 @@
 
 ---
 
-## 6. 8 指令子集硬性审计要求
+## 6. RV32E 指令集硬性审计要求
 
-在阶段 4 补全完整 RV32E 前，任何软件镜像的汇编或编译输出必须通过 `scripts/check_isa_subset.py` 审计：
+阶段 4 起，任何软件镜像的汇编或编译输出必须通过 `scripts/check_isa_subset.py` 审计：
 
 1. **允许的指令**：
-   - 规范 8 指令：`add`, `addi`, `lui`, `lw`, `lbu`, `sw`, `sb`, `jalr`；
-   - 安全别名：`nop`, `mv`, `li`, `ret`, `jr`；
+   - 官方 RV32E 37 条标准基础整数指令：`lui, auipc, jal, jalr, beq, bne, blt, bge, bltu, bgeu, lb, lh, lw, lbu, lhu, sb, sh, sw, addi, slti, sltiu, xori, ori, andi, slli, srli, srai, add, sub, sll, slt, sltu, xor, srl, sra, or, and, fence`；
+   - 常见安全别名：`nop, mv, not, neg, seqz, snez, sltz, sgtz, j, jr, ret, call` 等；
 2. **严禁的指令**：
-   - 严禁出现未实现指令：`auipc`, `jal`, `sub`, `and`, `or`, `xor`, `sll`, `srl`, `sra`, `beq`, `bne`, `blt`, `bge`, `csrr*` 等；
+   - 严禁出现未实现扩展：乘除法 M（`mul*, div*, rem*`）、压缩指令 C、浮点 F/D、特权级 CSR（`csrr*`）等；
    - 严禁出现寄存器 `x16`--`x31`。

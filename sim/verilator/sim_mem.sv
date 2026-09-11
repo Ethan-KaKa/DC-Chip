@@ -128,7 +128,9 @@ module sim_mem #(
   assign in_dram = (dmem_req_addr >= DRAM_BASE) &&
                    (dmem_req_addr < (DRAM_BASE + 32'(DRAM_BYTES)));
 
-  assign dram_aligned = (dmem_req_size != 2'b10) || (dmem_req_addr[1:0] == 2'b00);
+  assign dram_aligned = (dmem_req_size == 2'b00) ||
+                        ((dmem_req_size == 2'b01) && (dmem_req_addr[0] == 1'b0)) ||
+                        ((dmem_req_size == 2'b10) && (dmem_req_addr[1:0] == 2'b00));
 
   assign is_tohost = (dmem_req_addr == TOHOST_ADDR);
   assign tohost_legal_sw = is_tohost &&

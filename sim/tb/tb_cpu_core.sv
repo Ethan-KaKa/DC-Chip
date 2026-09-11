@@ -151,6 +151,82 @@ module tb_cpu_core;
                 dc_isa_pkg::OPCODE_JALR};
   endfunction
 
+  function automatic logic [31:0] enc_auipc(
+    input logic [4:0]  rd,
+    input logic [19:0] imm
+  );
+    enc_auipc = {imm, rd, dc_isa_pkg::OPCODE_AUIPC};
+  endfunction
+
+  function automatic logic [31:0] enc_jal(
+    input logic [4:0] rd,
+    input integer     imm
+  );
+    logic [20:0] imm_bits;
+    begin
+      imm_bits = imm[20:0];
+      enc_jal = {imm_bits[20], imm_bits[10:1], imm_bits[11], imm_bits[19:12],
+                 rd, dc_isa_pkg::OPCODE_JAL};
+    end
+  endfunction
+
+  function automatic logic [31:0] enc_beq(
+    input logic [4:0] rs1,
+    input logic [4:0] rs2,
+    input integer     imm
+  );
+    logic [12:0] imm_bits;
+    begin
+      imm_bits = imm[12:0];
+      enc_beq = {imm_bits[12], imm_bits[10:5], rs2, rs1, 3'b000,
+                 imm_bits[4:1], imm_bits[11], dc_isa_pkg::OPCODE_BRANCH};
+    end
+  endfunction
+
+  function automatic logic [31:0] enc_bne(
+    input logic [4:0] rs1,
+    input logic [4:0] rs2,
+    input integer     imm
+  );
+    logic [12:0] imm_bits;
+    begin
+      imm_bits = imm[12:0];
+      enc_bne = {imm_bits[12], imm_bits[10:5], rs2, rs1, 3'b001,
+                 imm_bits[4:1], imm_bits[11], dc_isa_pkg::OPCODE_BRANCH};
+    end
+  endfunction
+
+  function automatic logic [31:0] enc_sub(
+    input logic [4:0] rd,
+    input logic [4:0] rs1,
+    input logic [4:0] rs2
+  );
+    enc_sub = {7'b0100000, rs2, rs1, 3'b000, rd,
+               dc_isa_pkg::OPCODE_OP};
+  endfunction
+
+  function automatic logic [31:0] enc_sh(
+    input logic [4:0] rs2,
+    input logic [4:0] rs1,
+    input integer     imm
+  );
+    logic [11:0] imm_bits;
+    begin
+      imm_bits = imm[11:0];
+      enc_sh = {imm_bits[11:5], rs2, rs1, 3'b001,
+                imm_bits[4:0], dc_isa_pkg::OPCODE_STORE};
+    end
+  endfunction
+
+  function automatic logic [31:0] enc_lh(
+    input logic [4:0] rd,
+    input logic [4:0] rs1,
+    input integer     imm
+  );
+    enc_lh = {imm[11:0], rs1, 3'b001, rd,
+              dc_isa_pkg::OPCODE_LOAD};
+  endfunction
+
   task automatic clear_bus_inputs;
     begin
       imem_req_ready = 1'b0;
@@ -735,6 +811,34 @@ module tb_cpu_core;
     fetch_same_cycle(32'd0, inst, 1'b0);
     check_commit(32'd0, inst, 32'd4);
     check_reg(4'd1, 32'd9);
+
+    // Test AUIPC: PC=4, imm=0x1000, rd=x2 -> x2 = 4 + 0x01000000 = 0x01000004
+    inst = enc_auipc(5'd2, 20'h01000);
+    fetch_same_cycle(32'd4, inst, 1'b0);
+    check_commit(32'd4, inst, 32'd8);
+    check_reg(4'd2, 32'h01000004);
+
+    // Test JAL: PC=8, target = 8 + 16 = 24, link x3 = 8 + 4 = 12
+    inst = enc_jal(5'd3, 16);
+    fetch_same_cycle(32'd8, inst, 1'b0);
+    check_commit(32'd8, inst, 32'd24);
+    check_reg(4'd3, 32'd12);
+
+    // Test BEQ (not taken): PC=24, x1=9, x0=0 -> not equal -> not taken -> PC=28
+    inst = enc_beq(5'd1, 5'd0, 16);
+    fetch_same_cycle(32'd24, inst, 1'b0);
+    check_commit(32'd24, inst, 32'd28);
+
+    // Test BNE (taken): PC=28, x1=9, x0=0 -> not equal -> taken -> PC=28 + 16 = 44
+    inst = enc_bne(5'd1, 5'd0, 16);
+    fetch_same_cycle(32'd28, inst, 1'b0);
+    check_commit(32'd28, inst, 32'd44);
+
+    // Test SUB: PC=44, x4 = x1 - x1 = 0
+    inst = enc_sub(5'd4, 5'd1, 5'd1);
+    fetch_same_cycle(32'd44, inst, 1'b0);
+    check_commit(32'd44, inst, 32'd48);
+    check_reg(4'd4, 32'd0);
 
     $display("tb_cpu_core: PASS");
     disable clock_block;

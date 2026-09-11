@@ -77,7 +77,7 @@ commit/trace/fault <- control <- writeback <-----------------------+
 | input | `dmem_req_ready` | 1 | 接收请求 |
 | output | `dmem_req_addr` | 32 | 有效 byte address |
 | output | `dmem_req_write` | 1 | 1=store，0=load |
-| output | `dmem_req_size` | 2 | `00`=byte，`10`=32-bit word；其他值不使用 |
+| output | `dmem_req_size` | 2 | `00`=byte, `01`=halfword, `10`=32-bit word |
 | output | `dmem_req_wdata` | 32 | 按地址 lane 放置的 store 数据 |
 | output | `dmem_req_wstrb` | 4 | 每位对应一个 byte lane |
 | input | `dmem_rsp_valid` | 1 | load/store 完成响应有效 |
@@ -90,10 +90,10 @@ size、写数据和 strobe 必须保持稳定；响应被背压时，数据和�
 每条 load/store 只发出一次请求，并等待唯一一次响应，等待期间不提交且不发出
 下一条取指。
 
-lane 约定：`lane = addr[1:0]`。`lbu` 从
-`dmem_rsp_rdata[8*lane +: 8]` 零扩展；`sb` 令 `wstrb = 4'b0001 << lane`，并把
-`rs2[7:0]` 放入对应 `wdata` lane。`lw/sw` 地址低两位必须为零，使用完整 32 位
-数据和 `wstrb=4'b1111`。load 的 `wdata/wstrb` 必须为零。
+lane 与字节使能约定：
+- 字节访问（`lb/lbu/sb`）：`lane = addr[1:0]`。`sb` 令 `wstrb = 4'b0001 << lane`，数据置于 `wdata[8*lane +: 8]`；`lbu` 零扩展，`lb` 符号扩展；
+- 半字访问（`lh/lhu/sh`）：要求 `addr[0] == 0`（2 字节对齐）。若 `addr[1] == 0`，`wstrb = 4'b0011`，数据置于 `wdata[15:0]`；若 `addr[1] == 1`，`wstrb = 4'b1100`，数据置于 `wdata[31:16]`。`lh` 符号扩展，`lhu` 零扩展；
+- 字访问（`lw/sw`）：要求 `addr[1:0] == 2'b00`（4 字节对齐），使用完整 32 位数据和 `wstrb = 4'b1111`。
 
 所有 store 也必须收到完成响应。只有 `dmem_rsp_error=0` 的响应才能使 store
 副作用和指令提交成立；错误响应表示目标未发生任何部分或完整写入。
@@ -105,10 +105,13 @@ lane 约定：`lane = addr[1:0]`。`lbu` 从
 
 | 指令类别 | 提交条件 | 同一提交沿的效果 |
 | --- | --- | --- |
-| `add/addi/lui` | 已成功取指、合法译码并完成执行 | 可选寄存器写回；`pc <- old_pc+4` |
-| `lw/lbu` | 数据成功响应被接收 | 写回 load 值；`pc <- old_pc+4` |
-| `sw/sb` | store 成功响应被接收 | 内存写完成；`pc <- old_pc+4` |
-| `jalr` | 目标四字节对齐 | 可选 link 写回；`pc <- target` |
+| 算术/逻辑/LUI/AUIPC | 已成功取指、合法译码并完成执行 | 可选寄存器写回；`pc <- old_pc+4` |
+| 条件分支（B型） | 已成功取指、合法译码，且目标对齐 | 若条件成立 `pc <- old_pc + imm_b`，否则 `pc <- old_pc + 4` |
+| `jal` | 目标四字节对齐 | 写回 `old_pc+4` 到 `rd`；`pc <- old_pc + imm_j` |
+| `jalr` | 目标四字节对齐 | 写回 `old_pc+4` 到 `rd`；`pc <- target` |
+| `load` (`lw/lh/lhu/lb/lbu`) | 数据成功响应被接收 | 写回 load 值（带扩展）；`pc <- old_pc+4` |
+| `store` (`sw/sh/sb`) | store 成功响应被接收 | 内存写完成；`pc <- old_pc+4` |
+| `fence` | 译码成功 | 正常提交，`pc <- old_pc+4` |
 | 任一 fault | 永不提交 | 进入粘滞 fault，无指令副作用 |
 
 写 `x0` 被 regfile 丢弃，但合法指令仍按上述条件提交。`jalr rd==rs1` 时先锁存

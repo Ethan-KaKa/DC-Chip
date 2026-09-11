@@ -50,6 +50,78 @@ TEST_CASES = [
         "expected_guest_exit": 0,
         "expect_regs": {"x10": 0, "x11": 42},
     },
+    {
+        "name": "cpu_dummy",
+        "expected_sim_exit": 0,
+        "expected_guest_exit": 0,
+        "expect_regs": {"x10": 0},
+    },
+    {
+        "name": "cpu_add",
+        "expected_sim_exit": 0,
+        "expected_guest_exit": 0,
+        "expect_regs": {"x10": 0},
+    },
+    {
+        "name": "cpu_sub_longlong",
+        "expected_sim_exit": 0,
+        "expected_guest_exit": 0,
+        "expect_regs": {"x10": 0},
+    },
+    {
+        "name": "cpu_bit",
+        "expected_sim_exit": 0,
+        "expected_guest_exit": 0,
+        "expect_regs": {"x10": 0},
+    },
+    {
+        "name": "cpu_bubble_sort",
+        "expected_sim_exit": 0,
+        "expected_guest_exit": 0,
+        "expect_regs": {"x10": 0},
+    },
+    {
+        "name": "cpu_select_sort",
+        "expected_sim_exit": 0,
+        "expected_guest_exit": 0,
+        "expect_regs": {"x10": 0},
+    },
+    {
+        "name": "cpu_fib",
+        "expected_sim_exit": 0,
+        "expected_guest_exit": 0,
+        "expect_regs": {"x10": 0},
+    },
+    {
+        "name": "cpu_recursion",
+        "expected_sim_exit": 0,
+        "expected_guest_exit": 0,
+        "expect_regs": {"x10": 0},
+    },
+    {
+        "name": "cpu_string",
+        "expected_sim_exit": 0,
+        "expected_guest_exit": 0,
+        "expect_regs": {"x10": 0},
+    },
+    {
+        "name": "cpu_leap_year",
+        "expected_sim_exit": 0,
+        "expected_guest_exit": 0,
+        "expect_regs": {"x10": 0},
+    },
+    {
+        "name": "cpu_if_else",
+        "expected_sim_exit": 0,
+        "expected_guest_exit": 0,
+        "expect_regs": {"x10": 0},
+    },
+    {
+        "name": "cpu_load_store",
+        "expected_sim_exit": 0,
+        "expected_guest_exit": 0,
+        "expect_regs": {"x10": 0},
+    },
 ]
 
 def parse_summary_line(line):

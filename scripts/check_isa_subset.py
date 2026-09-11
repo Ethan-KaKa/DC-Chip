@@ -2,10 +2,9 @@
 """
 check_isa_subset.py
 
-Automated ISA subset auditor for DC-Chip v0.2.
+Automated ISA subset auditor for DC-Chip RV32E.
 Validates that every instruction in a given objdump disassembly text (.txt)
-strictly belongs to the 8-instruction RV32E subset:
-  - add, addi, lui, lw, lbu, sw, sb, jalr
+strictly belongs to the standard 37-instruction RV32E Base Integer Instruction Set
 and only references registers x0..x15.
 """
 
@@ -58,43 +57,60 @@ def audit_file(filepath):
             pc = int(pc_str, 16)
             fail_reason = None
 
-            if opcode == 0x33:  # R-type
-                if funct3 == 0 and funct7 == 0:  # add
-                    if rd >= 16 or rs1 >= 16 or rs2 >= 16:
-                        fail_reason = f"register out of bounds for RV32E (rd=x{rd}, rs1=x{rs1}, rs2=x{rs2})"
+            if opcode == 0x33:  # R-type arithmetic/logical
+                if funct3 == 0 and funct7 == 0x00:  # add
+                    pass
+                elif funct3 == 0 and funct7 == 0x20:  # sub
+                    pass
+                elif funct3 == 1 and funct7 == 0x00:  # sll
+                    pass
+                elif funct3 == 2 and funct7 == 0x00:  # slt
+                    pass
+                elif funct3 == 3 and funct7 == 0x00:  # sltu
+                    pass
+                elif funct3 == 4 and funct7 == 0x00:  # xor
+                    pass
+                elif funct3 == 5 and funct7 == 0x00:  # srl
+                    pass
+                elif funct3 == 5 and funct7 == 0x20:  # sra
+                    pass
+                elif funct3 == 6 and funct7 == 0x00:  # or
+                    pass
+                elif funct3 == 7 and funct7 == 0x00:  # and
+                    pass
                 else:
                     fail_reason = f"unsupported R-type instruction (funct3={funct3:#x}, funct7={funct7:#x})"
 
-            elif opcode == 0x13:  # I-type arithmetic
-                if funct3 == 0:  # addi
-                    if rd >= 16 or rs1 >= 16:
-                        fail_reason = f"register out of bounds for RV32E (rd=x{rd}, rs1=x{rs1})"
+                if not fail_reason and (rd >= 16 or rs1 >= 16 or rs2 >= 16):
+                    fail_reason = f"register out of bounds for RV32E (rd=x{rd}, rs1=x{rs1}, rs2=x{rs2})"
+
+            elif opcode == 0x13:  # I-type arithmetic/logical
+                shamt = rs2  # inst[24:20]
+                if funct3 in (0, 2, 3, 4, 6, 7):  # addi, slti, sltiu, xori, ori, andi
+                    pass
+                elif funct3 == 1:  # slli
+                    if funct7 != 0x00:
+                        fail_reason = f"invalid funct7 for slli ({funct7:#x})"
+                elif funct3 == 5:  # srli, srai
+                    if funct7 != 0x00 and funct7 != 0x20:
+                        fail_reason = f"invalid funct7 for srli/srai ({funct7:#x})"
                 else:
                     fail_reason = f"unsupported OP-IMM instruction (funct3={funct3:#x})"
+
+                if not fail_reason and (rd >= 16 or rs1 >= 16):
+                    fail_reason = f"register out of bounds for RV32E (rd=x{rd}, rs1=x{rs1})"
 
             elif opcode == 0x37:  # lui
                 if rd >= 16:
                     fail_reason = f"register out of bounds for RV32E (rd=x{rd})"
 
-            elif opcode == 0x03:  # load
-                if funct3 == 0x2:  # lw
-                    if rd >= 16 or rs1 >= 16:
-                        fail_reason = f"register out of bounds for RV32E (rd=x{rd}, rs1=x{rs1})"
-                elif funct3 == 0x4:  # lbu
-                    if rd >= 16 or rs1 >= 16:
-                        fail_reason = f"register out of bounds for RV32E (rd=x{rd}, rs1=x{rs1})"
-                else:
-                    fail_reason = f"unsupported LOAD instruction (funct3={funct3:#x})"
+            elif opcode == 0x17:  # auipc
+                if rd >= 16:
+                    fail_reason = f"register out of bounds for RV32E (rd=x{rd})"
 
-            elif opcode == 0x23:  # store
-                if funct3 == 0x2:  # sw
-                    if rs1 >= 16 or rs2 >= 16:
-                        fail_reason = f"register out of bounds for RV32E (rs1=x{rs1}, rs2=x{rs2})"
-                elif funct3 == 0x0:  # sb
-                    if rs1 >= 16 or rs2 >= 16:
-                        fail_reason = f"register out of bounds for RV32E (rs1=x{rs1}, rs2=x{rs2})"
-                else:
-                    fail_reason = f"unsupported STORE instruction (funct3={funct3:#x})"
+            elif opcode == 0x6F:  # jal
+                if rd >= 16:
+                    fail_reason = f"register out of bounds for RV32E (rd=x{rd})"
 
             elif opcode == 0x67:  # jalr
                 if funct3 == 0:
@@ -103,14 +119,34 @@ def audit_file(filepath):
                 else:
                     fail_reason = f"unsupported JALR instruction (funct3={funct3:#x})"
 
-            elif opcode == 0x6F:
-                fail_reason = "instruction 'jal' (0x6F) is not in the v0.2 8-instruction subset"
-            elif opcode == 0x17:
-                fail_reason = "instruction 'auipc' (0x17) is not in the v0.2 8-instruction subset"
-            elif opcode == 0x63:
-                fail_reason = f"branch instruction (0x63, funct3={funct3:#x}) is not in the v0.2 8-instruction subset"
-            elif opcode == 0x73:
-                fail_reason = "SYSTEM instruction (0x73) is not in the v0.2 8-instruction subset"
+            elif opcode == 0x63:  # B-type branch
+                if funct3 in (0, 1, 4, 5, 6, 7):  # beq, bne, blt, bge, bltu, bgeu
+                    if rs1 >= 16 or rs2 >= 16:
+                        fail_reason = f"register out of bounds for RV32E (rs1=x{rs1}, rs2=x{rs2})"
+                else:
+                    fail_reason = f"unsupported BRANCH instruction (funct3={funct3:#x})"
+
+            elif opcode == 0x03:  # load
+                if funct3 in (0, 1, 2, 4, 5):  # lb, lh, lw, lbu, lhu
+                    if rd >= 16 or rs1 >= 16:
+                        fail_reason = f"register out of bounds for RV32E (rd=x{rd}, rs1=x{rs1})"
+                else:
+                    fail_reason = f"unsupported LOAD instruction (funct3={funct3:#x})"
+
+            elif opcode == 0x23:  # store
+                if funct3 in (0, 1, 2):  # sb, sh, sw
+                    if rs1 >= 16 or rs2 >= 16:
+                        fail_reason = f"register out of bounds for RV32E (rs1=x{rs1}, rs2=x{rs2})"
+                else:
+                    fail_reason = f"unsupported STORE instruction (funct3={funct3:#x})"
+
+            elif opcode == 0x0F:  # fence
+                if funct3 == 0:
+                    if rd >= 16 or rs1 >= 16:
+                        fail_reason = f"register out of bounds for RV32E (rd=x{rd}, rs1=x{rs1})"
+                else:
+                    fail_reason = f"unsupported MISC-MEM instruction (funct3={funct3:#x})"
+
             else:
                 fail_reason = f"unsupported opcode {opcode:#04x}"
 

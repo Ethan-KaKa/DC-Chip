@@ -18,7 +18,6 @@ extern Area heap;
 
 void _trm_init(void);
 void putch(char ch);
-int main(const char *args);
 
 static inline void halt(int code) __attribute__((__noreturn__));
 static inline void halt(int code) {

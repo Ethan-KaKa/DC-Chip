@@ -50,6 +50,102 @@ std::uint32_t enc_sb(std::uint32_t rs2, std::uint32_t rs1, std::int32_t imm) {
   return ((uimm >> 5U) << 25U) | (rs2 << 20U) | (rs1 << 15U) | (0b000 << 12U) | ((uimm & 0x1fU) << 7U) | 0b0100011;
 }
 
+std::uint32_t enc_sub(std::uint32_t rd, std::uint32_t rs1, std::uint32_t rs2) {
+  return (0b0100000 << 25U) | (rs2 << 20U) | (rs1 << 15U) | (0b000 << 12U) | (rd << 7U) | 0b0110011;
+}
+
+std::uint32_t enc_sll(std::uint32_t rd, std::uint32_t rs1, std::uint32_t rs2) {
+  return (0b0000000 << 25U) | (rs2 << 20U) | (rs1 << 15U) | (0b001 << 12U) | (rd << 7U) | 0b0110011;
+}
+
+std::uint32_t enc_slt(std::uint32_t rd, std::uint32_t rs1, std::uint32_t rs2) {
+  return (0b0000000 << 25U) | (rs2 << 20U) | (rs1 << 15U) | (0b010 << 12U) | (rd << 7U) | 0b0110011;
+}
+
+std::uint32_t enc_sltu(std::uint32_t rd, std::uint32_t rs1, std::uint32_t rs2) {
+  return (0b0000000 << 25U) | (rs2 << 20U) | (rs1 << 15U) | (0b011 << 12U) | (rd << 7U) | 0b0110011;
+}
+
+std::uint32_t enc_xor(std::uint32_t rd, std::uint32_t rs1, std::uint32_t rs2) {
+  return (0b0000000 << 25U) | (rs2 << 20U) | (rs1 << 15U) | (0b100 << 12U) | (rd << 7U) | 0b0110011;
+}
+
+std::uint32_t enc_srl(std::uint32_t rd, std::uint32_t rs1, std::uint32_t rs2) {
+  return (0b0000000 << 25U) | (rs2 << 20U) | (rs1 << 15U) | (0b101 << 12U) | (rd << 7U) | 0b0110011;
+}
+
+std::uint32_t enc_sra(std::uint32_t rd, std::uint32_t rs1, std::uint32_t rs2) {
+  return (0b0100000 << 25U) | (rs2 << 20U) | (rs1 << 15U) | (0b101 << 12U) | (rd << 7U) | 0b0110011;
+}
+
+std::uint32_t enc_or(std::uint32_t rd, std::uint32_t rs1, std::uint32_t rs2) {
+  return (0b0000000 << 25U) | (rs2 << 20U) | (rs1 << 15U) | (0b110 << 12U) | (rd << 7U) | 0b0110011;
+}
+
+std::uint32_t enc_and(std::uint32_t rd, std::uint32_t rs1, std::uint32_t rs2) {
+  return (0b0000000 << 25U) | (rs2 << 20U) | (rs1 << 15U) | (0b111 << 12U) | (rd << 7U) | 0b0110011;
+}
+
+std::uint32_t enc_slli(std::uint32_t rd, std::uint32_t rs1, std::uint32_t shamt) {
+  return ((shamt & 0x1fU) << 20U) | (rs1 << 15U) | (0b001 << 12U) | (rd << 7U) | 0b0010011;
+}
+
+std::uint32_t enc_srli(std::uint32_t rd, std::uint32_t rs1, std::uint32_t shamt) {
+  return ((shamt & 0x1fU) << 20U) | (rs1 << 15U) | (0b101 << 12U) | (rd << 7U) | 0b0010011;
+}
+
+std::uint32_t enc_srai(std::uint32_t rd, std::uint32_t rs1, std::uint32_t shamt) {
+  return (0b0100000 << 25U) | ((shamt & 0x1fU) << 20U) | (rs1 << 15U) | (0b101 << 12U) | (rd << 7U) | 0b0010011;
+}
+
+std::uint32_t enc_auipc(std::uint32_t rd, std::uint32_t imm20) {
+  return (imm20 << 12U) | (rd << 7U) | 0b0010111;
+}
+
+std::uint32_t enc_jal(std::uint32_t rd, std::int32_t imm21) {
+  const std::uint32_t imm = static_cast<std::uint32_t>(imm21);
+  return (((imm >> 20U) & 0x1U) << 31U) |
+         (((imm >> 1U) & 0x3ffU) << 21U) |
+         (((imm >> 11U) & 0x1U) << 20U) |
+         (((imm >> 12U) & 0xffU) << 12U) |
+         (rd << 7U) | 0b1101111;
+}
+
+std::uint32_t enc_branch(std::uint32_t funct3, std::uint32_t rs1, std::uint32_t rs2, std::int32_t imm13) {
+  const std::uint32_t imm = static_cast<std::uint32_t>(imm13);
+  return (((imm >> 12U) & 0x1U) << 31U) |
+         (((imm >> 5U) & 0x3fU) << 25U) |
+         (rs2 << 20U) | (rs1 << 15U) |
+         (funct3 << 12U) |
+         (((imm >> 1U) & 0xfU) << 8U) |
+         (((imm >> 11U) & 0x1U) << 7U) |
+         0b1100011;
+}
+
+std::uint32_t enc_beq(std::uint32_t rs1, std::uint32_t rs2, std::int32_t imm) { return enc_branch(0b000, rs1, rs2, imm); }
+std::uint32_t enc_bne(std::uint32_t rs1, std::uint32_t rs2, std::int32_t imm) { return enc_branch(0b001, rs1, rs2, imm); }
+std::uint32_t enc_blt(std::uint32_t rs1, std::uint32_t rs2, std::int32_t imm) { return enc_branch(0b100, rs1, rs2, imm); }
+std::uint32_t enc_bge(std::uint32_t rs1, std::uint32_t rs2, std::int32_t imm) { return enc_branch(0b101, rs1, rs2, imm); }
+std::uint32_t enc_bltu(std::uint32_t rs1, std::uint32_t rs2, std::int32_t imm) { return enc_branch(0b110, rs1, rs2, imm); }
+std::uint32_t enc_bgeu(std::uint32_t rs1, std::uint32_t rs2, std::int32_t imm) { return enc_branch(0b111, rs1, rs2, imm); }
+
+std::uint32_t enc_lh(std::uint32_t rd, std::uint32_t rs1, std::int32_t imm) {
+  return ((static_cast<std::uint32_t>(imm) & 0xfffU) << 20U) | (rs1 << 15U) | (0b001 << 12U) | (rd << 7U) | 0b0000011;
+}
+
+std::uint32_t enc_lhu(std::uint32_t rd, std::uint32_t rs1, std::int32_t imm) {
+  return ((static_cast<std::uint32_t>(imm) & 0xfffU) << 20U) | (rs1 << 15U) | (0b101 << 12U) | (rd << 7U) | 0b0000011;
+}
+
+std::uint32_t enc_lb(std::uint32_t rd, std::uint32_t rs1, std::int32_t imm) {
+  return ((static_cast<std::uint32_t>(imm) & 0xfffU) << 20U) | (rs1 << 15U) | (0b000 << 12U) | (rd << 7U) | 0b0000011;
+}
+
+std::uint32_t enc_sh(std::uint32_t rs2, std::uint32_t rs1, std::int32_t imm) {
+  const std::uint32_t uimm = static_cast<std::uint32_t>(imm) & 0xfffU;
+  return ((uimm >> 5U) << 25U) | (rs2 << 20U) | (rs1 << 15U) | (0b001 << 12U) | ((uimm & 0x1fU) << 7U) | 0b0100011;
+}
+
 std::uint32_t enc_jalr(std::uint32_t rd, std::uint32_t rs1, std::int32_t imm) {
   return ((static_cast<std::uint32_t>(imm) & 0xfffU) << 20U) | (rs1 << 15U) | (rd << 7U) | 0b1100111;
 }
@@ -102,6 +198,52 @@ void test_directed(const std::string &temp_dir) {
       enc_lui(8, 0xfffff),       // lui  x8, 0xfffff
       enc_addi(8, 8, -16),       // addi x8, x8, -16 => 0xfffffff0
       enc_sw(0, 8, 0),           // sw   x0, 0(x8) => tohost exit 0
+  };
+
+  run_test_vector(hex_file, insts, insts.size());
+}
+
+void test_directed_rv32e(const std::string &temp_dir) {
+  const std::string hex_file = temp_dir + "/test_directed_rv32e.hex";
+  std::vector<std::uint32_t> insts = {
+      // 0x00: auipc x1, 0x10 => x1 = 0x00010000
+      enc_auipc(1, 0x10),
+      // 0x04: jal x2, 8 => target = 0x04 + 8 = 0x0c, x2 = 0x08
+      enc_jal(2, 8),
+      // 0x08: should be skipped
+      enc_addi(3, 0, 999),
+      // 0x0c: addi x3, x0, 10
+      enc_addi(3, 0, 10),
+      // 0x10: addi x4, x0, 10
+      enc_addi(4, 0, 10),
+      // 0x14: beq x3, x4, 8 => target = 0x14 + 8 = 0x1c
+      enc_beq(3, 4, 8),
+      // 0x18: should be skipped
+      enc_addi(5, 0, 888),
+      // 0x1c: sub x5, x3, x4 => 0
+      enc_sub(5, 3, 4),
+      // 0x20: addi x6, x0, -1
+      enc_addi(6, 0, -1),
+      // 0x24: sltu x7, x5, x6 => 1 (0 < 0xffffffff unsigned)
+      enc_sltu(7, 5, 6),
+      // 0x28: slt x8, x6, x5 => 1 (-1 < 0 signed)
+      enc_slt(8, 6, 5),
+      // 0x2c: xor x9, x7, x8 => 0
+      enc_xor(9, 7, 8),
+      // 0x30: slli x10, x7, 4 => 16
+      enc_slli(10, 7, 4),
+      // 0x34: lui x11, 0x20000 => 0x20000000 (DRAM)
+      enc_lui(11, 0x20000),
+      // 0x38: sh x10, 2(x11) => DRAM[2..3] = 16
+      enc_sh(10, 11, 2),
+      // 0x3c: lh x12, 2(x11) => 16
+      enc_lh(12, 11, 2),
+      // 0x40: lhu x13, 2(x11) => 16
+      enc_lhu(13, 11, 2),
+      // 0x44: exit tohost
+      enc_lui(14, 0xfffff),
+      enc_addi(14, 14, -16),
+      enc_sw(0, 14, 0),
   };
 
   run_test_vector(hex_file, insts, insts.size());
@@ -169,7 +311,17 @@ void test_fault_difftest(const std::string &temp_dir) {
     const std::string hex_file = temp_dir + "/test_fault_misalign.hex";
     std::vector<std::uint32_t> insts = {
         enc_lui(1, 0x20000),
-        enc_lw(2, 1, 1), // 0x20000001 misaligned
+        enc_lw(2, 1, 1), // 0x20000001 misaligned word
+    };
+    run_test_vector(hex_file, insts, 2);
+  }
+
+  // Test misaligned halfword load difftest
+  {
+    const std::string hex_file = temp_dir + "/test_fault_lh_misalign.hex";
+    std::vector<std::uint32_t> insts = {
+        enc_lui(1, 0x20000),
+        enc_lh(2, 1, 1), // 0x20000001 misaligned halfword
     };
     run_test_vector(hex_file, insts, 2);
   }
@@ -238,7 +390,9 @@ void test_binary_difftest(const std::string &temp_dir) {
 
 void test_sw_difftest() {
   const std::vector<std::string> sw_cases = {
-      "trm_smoke", "trm_exit_code", "calc_add", "dram_access", "heap_smoke", "jump_table"
+      "trm_smoke", "trm_exit_code", "calc_add", "dram_access", "heap_smoke", "jump_table",
+      "cpu_dummy", "cpu_add", "cpu_sub_longlong", "cpu_bit", "cpu_bubble_sort", "cpu_select_sort",
+      "cpu_fib", "cpu_recursion", "cpu_string", "cpu_leap_year", "cpu_if_else", "cpu_load_store"
   };
   for (const auto &name : sw_cases) {
     const std::string inst_bin = "build/sw/tests/" + name + "/" + name + ".inst.bin";
@@ -269,7 +423,7 @@ void test_sw_difftest() {
 
     dc_sim::Difftest difftest(dut, ref);
     dc_sim::DifftestMismatch mismatch;
-    bool ok = difftest.run_difftest(10000, 50000, &mismatch);
+    bool ok = difftest.run_difftest(50000, 100000, &mismatch);
     require(ok, "sw difftest failed on " + name + ": " + mismatch.message);
   }
 }
@@ -280,6 +434,7 @@ int main(int argc, char **argv) {
   const std::string temp_dir = (argc > 1) ? argv[1] : ".";
   try {
     test_directed(temp_dir);
+    test_directed_rv32e(temp_dir);
     test_randomized(temp_dir);
     test_fault_difftest(temp_dir);
     test_binary_difftest(temp_dir);

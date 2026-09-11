@@ -23,7 +23,7 @@ struct ReferenceStepResult {
   bool mem_access = false;
   bool mem_write = false;
   std::uint32_t mem_addr = 0;
-  std::uint8_t mem_size = 0;  // 1 (byte) or 4 (word)
+  std::uint8_t mem_size = 0;  // 1 (byte), 2 (halfword), 4 (word)
   std::uint32_t mem_wdata = 0;
   std::uint8_t mem_wstrb = 0;
 
@@ -49,7 +49,10 @@ class ReferenceModel {
   void load_irom(const std::vector<std::uint32_t> &words);
   void load_from_sim_memory();
   void write_dram_byte(std::uint32_t addr, std::uint8_t byte_val);
+  void write_dram_half(std::uint32_t addr, std::uint16_t half_val);
+  void write_dram_word(std::uint32_t addr, std::uint32_t word_val);
   std::uint8_t read_dram_byte(std::uint32_t addr) const;
+  std::uint16_t read_dram_half(std::uint32_t addr) const;
   std::uint32_t read_dram_word(std::uint32_t addr) const;
 
   // State queries

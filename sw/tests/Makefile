@@ -3,16 +3,16 @@ AM_ROOT   := $(REPO_ROOT)/sw/am
 BUILD_DIR ?= $(REPO_ROOT)/build/sw
 TEST_BUILD_DIR := $(BUILD_DIR)/tests
 
-RISCV_GCC     ?= riscv64-linux-gnu-gcc
-RISCV_OBJDUMP ?= riscv64-linux-gnu-objdump
-RISCV_OBJCOPY ?= riscv64-linux-gnu-objcopy
+RISCV_GCC     ?= $(shell which riscv64-unknown-elf-gcc 2>/dev/null || which riscv64-linux-gnu-gcc 2>/dev/null || echo riscv64-linux-gnu-gcc)
+RISCV_OBJDUMP ?= $(shell which riscv64-unknown-elf-objdump 2>/dev/null || which riscv64-linux-gnu-objdump 2>/dev/null || echo riscv64-linux-gnu-objdump)
+RISCV_OBJCOPY ?= $(shell which riscv64-unknown-elf-objcopy 2>/dev/null || which riscv64-linux-gnu-objcopy 2>/dev/null || echo riscv64-linux-gnu-objcopy)
 PYTHON        ?= python3
 
 AM_INC_DIR := $(AM_ROOT)/include
 AM_LDSCRIPT := $(AM_ROOT)/scripts/link.ld
 CHECK_ISA   := $(PYTHON) $(REPO_ROOT)/scripts/check_isa_subset.py
 
-CFLAGS := -march=rv32e -mabi=ilp32e -nostdlib \
+CFLAGS := -march=rv32e -mabi=ilp32e -mstrict-align -nostdlib \
 	-fno-pic -fno-pie -static -mcmodel=medlow \
 	-fno-asynchronous-unwind-tables -fno-builtin -fno-stack-protector \
 	-O2 -Wall -Wextra -Wno-main \
@@ -21,11 +21,14 @@ CFLAGS := -march=rv32e -mabi=ilp32e -nostdlib \
 LDFLAGS := -nostdlib -static -mcmodel=medlow \
 	-T $(AM_LDSCRIPT) \
 	-Wl,--gc-sections \
-	-Wl,--build-id=none
+	-Wl,--build-id=none \
+	-lgcc
 
-AM_OBJS := $(BUILD_DIR)/am/start.S.o $(BUILD_DIR)/am/trm.c.o
+AM_OBJS := $(BUILD_DIR)/am/start.S.o $(BUILD_DIR)/am/trm.c.o $(BUILD_DIR)/am/klib.c.o
 
-TESTS := trm_smoke trm_exit_code calc_add dram_access heap_smoke jump_table
+TESTS := trm_smoke trm_exit_code calc_add dram_access heap_smoke jump_table \
+	cpu_dummy cpu_add cpu_sub_longlong cpu_bit cpu_bubble_sort cpu_select_sort \
+	cpu_fib cpu_recursion cpu_string cpu_leap_year cpu_if_else cpu_load_store
 
 TARGET_INST_BINS := $(foreach t,$(TESTS),$(TEST_BUILD_DIR)/$(t)/$(t).inst.bin)
 
