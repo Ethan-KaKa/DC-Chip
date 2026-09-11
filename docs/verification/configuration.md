@@ -1,22 +1,22 @@
 # DC-Chip 构建配置说明
 
 - 版本：v0.1
-- 状态：配置步骤 1 已实现；统一执行引擎步骤 2 已接入
-- 更新日期：2026-09-10
+- 状态：配置步骤 1 已实现；波形步骤 4 已接入
+- 更新日期：2026-09-11
 - 配置规范：仓库根目录 `Dconfig`
 - 仿真器接口：[`simulator.md`](simulator.md)
 
 ## 1. 范围与默认值
 
-当前配置系统只负责把两个独立布尔选项传递给 Make 和 C++ 构建：
+当前配置系统把两个独立布尔选项传递给 Make 和 C++ 构建：
 
-| 名称 | 默认值 | 步骤 1 状态 |
+| 名称 | 默认值 | 当前状态 |
 | --- | --- | --- |
 | `DC_SIM_SDB` | `n` | 可配置、可生成宏；SDB 功能尚未实现 |
-| `DC_SIM_WAVE` | `n` | 可配置、可生成宏；VCD 功能尚未实现 |
+| `DC_SIM_WAVE` | `n` | `y` 时编译并启用 VCD；`n` 时不编译 VCD 支持 |
 
 tracked `configs/default_defconfig` 显式关闭两个选项。本地选择保存在被 Git
-忽略的仓库根 `.config`，不得把当前开关值理解为 SDB 或波形已经可用。
+忽略的仓库根 `.config`。`DC_SIM_SDB=y` 仍只生成配置宏，不代表 SDB 可用。
 
 ## 2. 人工入口
 
@@ -82,7 +82,20 @@ Make 解析期间加载 `auto.conf`。`help`、lint 和独立 RTL 模块测试�
 `PYTHON=<python3>` 覆盖 Python 解释器；`make check-tools` 会检查 Python 3、
 标准库 `curses`、原有 HDL 工具和 C++17 支持。
 
-## 5. 固定第三方实现
+## 5. 波形构建行为
+
+`CONFIG_DC_SIM_WAVE=y` 时，Make 只为正式仿真器和独立 Simulation 引擎测试的
+Verilator 命令增加 `--trace`，生成结果为 `VM_TRACE=1`、`VM_TRACE_VCD=1`。
+关闭时二者均为 0，项目 C++ 不包含 VCD 头文件、接口或 dump 调用，也不编译、
+链接 `verilated_vcd_c` 实现。
+
+波形开启构建运行时，从真实可执行文件所在的 `<BUILD_DIR>/verilator*` 目录
+推导并截断写入唯一的 `<BUILD_DIR>/dump.vcd`。详细生命周期和接口见
+[`simulator.md`](simulator.md)。`make test-wave` 使用
+`build/test-fixtures/wave/off/` 和 `on/` 下的隔离配置与构建目录，不修改仓库根
+`.config`。
+
+## 6. 固定第三方实现
 
 配置实现使用 Kconfiglib v14.1.0，不依赖系统安装包或 ysyx-workbench。仓库只
 保存 `kconfiglib.py`、`menuconfig.py`、ISC `LICENSE.txt` 和来源/校验说明；

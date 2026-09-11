@@ -13,7 +13,7 @@ config DC_SIM_WAVE
 	bool "Build VCD waveform support"
 	default n
 	help
-	  Build support for Verilator VCD waveform recording.
-	  Waveform recording itself is not implemented in configuration step 1.
+	  Build and enable Verilator VCD waveform recording. The simulator writes
+	  one dump.vcd file in its configured build directory.
 
 endmenu

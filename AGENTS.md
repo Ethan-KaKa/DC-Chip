@@ -18,8 +18,8 @@
 ## 当前状态（2026-09-11）
 
 - 当前目录已初始化为 Git 仓库，默认分支为 `main`。
-- 当前已完成阶段 A–E 及仿真调试基础设施步骤 0–3：除课程原始资料、初版正式规格、ISA package、构建骨架、组合 ALU、decoder、4×16-bit regfile、单周期 CPU 核心、四个自检 testbench、Verilator DPI-C 指令存储器、C++17 端到端驱动和完整回归入口外，已加入固定 Kconfiglib v14.1.0 的 Dconfig 配置生成、Make/C++ 传递、隔离配置测试、统一 Simulation 执行引擎和 ISA v0.1 最小反汇编器。
-- `DC_SIM_SDB` 与 `DC_SIM_WAVE` 当前默认关闭；步骤 3 已实现严格拒绝非规范编码的独立反汇编接口，但尚未接入 batch trace。SDB、断点恢复策略和 VCD 波形仍未实现，不得按开关名称提前声称功能可用。
+- 当前已完成阶段 A–E 及仿真调试基础设施步骤 0–4：除课程原始资料、初版正式规格、ISA package、构建骨架、组合 ALU、decoder、4×16-bit regfile、单周期 CPU 核心、四个自检 testbench、Verilator DPI-C 指令存储器、C++17 端到端驱动和完整回归入口外，已加入固定 Kconfiglib v14.1.0 的 Dconfig 配置生成、Make/C++ 传递、隔离配置测试、统一 Simulation 执行引擎、ISA v0.1 最小反汇编器和编译期可选 VCD 波形。
+- `DC_SIM_SDB` 与 `DC_SIM_WAVE` 当前默认关闭；`DC_SIM_WAVE=y` 时已实现从 reset 前开始记录 `<BUILD_DIR>/dump.vcd`，关闭时不编译 VCD 支持。独立反汇编接口尚未接入 batch trace；SDB、断点恢复策略和 SDB `wave` 命令仍未实现，不得按开关名称提前声称这些功能可用。
 - 初版已确定采用 16 位定长自定义指令、4 个 16 位通用寄存器、8 位字地址 PC、8 条基础指令和单周期执行模式；规范以 `docs/isa/isa.md` 为准。
 - CPU 后续扩展指令、存储映射、板卡具体型号/封装、时钟频率、板级复位极性和演示传感器仍未定稿。
 - 在对应规格落盘前，不得把上述未决项当成既定事实写入 RTL 或测试。
@@ -209,7 +209,7 @@ build/        # 生成物，不作为源码
 
 ## 构建命令状态
 
-本项目当前已实现阶段 A–E 及仿真调试基础设施步骤 0–3 的工具检查、Dconfig、RTL lint、模块测试、反汇编测试、统一执行引擎、端到端仿真和完整回归入口：
+本项目当前已实现阶段 A–E 及仿真调试基础设施步骤 0–4 的工具检查、Dconfig、RTL lint、模块测试、反汇编测试、统一执行引擎、编译期 VCD、端到端仿真和完整回归入口：
 
 ```bash
 make check-tools
@@ -230,6 +230,7 @@ make sim-build
 make sim IMG=<hex> [STEPS=<n>] [TRACE=1]
 make test-simulation
 make test-integration
+make test-wave
 make test
 make clean
 ```

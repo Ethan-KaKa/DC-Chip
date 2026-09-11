@@ -1,7 +1,7 @@
 # DC-Chip Verilator 仿真器使用与接口约定
 
 - 版本：v0.1
-- 状态：阶段 D–E 基线及仿真调试基础设施步骤 1–3 已实现
+- 状态：阶段 D–E 基线及仿真调试基础设施步骤 1–4 已实现
 - 更新日期：2026-09-11
 - ISA 规范：[`../isa/isa.md`](../isa/isa.md)
 - 验证计划：[`plan.md`](plan.md)
@@ -9,7 +9,8 @@
 ## 1. 适用范围
 
 本文记录当前 Verilator behavioral simulation 的稳定使用接口，包括 DPI-C
-取指边界、HEX 镜像格式、命令行参数、统一执行引擎、运行生命周期和退出码。
+取指边界、HEX 镜像格式、命令行参数、统一执行引擎、VCD 波形、运行生命周期
+和退出码。
 实现位于 `sim/verilator/`，反汇编器、引擎自检与 CLI 集成用例位于
 `sim/tests/`。
 
@@ -91,9 +92,9 @@ Vsim_top --help
 
 `simulation.h/.cpp` 提供与 CLI 分离的 `dc_sim::Simulation`。公开头文件通过
 PIMPL 隐藏 `Vsim_top`、`VerilatedContext` 等 Verilator 类型；每个实例独占
-context、模型、时钟相位、仿真时间及周期/提交计数，析构时只调用一次
-`final()`。`main.cpp` 只保留参数解析、镜像加载、batch 调度、格式化与退出码
-映射。
+context、模型、时钟相位、仿真时间及周期/提交计数。波形构建的析构顺序固定为
+VCD `flush()`、`close()`，随后 DUT `final()`；非波形构建只执行 `final()`。
+`main.cpp` 只保留参数解析、镜像加载、batch 调度、格式化与退出码映射。
 
 主要状态和控制接口如下：
 
@@ -134,7 +135,34 @@ reset 属于内部接口误用，以 C++ 异常明确失败。
 停止原因为越界取指。提交目标先于非法分类，因此最后一次合法提交造成的下一
 地址组合预取不会覆盖成功结果；下一次步进才会实际执行并报告越界。
 
-## 6. 最小反汇编接口
+## 6. 编译期 VCD 波形
+
+只有生成的 `config.h` 定义 `CONFIG_DC_SIM_WAVE` 时，`Simulation` 才公开：
+
+```cpp
+void set_wave_enabled(bool enabled);
+bool wave_enabled() const;
+const std::string &wave_path() const;
+```
+
+构造后的默认状态为开启记录。模型首个 reset 边沿前在时间 0 dump 初始状态；
+以后每个上升沿和下降沿 `eval()` 后使用同一 `VerilatedContext` 的单调时间 dump。
+两个同步 reset 周期因此位于波形中，但仍不计入 `cycles` 或 `commits`。
+
+`set_wave_enabled(false)` 只跳过后续 dump，CPU 和仿真时间继续推进；恢复为
+`true` 后继续写同一文件，不关闭、分段或改名。该接口当前只供执行引擎及测试
+使用，不增加 CLI 参数，也不代表 SDB 已有 `wave` 命令。
+
+输出路径不依赖启动工作目录。Linux 构建从 `/proc/self/exe` 解析真实可执行
+文件，要求其位于 `<BUILD_DIR>/verilator*/<binary>`，并将唯一波形截断写入
+`<BUILD_DIR>/dump.vcd`。路径无法解析或文件无法打开时，诊断包含完整目标路径
+并返回退出码 1；已经构造的 PIMPL 仍按正常顺序清理。帮助、CLI 参数错误和
+HEX 加载错误均发生在模型创建前，不创建或覆盖波形。
+
+关闭配置时 Verilator 不接收 `--trace`，`VM_TRACE=0`、`VM_TRACE_VCD=0`，VCD
+头文件、公开接口、tracer 成员和 dump 调用均不参与编译。
+
+## 7. 最小反汇编接口
 
 `disasm.h/.cpp` 提供与 DUT 状态无关的纯 C++17 接口：
 
@@ -150,7 +178,7 @@ std::string dc_sim::disassemble(std::uint16_t instruction);
 步骤 3 只建立供后续 SDB 使用的接口，现有 `--trace`、summary 和错误输出不
 调用反汇编器，因而其文本契约保持不变。
 
-## 7. 输出与退出码
+## 8. 输出与退出码
 
 trace 使用固定宽度小写十六进制，格式为：
 
@@ -167,23 +195,22 @@ summary commits=<n> cycles=<n> pc=0x00 r0=0x0000 r1=0x0000 r2=0x0000 r3=0x0000
 | 退出码 | 条件 |
 | ---: | --- |
 | 0 | 帮助，或目标提交完成且全部 expectation 匹配 |
-| 1 | CLI 或 HEX 镜像错误 |
+| 1 | CLI、HEX 镜像或 VCD 初始化错误 |
 | 2 | 实际执行非法指令或越界取指返回的非法字 |
 | 3 | 达到最大周期数 |
 | 4 | 最终寄存器或 PC 不匹配 |
 
-## 8. 构建配置边界
+## 9. 构建配置边界
 
 仿真器构建通过根目录 `Dconfig` 接收 `DC_SIM_SDB` 和 `DC_SIM_WAVE`，两项
-默认均为 `n`。当前步骤 1 只建立 `.config`、Make `auto.conf` 和 C++
-`config.h` 的生成与传递；两个开关尚不改变 RTL、构建选项、CLI 或运行行为，
-也不能据此声称 SDB 或 VCD 已实现。完整配置接口见
+默认均为 `n`。`DC_SIM_WAVE=y` 选择本节的编译期 VCD 行为；
+`DC_SIM_SDB` 仍只生成配置宏，SDB 尚未实现。完整配置接口见
 [`configuration.md`](configuration.md)。
 
-默认配置下 Verilator 仍以 `VM_TRACE=0` 构建。`--trace` 仍只是既有的逐提交
-文本输出参数，与尚未实现的 VCD 功能无关。
+默认配置下 Verilator 仍以 `VM_TRACE=0` 构建。CLI `--trace` 始终只是既有的
+逐提交文本输出参数，与 VCD 编译期开关互相独立。
 
-## 9. 构建与回归入口
+## 10. 构建与回归入口
 
 ```bash
 make sim-build
@@ -192,6 +219,7 @@ make test-config
 make test-disasm
 make test-simulation
 make test-integration
+make test-wave
 make test
 make clean
 ```
@@ -210,3 +238,8 @@ package、decoder、ALU、regfile、core、wrapper 的顺序构建
 状态失配执行精确文本断言。`make test` 依次运行配置、反汇编、RTL
 lint/模块测试、Simulation 引擎自检和 CLI 集成测试。`make clean` 只允许删除
 仓库根目录的默认 `build/`；本地 `.config` 由 `make clean` 保留。
+
+`make test-wave` 另外构建彼此隔离的 WAVE-off/on 正式 CLI 和执行引擎。它检查
+编译宏与链接产物、固定输出路径、截断覆盖、VCD header、时间 0、reset 与正常
+执行双边沿、暂停间隙和状态等价，并在 WAVE-on 构建上复跑 19 个 CLI 用例及
+不可打开目标的错误路径。

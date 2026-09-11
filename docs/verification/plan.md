@@ -1,7 +1,7 @@
 # DC-Chip 初版验证计划
 
 - 版本：v0.1
-- 状态：初版 CPU 基线及仿真调试基础设施步骤 1–3
+- 状态：初版 CPU 基线及仿真调试基础设施步骤 1–4
 - 更新日期：2026-09-11
 - ISA 规范：`docs/isa/isa.md` v0.1
 - 仿真器接口：[`simulator.md`](simulator.md)
@@ -24,6 +24,7 @@ Icarus 和 Verilator 的通过结果只标记为 behavioral simulation。lint、
 | F | Dconfig 配置基础设施 | `make test-config`；`make test` | 隔离配置测试、四种配置值/头文件编译、既有回归兼容 |
 | G | 统一 Simulation 执行引擎 | `make test-simulation`；`make test-integration`；`make test` | 生命周期、周期/提交步进、停止优先级及 CLI 兼容 |
 | H | ISA v0.1 最小反汇编器 | `make test-disasm`；`make test` | 8 条指令格式、规范字段、全部 16 位编码及 batch 输出兼容 |
+| I | 编译期 VCD 波形 | `make test-wave`；`make test` | WAVE-off 零 VCD 代码、WAVE-on 时间轴/路径/暂停、CLI 兼容与错误处理 |
 
 阶段必须顺序完成。任一命令失败后立即停止，不运行当前阶段的后续命令，也不进入下一阶段。修复后先重跑失败项，再从阶段 A 起重跑截至当前阶段的所有累计门禁。
 
@@ -205,6 +206,32 @@ CLI 文本和退出码保持不变。
 步骤 3 不实现或启用 SDB、断点恢复或 VCD，也不修改 RTL、ISA、DPI 接口、
 HEX 格式、batch trace、退出码或软件 ABI。Vivado 综合/实现、时序、资源、
 功耗和真实板卡仍未验证。
+
+### 阶段 I：仿真调试基础设施步骤 4
+
+步骤 4 将 `DC_SIM_WAVE` 接入 Verilator 和统一 `Simulation` 时间轴。关闭配置
+不编译或链接 VCD；开启配置从首个 reset 边沿前的时间 0 开始，将唯一波形
+截断写入由真实可执行文件推导的 `<BUILD_DIR>/dump.vcd`。暂停记录只形成时间戳
+间隙，不改变 CPU 推进、体系结构状态、周期/提交计数或停止结果。
+
+`make test-wave` 使用 `build/test-fixtures/wave/off/` 和 `on/` 下的配置与构建
+目录。WAVE-off 检查两个 Verilator Mdir 均为 `VM_TRACE=0`、
+`VM_TRACE_VCD=0`，不存在 VCD 实现产物或波形；WAVE-on 检查对应值均为 1、
+时间 0/reset/执行双边沿、暂停两周期后的时间戳间隙、固定路径、截断覆盖、
+状态等价、模型创建前错误不产生波形、19 个 CLI 用例兼容，以及不可打开目标
+返回 1 并报告完整路径。
+
+| 日期 | 命令 | 结果 | 环境或备注 |
+| --- | --- | --- | --- |
+| 2026-09-11 | `make check-tools` | PASS | GNU Make 4.3；Verilator 5.041 devel；Icarus/vvp 13.0 devel；G++ 13.3.0；Python 3.12.3 |
+| 2026-09-11 | `make test-wave` | PASS | 隔离 WAVE-off/on 正式 CLI 和执行引擎构建；WAVE-on 复跑 19 个精确 CLI 用例 |
+| 2026-09-11 | `make test` | PASS | 默认 `DC_SIM_WAVE=n`；config、disassembler、RTL lint、4 个模块测试、执行引擎和 19 个 CLI 用例全部通过 |
+| 2026-09-11 | `make clean`；`make test` | PASS | 从空 `build/` 干净重建；正式 CLI 和执行引擎均为 `VM_TRACE=0`、`VM_TRACE_VCD=0` |
+| 2026-09-11 | `git diff --check` | PASS | 本步骤源码、测试、Make、Dconfig 与正式文档无 whitespace error |
+
+步骤 4 不实现 SDB、断点恢复或 SDB `wave` 命令，也不修改 RTL、ISA、DPI、
+HEX 格式、batch 文本输出或软件 ABI。Vivado 综合/实现、时序、资源、功耗和
+真实板卡仍未验证。
 
 ## 8. 后续验证
 

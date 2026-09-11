@@ -5,6 +5,9 @@
 #include <cstdint>
 #include <memory>
 #include <set>
+#ifdef CONFIG_DC_SIM_WAVE
+#include <string>
+#endif
 
 namespace dc_sim {
 
@@ -65,6 +68,12 @@ class Simulation {
                       std::uint64_t max_cycles,
                       const std::set<std::uint8_t> &breakpoints = {});
   ArchitecturalState snapshot() const;
+
+#ifdef CONFIG_DC_SIM_WAVE
+  void set_wave_enabled(bool enabled);
+  bool wave_enabled() const;
+  const std::string &wave_path() const;
+#endif
 
  private:
   class Impl;

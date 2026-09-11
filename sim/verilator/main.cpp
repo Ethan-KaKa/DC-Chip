@@ -7,6 +7,7 @@
 #include <iomanip>
 #include <iostream>
 #include <limits>
+#include <memory>
 #include <optional>
 #include <sstream>
 #include <string>
@@ -306,11 +307,17 @@ int main(int argc, char **argv) {
     max_cycles = steps + 4U;
   }
 
-  dc_sim::Simulation simulation(argc, argv);
-  simulation.reset();
+  std::unique_ptr<dc_sim::Simulation> simulation;
+  try {
+    simulation = std::make_unique<dc_sim::Simulation>(argc, argv);
+    simulation->reset();
+  } catch (const std::exception &exception) {
+    std::cerr << "error: " << exception.what() << '\n';
+    return kInputError;
+  }
   for (std::uint64_t step = 0; step < steps; ++step) {
     const dc_sim::RunResult result =
-        simulation.step_instruction(max_cycles);
+        simulation->step_instruction(max_cycles);
     if (result.reason == dc_sim::StopReason::commits_complete) {
       if (options.trace) {
         print_trace(result.event, result.state);
@@ -335,7 +342,7 @@ int main(int argc, char **argv) {
     }
   }
 
-  const dc_sim::ArchitecturalState final_state = simulation.snapshot();
+  const dc_sim::ArchitecturalState final_state = simulation->snapshot();
   print_state_summary(final_state);
   if (!check_expectations(options, final_state)) {
     return kStateMismatch;

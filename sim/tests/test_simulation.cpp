@@ -240,6 +240,64 @@ void test_misuse(const std::string &fixture_dir) {
                      "repeated reset did not fail");
 }
 
+#ifdef CONFIG_DC_SIM_WAVE
+void require_same_state(const ArchitecturalState &actual,
+                        const ArchitecturalState &expected) {
+  require(actual.fetch_pc == expected.fetch_pc,
+          "wave pause changed the final PC");
+  require(actual.fetch_inst == expected.fetch_inst,
+          "wave pause changed the final instruction");
+  require(actual.registers == expected.registers,
+          "wave pause changed the final registers");
+  require(actual.cycles == expected.cycles,
+          "wave pause changed the cycle count");
+  require(actual.commits == expected.commits,
+          "wave pause changed the commit count");
+  require(actual.time == expected.time,
+          "wave pause changed the simulation time");
+}
+
+void test_wave_control(const std::string &fixture_dir) {
+  load_image(fixture_dir, "jump_loop.hex");
+  ArchitecturalState reference_state;
+  StopReason reference_reason = StopReason::quit;
+  {
+    Simulation reference;
+    reference.reset();
+    const dc_sim::RunResult result =
+        reference.run_until(RunTarget::cycles, 4, 10, {});
+    reference_reason = result.reason;
+    reference_state = result.state;
+  }
+
+  load_image(fixture_dir, "jump_loop.hex");
+  Simulation paused;
+  require(paused.wave_enabled(), "wave recording did not start enabled");
+  require(!paused.wave_path().empty() &&
+              paused.wave_path().size() >= std::string("dump.vcd").size() &&
+              paused.wave_path().compare(
+                  paused.wave_path().size() - std::string("dump.vcd").size(),
+                  std::string("dump.vcd").size(), "dump.vcd") == 0,
+          "wave path does not end in dump.vcd");
+  paused.reset();
+  require(paused.run_until(RunTarget::cycles, 1, 10, {}).reason ==
+              StopReason::cycles_complete,
+          "wave pause setup cycle did not complete");
+  paused.set_wave_enabled(false);
+  require(!paused.wave_enabled(), "wave recording did not pause");
+  require(paused.run_until(RunTarget::cycles, 2, 10, {}).reason ==
+              StopReason::cycles_complete,
+          "cycles while wave recording was paused did not complete");
+  paused.set_wave_enabled(true);
+  require(paused.wave_enabled(), "wave recording did not resume");
+  const dc_sim::RunResult paused_result =
+      paused.run_until(RunTarget::cycles, 1, 10, {});
+  require(paused_result.reason == reference_reason,
+          "wave pause changed the final stop reason");
+  require_same_state(paused_result.state, reference_state);
+}
+#endif
+
 }  // namespace
 
 int main(int argc, char **argv) {
@@ -256,6 +314,9 @@ int main(int argc, char **argv) {
     test_illegal_and_out_of_bounds(fixture_dir);
     test_timeout_and_completion_priority(fixture_dir);
     test_misuse(fixture_dir);
+#ifdef CONFIG_DC_SIM_WAVE
+    test_wave_control(fixture_dir);
+#endif
   } catch (const std::exception &error) {
     std::cerr << "test_simulation: FAIL " << error.what() << '\n';
     return 1;

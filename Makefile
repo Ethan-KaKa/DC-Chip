@@ -53,11 +53,15 @@ ifneq ($(filter sim-build sim test-simulation test-integration test,$(MAKECMDGOA
 -include $(AUTO_CONF)
 endif
 
+ifeq ($(CONFIG_DC_SIM_WAVE),y)
+SIM_TRACE_FLAGS := --trace
+endif
+
 .DEFAULT_GOAL := help
 
 .PHONY: check-tools help defconfig menuconfig config-show test-config \
 	lint-comb lint test-alu test-decoder test-regfile test-core test-unit \
-	test-disasm sim-build sim test-simulation test-integration test clean
+	test-disasm sim-build sim test-simulation test-integration test-wave test clean
 
 check-tools:
 	@set -eu; \
@@ -178,6 +182,7 @@ $(SIM_BIN): $(SIM_RTL) $(SIM_CPP) sim/verilator/memory.h \
 	mkdir -p $(SIM_DIR)
 	CCACHE_DISABLE=1 CXX="$(CXX)" $(VERILATOR) --cc --exe --build \
 		--language 1800-2012 -Wall --top-module sim_top \
+		$(SIM_TRACE_FLAGS) \
 		--Mdir $(SIM_DIR) \
 		-CFLAGS "-std=c++17 $(SIM_CONFIG_CXXFLAGS)" \
 		$(SIM_RTL) $(SIM_CPP)
@@ -195,6 +200,7 @@ $(SIM_TEST_BIN): $(SIM_RTL) $(SIM_ENGINE_CPP) $(SIM_TEST_CPP) \
 	mkdir -p $(SIM_TEST_DIR)
 	CCACHE_DISABLE=1 CXX="$(CXX)" $(VERILATOR) --cc --exe --build \
 		--language 1800-2012 -Wall --top-module sim_top \
+		$(SIM_TRACE_FLAGS) \
 		--Mdir $(SIM_TEST_DIR) -o test_simulation \
 		-CFLAGS "-std=c++17 $(SIM_CONFIG_CXXFLAGS)" \
 		$(SIM_RTL) $(SIM_ENGINE_CPP) $(SIM_TEST_CPP)
@@ -234,6 +240,13 @@ test-integration: sim-build
 	TEST_FIXTURE_DIR="$(abspath $(BUILD_DIR))/test-fixtures" \
 		bash sim/tests/run_integration.sh "$(abspath $(SIM_BIN))"
 
+test-wave:
+	$(PYTHON) scripts/test_wave.py \
+		--fixture-root "$(abspath $(BUILD_DIR))/test-fixtures/wave" \
+		--make "$(MAKE)" --verilator "$(VERILATOR)" \
+		--iverilog "$(IVERILOG)" --vvp "$(VVP)" \
+		--cxx "$(CXX)" --python "$(PYTHON)"
+
 test:
 	$(MAKE) --no-print-directory test-config
 	$(MAKE) --no-print-directory test-disasm
@@ -256,7 +269,7 @@ help:
 	@printf '%s\n' \
 		'DC-Chip build entry points' \
 		'' \
-		'Available through simulator disassembler step 3:' \
+		'Available through simulator waveform step 4:' \
 		'  make check-tools  Check required tools, Python curses, and C++17' \
 		'  make help         Show this help without creating build output' \
 		'  make defconfig    Reset .config to configs/default_defconfig' \
@@ -275,6 +288,7 @@ help:
 		'  make sim IMG=<hex> [STEPS=<n>] [TRACE=1]' \
 		'  make test-simulation  Test the reusable Simulation engine' \
 		'  make test-integration  Run positive and negative integration cases' \
+		'  make test-wave    Test isolated WAVE-off/on simulator builds' \
 		'  make test         Run config, disasm, RTL, engine, and CLI regression' \
 		'  make clean        Remove only the repository-root build directory' \
 		'' \
@@ -286,4 +300,5 @@ help:
 		'  .config is local and preserved by make clean.' \
 		'  configs/default_defconfig is the tracked default.' \
 		'  Simulator targets generate build/config/auto.conf and config.h.' \
-		'  DC_SIM_SDB and DC_SIM_WAVE default to n and are not active yet.'
+		'  DC_SIM_WAVE=y enables build-time VCD output at build/dump.vcd.' \
+		'  DC_SIM_SDB defaults to n and is not active yet.'
