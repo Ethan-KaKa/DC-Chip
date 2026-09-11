@@ -1,7 +1,7 @@
 # DC-Chip 验证计划
 
 - 版本：v0.2
-- 状态：v0.2 验收契约已冻结；ISA 公共层专项已迁移
+- 状态：v0.2 验收契约已冻结；ISA 公共层与核心 RTL 专项已迁移
 - 更新日期：2026-09-11
 - ISA 规范：`docs/isa/isa.md` v0.2
 - 仿真器接口：[`simulator.md`](simulator.md)
@@ -18,13 +18,15 @@
 | --- | --- | --- |
 | v0.2 ISA/微架构/存储规格 | 已冻结 | 后续实现的验收依据 |
 | ISA package、decoder、编码器、反汇编器 | 已迁移至 v0.2 | `make test-isa` 的公共层专项证据 |
-| ALU、regfile、core、仿真器 | 仍为 v0.1 接口，迁移中不可构建 | 等待步骤 2.3--2.5，当前无 v0.2 执行证据 |
+| ALU、regfile、core | 已迁移至 v0.2 | `make lint` 与 `make test-unit` 的模块级 behavioral simulation 证据 |
+| Verilator wrapper、loader、Simulation、SDB | 仍为 v0.1 接口，迁移中不可构建 | 等待步骤 2.4--2.5，当前无 v0.2 端到端执行证据 |
 | v0.2 功能回归、参考模型、difftest | 未实现 | 不能宣称 v0.2 已通过 |
 | Vivado、时序、资源、功耗、上板 | 未验证 | 不能从 behavioral simulation 推断 |
 
-步骤 2.2 已使旧完整回归不再适用于当前工作树。步骤 2.3--2.5 完成前，只有
-`make test-isa` 能列为 v0.2 公共层证据；迁移前 `make test` PASS 仍只属于
-commit `9bfb9a9` 的 v0.1 behavioral simulation 记录。
+步骤 2.2 已使旧完整回归不再适用于当前工作树。步骤 2.3 完成后，只有
+`make test-isa`、RTL lint 和模块级 `make test-unit` 能列为 v0.2 证据；迁移前
+`make test` PASS 仍只属于 commit `9bfb9a9` 的 v0.1 behavioral simulation
+记录。步骤 2.4--2.5 完成前不得宣称 v0.2 端到端执行或完整回归可用。
 
 ## 2. v0.1 迁移前冻结记录
 
@@ -87,6 +89,21 @@ v0.1 的精确 CLI、SDB、VCD、HEX 和退出码契约继续记录在
 覆盖。该记录只证明 ISA 公共层，不覆盖 ALU、regfile、core、存储协议、
 Simulation、SDB、difftest、综合或 FPGA。
 
+### 2.5 v0.2 核心与存储协议迁移记录
+
+| 日期 | 命令 | 结果 | 证据边界 |
+| --- | --- | --- | --- |
+| 2026-09-11 | `make check-tools` | PASS | 工具版本、Python curses 与 C++17 可用性 |
+| 2026-09-11 | `make test-isa` | PASS | v0.2 编码、decoder 与反汇编公共层未回归 |
+| 2026-09-11 | `make lint-comb`；`make lint` | PASS | 32 位 ALU、decoder、regfile 和握手式 core 通过 Verilator lint |
+| 2026-09-11 | `make test-unit` | PASS | ALU、decoder、16×32-bit regfile、八指令执行、双通道握手和七类 fault 的模块级自检 |
+| 2026-09-11 | `git diff --check` | PASS | 本步骤源码、测试和正式文档无 whitespace error |
+
+core BFM 覆盖请求背压、请求接受当周期响应、延迟响应、四个 byte lane、I/S/U
+立即数边界、`jalr rd==rs1`、错误响应、fault 粘滞和 reset 取消。store 的真实
+内存副作用、仿真镜像、程序执行、SDB 和 difftest 仍待步骤 2.4--2.5；本记录只
+属于 lint 与模块级 behavioral simulation。
+
 ## 3. v0.2 验收矩阵
 
 下表未标明已完成的项目在对应代码和测试完成前均为 **未实现/未验证**：
@@ -94,19 +111,19 @@ Simulation、SDB、difftest、综合或 FPGA。
 | 类别 | 必测内容 | 主要方法 |
 | --- | --- | --- |
 | 编码 | 八条指令的标准 `opcode/funct3/funct7` 与格式；其他编码非法 | **已完成公共层专项**：decoder 定向与功能码空间枚举 |
-| 寄存器 | `x0` 恒零并忽略写；`x1`--`x15` 读写/reset | regfile 自检 |
-| RV32E 上界 | 实际 `rd/rs1/rs2` 使用 `x16`--`x31` 时非法 | **已完成 decoder/反汇编专项**；core 尚未验证 |
+| 寄存器 | `x0` 恒零并忽略写；`x1`--`x15` 读写/reset | **已完成模块级专项**：regfile 全寄存器与 core `rd=x0` 访问 |
+| RV32E 上界 | 实际 `rd/rs1/rs2` 使用 `x16`--`x31` 时非法 | **已完成公共层专项**：decoder/反汇编逐字段拒绝 |
 | `lui` 特例 | 只检查 `rd`；立即数中与 `rs1/rs2` 重叠的位不得误判 | **已完成公共层定向测试** |
-| 立即数 | I/S 拼接、`-2048/-1/0/2047`，U 型最低 12 位清零 | decoder/编码器已完成；execute 尚未验证 |
-| 算术 | `add/addi` 只保留低 32 位，正负溢出均不 fault | ALU 与参考模型 |
-| load | `lw` 小端与四字节对齐；`lbu` 任意 lane、零扩展；`rd=x0` 仍访问 | 可停顿/错误注入 BFM |
-| store | `sw` 四 lane；`sb` 单 lane；错误响应无部分副作用 | 带内存记分板 BFM |
-| `jalr` | 旧 `rs1`、`rd==rs1`、`pc+4`、清 bit 0、bit 1 对齐 fault | core 定向程序 |
-| 取指 | 32 位 byte PC、每次 `+4`、四字节对齐、访问错误 | 取指 BFM |
-| fault | 七种 cause、PC/指令字段、无提交/写回、粘滞、reset 恢复 | fault 注入与断言 |
-| stall | 请求/响应任意背压、payload 稳定、无丢失/重复、最多一个在途 | 随机 stall BFM，记录 seed |
-| reset | 未握手请求取消、已握手旧响应冲刷、不接收迟到响应 | 协议定向测试 |
-| trace/debug | 32 位 PC/指令、每条成功指令一次提交、索引读取 16×32 位状态 | 逐提交记分板 |
+| 立即数 | I/S 拼接、`-2048/-1/0/2047`，U 型最低 12 位清零 | **已完成模块级专项**：decoder、编码器与 core 边界执行 |
+| 算术 | `add/addi` 只保留低 32 位，正负溢出均不 fault | **已完成模块级专项**：ALU 边界与 core 写回；参考模型待实现 |
+| load | `lw` 小端与四字节对齐；`lbu` 任意 lane、零扩展；`rd=x0` 仍访问 | **核心专项已完成**；真实仿真存储待步骤 2.4 |
+| store | `sw` 四 lane；`sb` 单 lane；错误响应无部分副作用 | **核心请求/提交专项已完成**；存储副作用记分板待步骤 2.4 |
+| `jalr` | 旧 `rs1`、`rd==rs1`、`pc+4`、清 bit 0、bit 1 对齐 fault | **已完成 core 定向测试** |
+| 取指 | 32 位 byte PC、每次 `+4`、四字节对齐、访问错误 | **已完成 core 取指 BFM** |
+| fault | 七种 cause、PC/指令字段、无提交/写回、粘滞、reset 恢复 | **已完成 core fault 注入与断言** |
+| stall | 请求/响应任意背压、payload 稳定、无丢失/重复、最多一个在途 | **核心定向背压已完成**；随机存储 BFM 待步骤 2.4/2.5 |
+| reset | 未握手请求取消、已握手旧响应冲刷、不接收迟到响应 | **核心取消/忽略已完成**；存储模型冲刷待步骤 2.4 |
+| trace/debug | 32 位 PC/指令、每条成功指令一次提交、索引读取 16×32 位状态 | **基础 core trace/debug 已完成**；扩展提交字段待步骤 2.5 |
 | 程序 | 八指令 smoke、load/store lane、JALR loop、fault 负向镜像 | Verilator 集成测试 |
 | 参考模型 | 与 RTL 独立实现，逐提交比较 PC/寄存器/内存副作用/fault | difftest |
 
@@ -153,7 +170,7 @@ v0.2 目标文本 HEX 每个有效行是一条 32 位指令，即恰好 8 个十
 
 阶段 1 仿真目标使用私有 `tohost=0xfffffff0`、guest exit code 和有限 timeout
 形成自检程序终止闭环。它们不是正式 SoC MMIO 或 ISA 行为，不得写入
-`memory-map.md`；当前 v0.1 仿真器也尚未实现该机制。`.bin` 和 ELF loader
+`memory-map.md`；当前仿真 wrapper/loader 尚未实现该机制。`.bin` 和 ELF loader
 属于阶段 2。
 
 ## 7. 迁移实施门禁
@@ -162,13 +179,15 @@ v0.2 目标文本 HEX 每个有效行是一条 32 位指令，即恰好 8 个十
 
 1. 迁移 ISA package、decoder、编码器和反汇编器，并通过 `make test-isa`
    （已完成）；
-2. 迁移 ALU、regfile、控制器、32 位取指/data valid-ready 和结构化 fault；
+2. 迁移 ALU、regfile、控制器、32 位取指/data valid-ready 和结构化 fault
+   （已完成模块级验证）；
 3. 迁移 Verilator wrapper、loader、trace/debug、SDB 和 CLI；
 4. 加入独立参考模型、difftest、stall/fault 和程序回归；
 5. 删除 v0.1 裸机器码、`R0`--`R3` 和 16 位接口的剩余依赖。
 
-每一阶段先运行目标专项测试，再从快速门禁开始重跑累计回归。当前 `make test`
-继续保留 v0.1 防回归价值，但只有所有 v0.2 项完成后才能改称 v0.2 回归。
+每一阶段先运行目标专项测试，再从快速门禁开始重跑累计回归。当前完整
+`make test` 因仿真器迁移窗口不可用；步骤 2.4--2.5 完成并恢复全部入口后，才能
+把它重新作为 v0.2 累计回归。
 
 ## 8. 证据边界
 

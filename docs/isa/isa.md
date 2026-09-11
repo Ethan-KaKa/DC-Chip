@@ -1,7 +1,7 @@
 # DC-Chip RV32E 过渡子集指令集手册
 
 - 版本：v0.2
-- 状态：阶段 1 规范基线；ISA 公共层已迁移，CPU 与仿真器尚未迁移
+- 状态：阶段 1 规范基线；ISA 公共层与核心 RTL 已迁移，仿真器尚未迁移
 - 更新日期：2026-09-11
 
 ## 1. 范围与兼容性
@@ -14,11 +14,11 @@ RISC-V 32 位指令编码和 RV32E 的 16 个整数寄存器模型，但只实�
 宣称能够运行普通 RV32E/RV32I ELF 或由通用 GCC 工具链任意生成的程序。除本
 文精确列出的编码外，其他标准、保留或自定义编码在本项目中一律是非法指令。
 
-截至本文日期，ISA package、decoder、32 位反汇编器和测试编码器已按本文迁移，
-并由 `make test-isa` 验证。ALU、regfile、CPU 核心、Verilator wrapper/loader、
-Simulation、SDB 和程序测试仍待步骤 2.3--2.5 迁移，因此不代表 v0.2 CPU 已经
-实现或可执行；旧 ISA 不提供长期双模式开关，只由 Git 历史和迁移前验证记录
-保留。
+截至本文日期，ISA package、decoder、32 位反汇编器、测试编码器、ALU、
+regfile 和 CPU 核心已按本文迁移，并由 `make test-isa`、`make lint` 和
+`make test-unit` 验证。Verilator wrapper/loader、Simulation、SDB 和程序测试
+仍待步骤 2.4--2.5 迁移，因此尚无 v0.2 端到端执行闭环；旧 ISA 不提供长期
+双模式开关，只由 Git 历史和迁移前验证记录保留。
 
 本文中的“必须”表示后续实现与测试必须遵守；`TODO` 表示尚未决定，不得自行
 补全为架构行为。

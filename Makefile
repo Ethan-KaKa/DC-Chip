@@ -142,9 +142,9 @@ lint-isa:
 		--top-module decoder $(ISA_PKG) rtl/core/decoder.sv
 
 lint-comb:
-	$(VERILATOR) --lint-only --language 1800-2012 -Wall \
+	$(VERILATOR) --lint-only --language 1800-2012 -Wall -Wno-UNUSEDPARAM \
 		--top-module alu $(ISA_PKG) rtl/core/alu.sv
-	$(VERILATOR) --lint-only --language 1800-2012 -Wall \
+	$(VERILATOR) --lint-only --language 1800-2012 -Wall -Wno-UNUSEDPARAM \
 		--top-module decoder $(ISA_PKG) rtl/core/decoder.sv
 
 lint:

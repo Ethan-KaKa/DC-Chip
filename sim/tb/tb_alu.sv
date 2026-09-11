@@ -2,10 +2,10 @@
 `default_nettype none
 
 module tb_alu;
-  logic [15:0] lhs;
-  logic [15:0] rhs;
-  logic [2:0]  op;
-  logic [15:0] result;
+  logic [31:0] lhs;
+  logic [31:0] rhs;
+  dc_isa_pkg::alu_op_e op;
+  logic [31:0] result;
 
   alu dut (
     .lhs_i    (lhs),
@@ -14,51 +14,41 @@ module tb_alu;
     .result_o (result)
   );
 
-  task automatic check_result(
-    input logic [2:0]  test_op,
-    input logic [15:0] test_lhs,
-    input logic [15:0] test_rhs,
-    input logic [15:0] expected
+  task automatic check_add(
+    input logic [31:0] test_lhs,
+    input logic [31:0] test_rhs,
+    input logic [31:0] expected
   );
     begin
-      op  = test_op;
+      op  = dc_isa_pkg::ALU_ADD;
       lhs = test_lhs;
       rhs = test_rhs;
       #1;
       if (result !== expected) begin
         $fatal(1,
-               "tb_alu: op=%b lhs=%h rhs=%h expected=%h actual=%h",
-               test_op, test_lhs, test_rhs, expected, result);
+               "tb_alu: lhs=%h rhs=%h expected=%h actual=%h",
+               test_lhs, test_rhs, expected, result);
       end
     end
   endtask
 
   initial begin
-    lhs = 16'h0000;
-    rhs = 16'h0000;
-    op  = 3'b000;
+    lhs = '0;
+    rhs = '0;
+    op  = dc_isa_pkg::ALU_ADD;
 
-    check_result(dc_isa_pkg::ALU_PASS_B, 16'h1234, 16'h0000, 16'h0000);
-    check_result(dc_isa_pkg::ALU_PASS_B, 16'h0000, 16'hffff, 16'hffff);
-    check_result(dc_isa_pkg::ALU_PASS_B, 16'h5555, 16'haaaa, 16'haaaa);
+    check_add(32'h0000_0000, 32'h0000_0000, 32'h0000_0000);
+    check_add(32'h1234_5678, 32'h1111_1111, 32'h2345_6789);
+    check_add(32'hffff_ffff, 32'h0000_0001, 32'h0000_0000);
+    check_add(32'h7fff_ffff, 32'h0000_0001, 32'h8000_0000);
+    check_add(32'h8000_0000, 32'hffff_ffff, 32'h7fff_ffff);
+    check_add(32'hffff_f800, 32'h0000_0800, 32'h0000_0000);
 
-    check_result(dc_isa_pkg::ALU_ADD, 16'h1234, 16'h4321, 16'h5555);
-    check_result(dc_isa_pkg::ALU_ADD, 16'hffff, 16'h0001, 16'h0000);
-    check_result(dc_isa_pkg::ALU_SUB, 16'h1234, 16'h0234, 16'h1000);
-    check_result(dc_isa_pkg::ALU_SUB, 16'h0000, 16'h0001, 16'hffff);
-
-    check_result(dc_isa_pkg::ALU_AND, 16'h0000, 16'hffff, 16'h0000);
-    check_result(dc_isa_pkg::ALU_AND, 16'hffff, 16'hffff, 16'hffff);
-    check_result(dc_isa_pkg::ALU_AND, 16'haaaa, 16'h5555, 16'h0000);
-    check_result(dc_isa_pkg::ALU_OR, 16'h0000, 16'h0000, 16'h0000);
-    check_result(dc_isa_pkg::ALU_OR, 16'hffff, 16'h0000, 16'hffff);
-    check_result(dc_isa_pkg::ALU_OR, 16'haaaa, 16'h5555, 16'hffff);
-
-    check_result(3'b101, 16'hffff, 16'hffff, 16'h0000);
-    check_result(3'b110, 16'hffff, 16'hffff, 16'h0000);
-    check_result(3'b111, 16'hffff, 16'hffff, 16'h0000);
-    check_result(3'b0x1, 16'hffff, 16'hffff, 16'h0000);
-    check_result(3'b1z0, 16'hffff, 16'hffff, 16'h0000);
+    op = dc_isa_pkg::alu_op_e'(1'bx);
+    #1;
+    if (result !== 32'h0000_0000) begin
+      $fatal(1, "tb_alu: unknown operation did not select safe zero");
+    end
 
     $display("tb_alu: PASS");
     disable timeout_block;

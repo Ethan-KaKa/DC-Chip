@@ -1,7 +1,7 @@
 # DC-Chip 项目需求
 
 - 版本：v0.2
-- 状态：阶段 1 迁移中；ISA 公共层已实现，CPU/仿真器尚未迁移
+- 状态：阶段 1 迁移中；ISA 公共层与核心 RTL 已实现，仿真器尚未迁移
 - 更新日期：2026-09-11
 - ISA 规范：`docs/isa/isa.md` v0.2
 
@@ -64,16 +64,17 @@ fault 输出以 `docs/architecture/microarchitecture.md` 为准。
 | 层次 | 正式目标 | 2026-09-11 实际状态 |
 | --- | --- | --- |
 | ISA 规格 | RV32E 过渡子集 v0.2 | 已冻结于 `docs/isa/isa.md` |
-| 微架构/存储契约 | 32 位握手、数据访问、结构化 fault | 已规格化，尚未进入 RTL |
+| 微架构/存储契约 | 32 位握手、数据访问、结构化 fault | 已规格化并进入核心 RTL；仿真存储尚未实现 |
 | ISA 公共层 | 32 位 package、严格 decoder、测试编码器 | 已实现；`make test-isa` 已验证八条编码、立即数和 RV32E 寄存器限制 |
-| RTL 核心 | 16×32 位 v0.2 核心 | **未实现**；ALU、regfile 和 core 仍为 v0.1 接口，迁移窗口内不可构建 |
+| RTL 核心 | 16×32 位 v0.2 核心 | 已实现；ALU、regfile、八指令执行、双存储握手和七类 fault 通过模块级测试 |
 | 仿真器/反汇编器 | 32 位镜像、状态、trace、fault | 32 位反汇编器已实现；wrapper、loader、状态和 fault **未实现** |
-| 测试/参考模型 | v0.2 定向测试与 difftest | ISA/decoder/反汇编专项已实现；core、程序、参考模型和 difftest **未实现** |
+| 测试/参考模型 | v0.2 定向测试与 difftest | ISA、decoder、ALU、regfile 和 core 专项已实现；程序、参考模型和 difftest **未实现** |
 | 软件/SoC/FPGA | 后续阶段 | `TODO` / 未验证 |
 
-迁移期间允许公共层先于执行核心切换。步骤 2.2 后只以 `make test-isa` 作为
-已迁移范围的证据，完整 `make test` 要到步骤 2.3--2.5 恢复后才可重新作为累计
-门禁。不提供双 ISA 配置；后续迁移继续直接替换 v0.1 实现。
+迁移期间允许核心先于仿真器切换。步骤 2.3 后以 `make test-isa`、`make lint`
+和 `make test-unit` 作为已迁移范围的证据，完整 `make test` 要到步骤 2.4--2.5
+恢复后才可重新作为累计门禁。不提供双 ISA 配置；后续迁移继续直接替换 v0.1
+实现。
 
 ## 5. 阶段 1 v0.2 验收需求
 
