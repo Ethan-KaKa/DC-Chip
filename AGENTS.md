@@ -18,7 +18,7 @@
 ## 当前状态（2026-09-11）
 
 - 当前目录已初始化为 Git 仓库，默认分支为 `main`。
-- 当前已完成阶段 A–E 及仿真调试基础设施步骤 0–6：除课程原始资料、初版正式规格、ISA package、构建骨架、组合 ALU、decoder、4×16-bit regfile、单周期 CPU 核心、四个自检 testbench、Verilator DPI-C 指令存储器、C++17 端到端驱动和完整回归入口外，已加入固定 Kconfiglib v14.1.0 的 Dconfig 配置生成、Make/C++ 传递、隔离配置测试、统一 Simulation 执行引擎、ISA v0.1 最小反汇编器、编译期可选 VCD 波形及可配置 SDB 前端。
+- 当前已完成阶段 A–E 及仿真调试基础设施步骤 0–8：除课程原始资料、初版正式规格、ISA package、构建骨架、组合 ALU、decoder、4×16-bit regfile、单周期 CPU 核心、四个自检 testbench、Verilator DPI-C 指令存储器、C++17 端到端驱动和完整回归入口外，已加入固定 Kconfiglib v14.1.0 的 Dconfig 配置生成、Make/C++ 传递、隔离配置测试、统一 Simulation 执行引擎、ISA v0.1 最小反汇编器、编译期可选 VCD 波形及可配置 SDB 前端，并完成配置矩阵验证和正式文档归档。
 - `DC_SIM_SDB` 与 `DC_SIM_WAVE` 当前默认关闭；`DC_SIM_SDB=y` 时 reset 后默认进入 SDB，`--batch` 可恢复原 batch 行为；`DC_SIM_WAVE=y` 时从 reset 前开始记录 `<BUILD_DIR>/dump.vcd`，并向 SDB 注册 `info wave`、`wave on/off`。关闭相应配置时不编译对应 SDB 或 VCD 支持。独立反汇编接口只供 SDB 使用，既有 batch `--trace` 不增加反汇编字段。
 - 初版已确定采用 16 位定长自定义指令、4 个 16 位通用寄存器、8 位字地址 PC、8 条基础指令和单周期执行模式；规范以 `docs/isa/isa.md` 为准。
 - CPU 后续扩展指令、存储映射、板卡具体型号/封装、时钟频率、板级复位极性和演示传感器仍未定稿。
@@ -209,7 +209,7 @@ build/        # 生成物，不作为源码
 
 ## 构建命令状态
 
-本项目当前已实现阶段 A–E 及仿真调试基础设施步骤 0–4 的工具检查、Dconfig、RTL lint、模块测试、反汇编测试、统一执行引擎、编译期 VCD、端到端仿真和完整回归入口：
+本项目当前已实现阶段 A–E 及仿真调试基础设施步骤 0–8 的工具检查、Dconfig、RTL lint、模块测试、反汇编测试、统一执行引擎、编译期 VCD、SDB、端到端仿真、配置矩阵和完整回归入口：
 
 ```bash
 make check-tools
@@ -227,7 +227,7 @@ make test-core
 make test-unit
 make test-disasm
 make sim-build
-make sim IMG=<hex> [STEPS=<n>] [TRACE=1]
+make sim IMG=<hex> [STEPS=<n>] [TRACE=1] [BATCH=1]
 make test-simulation
 make test-integration
 make test-wave
@@ -236,8 +236,8 @@ make test
 make clean
 ```
 
-`make sim` 还支持 `BATCH=1`，用于在 SDB 构建中显式选择 batch。后续软件与
-FPGA 流程仍未实现，未实现前不得声称已经运行：
+`BATCH=1` 用于在 SDB 构建中显式选择 batch。后续软件与 FPGA 流程仍未实现，
+未实现前不得声称已经运行：
 
 ```bash
 make sw

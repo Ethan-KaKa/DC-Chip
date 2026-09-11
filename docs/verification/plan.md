@@ -1,7 +1,7 @@
 # DC-Chip 初版验证计划
 
 - 版本：v0.1
-- 状态：初版 CPU 基线及仿真调试基础设施步骤 1–6
+- 状态：初版 CPU 基线及仿真调试基础设施步骤 0–8 已完成并归档
 - 更新日期：2026-09-11
 - ISA 规范：`docs/isa/isa.md` v0.1
 - 仿真器接口：[`simulator.md`](simulator.md)
@@ -245,7 +245,7 @@ HEX 格式、batch trace、退出码或软件 ABI。Vivado 综合/实现、时�
 HEX 格式、batch 文本输出或软件 ABI。Vivado 综合/实现、时序、资源、功耗和
 真实板卡仍未验证。
 
-### 阶段 J：仿真调试基础设施步骤 5–6
+### 阶段 J：仿真调试基础设施步骤 5–8
 
 步骤 5–6 将配置期 SDB 接入正式仿真器。SDB、batch 和 VCD 复用统一
 `Simulation` 时间轴；SDB 只以单周期 `run_until()` 调用推进模型。执行前断点
@@ -257,6 +257,11 @@ SDB+WAVE。测试逐字检查提示符、帮助、状态、步进、断点和错
 SDB-off 不编译或链接 SDB/反汇编对象；在 SDB-on 上以 `--batch` 重跑 19 个
 既有 CLI 用例；并验证 WAVE 命令幂等、暂停时间戳间隙和体系结构状态等价。
 
+步骤 7 用 SDB-off、SDB-only、WAVE-only 和 SDB+WAVE 四种隔离构建完成配置、
+执行控制、SDB、波形及 batch 兼容验证。步骤 8 将稳定接口、生命周期、错误
+契约和实测结果归档到正式验证文档；临时实施计划完成使命后删除，不作为长期
+规范源。
+
 | 日期 | 命令 | 结果 | 环境或备注 |
 | --- | --- | --- | --- |
 | 2026-09-11 | `make check-tools` | PASS | GNU Make 4.3；Verilator 5.041 devel；Icarus/vvp 13.0 devel；G++ 13.3.0；Python 3.12.3 |
@@ -267,10 +272,19 @@ SDB-off 不编译或链接 SDB/反汇编对象；在 SDB-on 上以 `--batch` 重
 | 2026-09-11 | `make clean`；`make test` | PASS | 从空 `build/` 完整重建默认配置并通过 |
 | 2026-09-11 | `git diff --check` | PASS | 本步骤源码、测试、Make、Dconfig 与正式文档无 whitespace error |
 
-步骤 5–6 不实现 watchpoint、表达式、内存扫描、寄存器修改、readline、命令
+步骤 5–8 不实现 watchpoint、表达式、内存扫描、寄存器修改、readline、命令
 别名、ftrace、difftest 或新 ISA 指令，也不修改 RTL、DPI、HEX、存储映射或
 软件 ABI。Vivado 综合/实现、时序、资源、功耗和真实板卡仍未验证。
 
-## 8. 后续验证
+## 8. 后续方向与验证
 
-独立参考模型、软件测试、Vivado 综合/实现、post-implementation timing、功耗分析和真实板卡验收均为 `TODO`。ISA 扩展或核心引入流水线后，应优先增加逐提交 PC/寄存器差分检查。
+仿真调试基础设施归档后，按以下顺序推进：
+
+1. 建立集中维护的指令编码工具，并让编码器与反汇编器共享 ISA 测试向量；
+2. 实现独立的自定义 ISA 参考模型和逐提交差分测试；
+3. 决定数据存储、MMIO 地址图与取指握手扩展，并先更新正式规格；
+4. 按规格实现最小 SoC、timer/GPIO/UART 和周期性传感演示。
+
+软件测试、Vivado 综合/实现、post-implementation timing、功耗分析和真实板卡
+验收均为 `TODO`。ISA 扩展或核心引入流水线后，应优先扩大逐提交 PC/寄存器
+差分检查。
