@@ -1,6 +1,6 @@
-SPIKE_SRC_DIR ?= $(abspath ../spike)
-SPIKE_BUILD_DIR ?= $(SPIKE_SRC_DIR)/build
 BUILD_DIR ?= $(abspath ../../build)
+SPIKE_SRC_DIR ?= $(BUILD_DIR)/tools/spike/src
+SPIKE_BUILD_DIR ?= $(BUILD_DIR)/tools/spike/build
 
 INC_DIRS = $(SPIKE_SRC_DIR) \
            $(SPIKE_BUILD_DIR) \

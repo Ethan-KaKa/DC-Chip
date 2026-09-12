@@ -540,24 +540,34 @@ nvboard-run: sw $(NVBOARD_BIN)
 	printf 'Running %s on NVBoard...\n' "$$app"; \
 	"$(NVBOARD_BIN)" "$$@"
 
-SPIKE_SRC_DIR ?= $(abspath tools/spike)
-SPIKE_SO := $(BUILD_DIR)/dc-spike-so
+SPIKE_SUBMODULE_DIR ?= $(abspath tools/spike)
+SPIKE_OUT_DIR       := $(abspath $(BUILD_DIR))/tools/spike
+SPIKE_SRC_DIR       := $(SPIKE_OUT_DIR)/src
+SPIKE_BUILD_DIR     := $(SPIKE_OUT_DIR)/build
+SPIKE_SO            := $(BUILD_DIR)/dc-spike-so
 
 init-spike:
-	@if [ ! -d "tools/spike/.git" ]; then \
+	@if [ ! -d "tools/spike/.git" ] && [ ! -f "tools/spike/.git" ]; then \
 		git submodule update --init --recursive tools/spike; \
 	fi
-	@if [ -d "tools/spike" ] && git -C "$(SPIKE_SRC_DIR)" diff --quiet riscv/platform.h; then \
+	@mkdir -p "$(SPIKE_SRC_DIR)" "$(SPIKE_BUILD_DIR)"
+	@if [ ! -f "$(SPIKE_SRC_DIR)/configure" ]; then \
+		printf 'Exporting clean tools/spike source to %s...\n' "$(SPIKE_SRC_DIR)"; \
+		if [ -d "$(SPIKE_SUBMODULE_DIR)/.git" ] || [ -f "$(SPIKE_SUBMODULE_DIR)/.git" ]; then \
+			git -C "$(SPIKE_SUBMODULE_DIR)" archive HEAD | tar -x -C "$(SPIKE_SRC_DIR)"; \
+		else \
+			cp -a "$(SPIKE_SUBMODULE_DIR)/." "$(SPIKE_SRC_DIR)/"; \
+		fi; \
+		printf 'Applying patch tools/spike-diff/spike.patch...\n'; \
 		patch -d "$(SPIKE_SRC_DIR)" -p1 < tools/spike-diff/spike.patch; \
 	fi
 
 $(SPIKE_SO): init-spike
-	@if [ ! -f "$(SPIKE_SRC_DIR)/build/Makefile" ]; then \
-		mkdir -p "$(SPIKE_SRC_DIR)/build" && \
-		cd "$(SPIKE_SRC_DIR)/build" && ../configure; \
+	@if [ ! -f "$(SPIKE_BUILD_DIR)/Makefile" ]; then \
+		cd "$(SPIKE_BUILD_DIR)" && "$(SPIKE_SRC_DIR)/configure" --prefix=/usr/local; \
 	fi
-	$(MAKE) -C "$(SPIKE_SRC_DIR)/build" -j$$(nproc) CFLAGS="-fPIC -O2" CXXFLAGS="-fPIC -O2"
-	$(MAKE) -C tools/spike-diff
+	$(MAKE) -C "$(SPIKE_BUILD_DIR)" -j$$(nproc) CFLAGS="-fPIC -O2" CXXFLAGS="-fPIC -O2"
+	$(MAKE) -C tools/spike-diff SPIKE_SRC_DIR="$(SPIKE_SRC_DIR)" SPIKE_BUILD_DIR="$(SPIKE_BUILD_DIR)" BUILD_DIR="$(abspath $(BUILD_DIR))"
 
 spike-build: $(SPIKE_SO)
 
@@ -606,6 +616,7 @@ tools-clean:
 	@if [ -d tools/spike-diff ]; then \
 		$(MAKE) -C tools/spike-diff clean >/dev/null 2>&1 || true; \
 	fi
+	@rm -rf "$(BUILD_DIR)/tools/spike"
 	@rm -f "$(BUILD_DIR)/dc-spike-so"
 
 distclean: clean tools-clean
