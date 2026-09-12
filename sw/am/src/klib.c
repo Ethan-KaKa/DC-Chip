@@ -115,3 +115,183 @@ int memcmp(const void *s1, const void *s2, size_t n) {
   }
   return 0;
 }
+
+// -----------------------------------------------------------------------------
+// Formatted Output Functions
+// -----------------------------------------------------------------------------
+struct fmt_out {
+  char *buf;
+  size_t max_len;
+  size_t count;
+};
+
+static void fmt_putc(struct fmt_out *out, char c) {
+  if (out->buf != NULL) {
+    if (out->count + 1 < out->max_len) {
+      out->buf[out->count] = c;
+    }
+  } else {
+    putch(c);
+  }
+  out->count++;
+}
+
+static uint32_t udiv_mod(uint32_t dividend, uint32_t divisor, uint32_t *remainder) {
+  if (divisor == 0) {
+    if (remainder) *remainder = 0;
+    return 0;
+  }
+  uint32_t quotient = 0;
+  uint32_t rem = 0;
+  for (int i = 31; i >= 0; i--) {
+    rem = (rem << 1) | ((dividend >> (uint32_t)i) & 1u);
+    if (rem >= divisor) {
+      rem -= divisor;
+      quotient |= (1u << (uint32_t)i);
+    }
+  }
+  if (remainder) *remainder = rem;
+  return quotient;
+}
+
+int vsnprintf(char *out, size_t n, const char *fmt, va_list ap) {
+  struct fmt_out fo;
+  fo.buf = out;
+  fo.max_len = n;
+  fo.count = 0;
+
+  for (const char *p = fmt; *p != '\0'; p++) {
+    if (*p != '%') {
+      fmt_putc(&fo, *p);
+      continue;
+    }
+
+    p++;
+    if (*p == '\0') break;
+
+    switch (*p) {
+      case 'c': {
+        char c = (char)va_arg(ap, int);
+        fmt_putc(&fo, c);
+        break;
+      }
+      case 's': {
+        const char *s = va_arg(ap, const char *);
+        if (s == NULL) s = "(null)";
+        while (*s != '\0') {
+          fmt_putc(&fo, *s++);
+        }
+        break;
+      }
+      case 'd': {
+        int val = va_arg(ap, int);
+        uint32_t uval;
+        if (val < 0) {
+          fmt_putc(&fo, '-');
+          uval = (uint32_t)(-val);
+        } else {
+          uval = (uint32_t)val;
+        }
+        char num_buf[12];
+        int idx = 0;
+        if (uval == 0) {
+          num_buf[idx++] = '0';
+        } else {
+          while (uval > 0) {
+            uint32_t rem;
+            uval = udiv_mod(uval, 10, &rem);
+            num_buf[idx++] = (char)('0' + rem);
+          }
+        }
+        for (int i = idx - 1; i >= 0; i--) {
+          fmt_putc(&fo, num_buf[i]);
+        }
+        break;
+      }
+      case 'u': {
+        uint32_t uval = va_arg(ap, uint32_t);
+        char num_buf[12];
+        int idx = 0;
+        if (uval == 0) {
+          num_buf[idx++] = '0';
+        } else {
+          while (uval > 0) {
+            uint32_t rem;
+            uval = udiv_mod(uval, 10, &rem);
+            num_buf[idx++] = (char)('0' + rem);
+          }
+        }
+        for (int i = idx - 1; i >= 0; i--) {
+          fmt_putc(&fo, num_buf[i]);
+        }
+        break;
+      }
+      case 'x':
+      case 'p': {
+        uint32_t uval = va_arg(ap, uint32_t);
+        char hex_buf[10];
+        int idx = 0;
+        if (uval == 0) {
+          hex_buf[idx++] = '0';
+        } else {
+          while (uval > 0) {
+            uint32_t nibble = uval & 0xfu;
+            hex_buf[idx++] = (char)((nibble < 10) ? ('0' + nibble) : ('a' + nibble - 10));
+            uval >>= 4;
+          }
+        }
+        for (int i = idx - 1; i >= 0; i--) {
+          fmt_putc(&fo, hex_buf[i]);
+        }
+        break;
+      }
+      case '%': {
+        fmt_putc(&fo, '%');
+        break;
+      }
+      default: {
+        fmt_putc(&fo, '%');
+        fmt_putc(&fo, *p);
+        break;
+      }
+    }
+  }
+
+  if (out != NULL && n > 0) {
+    if (fo.count < n) {
+      out[fo.count] = '\0';
+    } else {
+      out[n - 1] = '\0';
+    }
+  }
+
+  return (int)fo.count;
+}
+
+int vsprintf(char *out, const char *fmt, va_list ap) {
+  return vsnprintf(out, (size_t)-1, fmt, ap);
+}
+
+int sprintf(char *out, const char *fmt, ...) {
+  va_list ap;
+  va_start(ap, fmt);
+  int ret = vsprintf(out, fmt, ap);
+  va_end(ap);
+  return ret;
+}
+
+int snprintf(char *out, size_t n, const char *fmt, ...) {
+  va_list ap;
+  va_start(ap, fmt);
+  int ret = vsnprintf(out, n, fmt, ap);
+  va_end(ap);
+  return ret;
+}
+
+int printf(const char *fmt, ...) {
+  va_list ap;
+  va_start(ap, fmt);
+  int ret = vsnprintf(NULL, 0, fmt, ap);
+  va_end(ap);
+  return ret;
+}

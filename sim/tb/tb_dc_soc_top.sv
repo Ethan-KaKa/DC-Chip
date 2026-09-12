@@ -30,6 +30,8 @@ module tb_dc_soc_top;
 
   // Peripherals
   logic [15:0] o_led;
+  logic        o_uart_tx;
+  logic        i_uart_rx;
 
   // Trace & Debug
   logic        trace_valid;
@@ -46,6 +48,8 @@ module tb_dc_soc_top;
   dc_soc_top u_soc (
     .clk              (clk),
     .rst              (rst),
+    .clk_periph       (clk),
+    .rst_periph       (rst),
     .imem_req_valid   (imem_req_valid),
     .imem_req_ready   (imem_req_ready),
     .imem_req_addr    (imem_req_addr),
@@ -65,6 +69,8 @@ module tb_dc_soc_top;
     .dram_rsp_rdata   (dram_rsp_rdata),
     .dram_rsp_error   (dram_rsp_error),
     .o_led            (o_led),
+    .o_uart_tx        (o_uart_tx),
+    .i_uart_rx        (i_uart_rx),
     .trace_valid      (trace_valid),
     .trace_pc         (trace_pc),
     .trace_inst       (trace_inst),
@@ -206,6 +212,24 @@ module tb_dc_soc_top;
       $display("tb_dc_soc_top: FAIL - DRAM readback mismatch: expected 0x123, got %h", debug_reg_data);
       $finish(1);
     end
+
+    // 8. lw x6, 8(x1) -> reads UART_STATUS 0x1000_0008 (expect tx_ready=1, rx_ready=0 -> 2)
+    fetch_inst(32'h0000_001c, 32'h0080a303);
+    @(posedge clk);
+    @(posedge clk);
+    #1;
+    debug_reg_addr = 4'd6;
+    #1;
+    if (debug_reg_data !== 32'h0000_0002) begin
+      $display("tb_dc_soc_top: FAIL - UART status mismatch: expected 0x2, got %h", debug_reg_data);
+      $finish(1);
+    end
+
+    // 9. sw x2, 0(x1) -> writes x2 to UART_TX 0x1000_0000
+    fetch_inst(32'h0000_0020, 32'h0020a023);
+    @(posedge clk);
+    @(posedge clk);
+    #1;
 
     $display("tb_dc_soc_top: PASS");
     $finish(0);

@@ -17,7 +17,10 @@ constexpr std::size_t kDramCapacityWords = 16384U;
 
 constexpr std::uint32_t kMmioBase = 0x10000000U;
 constexpr std::size_t kMmioCapacityBytes = 65536U;
-constexpr std::uint32_t kMmioLedAddr = 0x10000100U;
+constexpr std::uint32_t kMmioUartTxAddr     = 0x10000000U;
+constexpr std::uint32_t kMmioUartRxAddr     = 0x10000004U;
+constexpr std::uint32_t kMmioUartStatusAddr = 0x10000008U;
+constexpr std::uint32_t kMmioLedAddr        = 0x10000100U;
 
 constexpr std::uint32_t kTohostAddr = 0xfffffff0U;
 
@@ -56,6 +59,7 @@ void sim_irom_read(std::uint32_t addr, std::uint32_t *data);
 void sim_dram_read(std::uint32_t addr, std::uint32_t *data);
 void sim_dram_write(std::uint32_t addr, std::uint32_t data, std::uint32_t wstrb);
 std::uint32_t sim_imem_read(std::uint32_t word_addr);
+void sim_uart_putc(std::uint8_t data);
 }
 
 #endif  // DC_CHIP_SIM_VERILATOR_MEMORY_H_

@@ -1,7 +1,8 @@
 # DC-Chip v0.2 地址与存储模型
 
 - 版本：v0.2
-- 状态：阶段 5 Phase 1 完成 MMIO 基地址（`0x10000000`）与 LED 控制器（`0x10000100`）规格冻结；timer/UART 待 Phase 2/3
+- 版本：v0.2
+- 状态：阶段 5 Phase 2 完成 MMIO UART 控制器（`0x10000000`）与 CDC 异步/同步总线桥规范冻结；外设时钟在 FPGA 目标上固定为 50 MHz (`clk_periph = 50MHz`)，CPU 及片上存储（IROM/DRAM）位于独立时钟域 (`clk_cpu`)；timer/sensor 待后续子阶段
 - 更新日期：2026-09-12
 - ISA 规范：`docs/isa/isa.md` v0.2
 
@@ -68,9 +69,10 @@ bit 1，若为一则在 `jalr` 上报告 instruction address misaligned，不发
 | --- | --- | ---: | --- | --- | --- |
 | **IROM** | `0x00000000`--`0x0000ffff` | 64 KiB | **只读/可执行**（仅允许 IFU 取指，四字节对齐） | LSU 读写触发 load/store access fault；未对齐取指触发 instruction misaligned | 片上 BRAM / 仿真 IROM 数组 |
 | **DRAM** | `0x20000000`--`0x2000ffff` | 64 KiB | **可读/可写**（仅允许 LSU 访存，仿真支持扩展至 256 KiB） | IFU 取指触发 instruction access fault；未对齐 word 触发 misaligned | 片上 BRAM / 仿真 DRAM 数组 |
-| **MMIO 总区域** | `0x10000000`--`0x1000ffff` | 64 KiB | **设备寄存器**（仅允许 LSU 访存，由总线路由至各外设） | IFU 取指触发 instruction access fault；未分配外设子空间触发 access fault | SoC Interconnect 译码 |
+| **MMIO 总区域** | `0x10000000`--`0x1000ffff` | 64 KiB | **设备寄存器**（仅允许 LSU 访存，经 CDC 桥至外设路由器） | IFU 取指触发 instruction access fault；未分配外设子空间触发 access fault | SoC Interconnect 译码 |
+| **MMIO UART 控制器** | `0x10000000`--`0x1000000f` | 16 字节 | **寄存器映射**（TX只写、RX只读、STATUS只读；16字节FIFO） | 写只读/读只写或未对齐多字节读写按规范返回错误 | `rtl/periph/uart_controller.sv` |
 | **GPIO LED 控制器** | `0x10000100`--`0x10000103` | 4 字节 | **可读/可写**（低 16 位映射到 16 颗 LED，高 16 位保留为 0） | IFU 取指或未对齐多字节读写按规范返回错误 | `rtl/periph/led_controller.sv` |
-| timer/UART/sensor | `0x10000200` 等 | 待定 | 阶段 5 后续子阶段规划中 | 访问未就绪外设地址触发 access fault | `TODO` |
+| timer/sensor | `0x10000200` 等 | 待定 | 阶段 5 后续子阶段规划中 | 访问未就绪外设地址触发 access fault | `TODO` |
 
 ### 5.1 Harvard 访问隔离与 Fault 契约
 
@@ -78,12 +80,33 @@ bit 1，若为一则在 `jalr` 上报告 instruction address misaligned，不发
 - **LSU 路由与访问**：数据请求由 `soc_interconnect` 译码路由：
   - DRAM 区域：`[0x20000000, 0x20010000)` 内，转发至 DRAM 存储；
   - 私有 `tohost`：`0xfffffff0`，转发至仿真/主机监控；
-  - MMIO 区域：`[0x10000000, 0x10010000)` 内，仅已实现外设（如 `0x10000100` LED）返回正常握手响应；未实现的外设地址直接返回 `rsp_error = 1`；
+  - MMIO 区域：`[0x10000000, 0x10010000)` 内，转发至 `mmio_cdc_bridge` 与 `periph_interconnect`；已分配外设（`0x10000000` UART、`0x10000100` LED）返回正常握手响应；未实现的外设地址直接返回 `rsp_error = 1`；
   - 未映射区域或尝试对 IROM 执行 load/store：总线互连立即返回 `rsp_error = 1`；
 - 核心收到 `rsp_error` 时产生粘滞的 `load access fault`（`fault_cause = 3'd5`）或 `store access fault`（`fault_cause = 3'd7`）；
 - 跨区域非法访问不会产生任何局部数据写入或寄存器写回，故障状态保持至复位。
 
-### 5.2 GPIO LED 控制器寄存器定义（`0x10000100`）
+### 5.2 MMIO UART 控制器寄存器定义（`0x10000000`）
+
+| 偏移/地址 | 字段 | 位宽 | 读写权限 | 描述 |
+| --- | --- | ---: | --- | --- |
+| `0x10000000` | `TX_DATA[7:0]` | 8 | WO | 发送数据寄存器。写入触发压入 TX FIFO（容量 16 字节），并自动发起串行发送。对该地址的读操作返回 0。写其他位忽略。 |
+| `0x10000004` | `RX_DATA[7:0]` | 8 | RO | 接收数据寄存器。读取返回接收到的最新字节并自动清除 `rx_ready` 状态。对该地址写入返回 access error。 |
+| `0x10000008` | `STATUS[1:0]` | 2 | RO | 串口状态寄存器：<br>- `bit 0`: `rx_ready`（1 表示 RX 有有效数据待读）<br>- `bit 1`: `tx_ready`（1 表示 TX FIFO 未满，可写入；0 表示 FIFO 满）<br>- `bit 31:2`: 保留为 0。对该地址写入返回 access error。 |
+
+- **时钟与波特率**：外设固定工作在 50 MHz (`clk_periph`)，默认波特率分频比 `BAUD_DIV = 432`（即 50,000,000 / 115,200 ≈ 434，NVBoard 端标准为 432 分频），帧格式为 8N1（1 起始位、8 数据位、无校验、1 停止位）。
+- **仿真加速**：在 Verilator 仿真环境下通过 DPI-C `sim_uart_putc` 实时镜像输出到宿主机终端，无丢字风险。
+
+### 5.3 跨时钟域桥接与时钟策略（`mmio_cdc_bridge`）
+
+- **FPGA 时钟策略**：
+  - 外设时钟固定为 **50 MHz** (`clk_periph`)，用于保证 UART 波特率、定时器外设等物理时序稳定。
+  - CPU 核心与片上紧耦合存储（IROM/DRAM）运行于独立时钟域 (`clk_cpu`)，便于在 FPGA 上探索核心最高工作频率。
+- **跨时钟域桥接机制**：
+  - 由 `rtl/soc/mmio_cdc_bridge.sv` 负责 CPU 总线与外设总线之间的请求/响应同步。
+  - 参数 `ASYNC_CDC = 0`（仿真与单元测试默认）：纯组合/同源直通，零延迟惩罚。
+  - 参数 `ASYNC_CDC = 1`（FPGA 物理部署）：基于四相翻转电平（toggle-handshake）与双级寄存器同步器（2FF synchronizer）跨越时钟域，确保无亚稳态传输，请求期间 CPU 核心通过总线反压（`req_ready = 0`）自然等待。
+
+### 5.4 GPIO LED 控制器寄存器定义（`0x10000100`）
 
 | 偏移/地址 | 字段 | 位宽 | 读写权限 | 描述 |
 | --- | --- | ---: | --- | --- |

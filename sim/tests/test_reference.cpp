@@ -249,6 +249,38 @@ void test_mmio_led() {
   require(r_unmapped.faulted && r_unmapped.fault_cause == 5, "unmapped MMIO load should fault with cause 5");
 }
 
+void test_mmio_uart() {
+  dc_sim::ReferenceModel model;
+  model.load_irom({
+      enc_lui(1, 0x10000),      // lui x1, 0x10000 => x1 = 0x10000000
+      enc_lw(2, 1, 8),          // lw x2, 8(x1) => UART STATUS (expect 0x02)
+      enc_addi(3, 0, 0x41),     // addi x3, x0, 'A'
+      enc_sb(3, 1, 0),          // sb x3, 0(x1) => write byte to UART TX
+      enc_sw(3, 1, 0),          // sw x3, 0(x1) => write word to UART TX
+      enc_lw(4, 1, 4),          // lw x4, 4(x1) => read UART RX (expect 0)
+      enc_lw(5, 1, 0x200),      // lw x5, 0x200(x1) => unmapped MMIO -> fault 5
+  });
+
+  model.step(); // lui
+  auto r_status = model.step(); // lw status
+  require(r_status.committed && !r_status.faulted, "lw from UART status should commit");
+  require(model.reg(2) == 0x02, "UART status should be 0x02 (tx_ready=1)");
+
+  model.step(); // addi
+  auto r_sb = model.step(); // sb
+  require(r_sb.committed && !r_sb.faulted, "sb to UART TX should commit");
+
+  auto r_sw = model.step(); // sw
+  require(r_sw.committed && !r_sw.faulted, "sw to UART TX should commit");
+
+  auto r_rx = model.step(); // lw rx
+  require(r_rx.committed && !r_rx.faulted, "lw from UART RX should commit");
+  require(model.reg(4) == 0, "UART RX should be 0");
+
+  auto r_unmapped = model.step(); // unmapped MMIO
+  require(r_unmapped.faulted && r_unmapped.fault_cause == 5, "unmapped MMIO should fault with cause 5");
+}
+
 }  // namespace
 
 int main() {
@@ -258,6 +290,7 @@ int main() {
     test_control_and_tohost();
     test_faults();
     test_mmio_led();
+    test_mmio_uart();
     std::cout << "test_reference: PASS (all tests passed)\n";
     return 0;
   } catch (const std::exception &e) {

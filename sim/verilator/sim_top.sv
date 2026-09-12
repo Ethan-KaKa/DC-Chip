@@ -26,8 +26,10 @@ module sim_top (
   output logic [31:0] fetch_pc,
   output logic [31:0] fetch_inst,
 
-  // Peripheral output pins (LEDs)
-  output logic [15:0] o_led
+  // Peripheral output pins (LEDs and UART)
+  output logic [15:0] o_led,
+  output logic        o_uart_tx,
+  input  logic        i_uart_rx
 );
 
   logic        imem_req_valid;
@@ -53,6 +55,8 @@ module sim_top (
   dc_soc_top u_dc_soc_top (
     .clk              (clk),
     .rst              (rst),
+    .clk_periph       (clk),
+    .rst_periph       (rst),
     .imem_req_valid   (imem_req_valid),
     .imem_req_ready   (imem_req_ready),
     .imem_req_addr    (imem_req_addr),
@@ -72,6 +76,8 @@ module sim_top (
     .dram_rsp_rdata   (dram_rsp_rdata),
     .dram_rsp_error   (dram_rsp_error),
     .o_led            (o_led),
+    .o_uart_tx        (o_uart_tx),
+    .i_uart_rx        (i_uart_rx),
     .trace_valid      (trace_valid),
     .trace_pc         (trace_pc),
     .trace_inst       (trace_inst),

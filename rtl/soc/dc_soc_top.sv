@@ -5,10 +5,13 @@ module dc_soc_top #(
   parameter int unsigned DRAM_BYTES  = 65536,
   parameter logic [31:0] MMIO_BASE   = 32'h1000_0000,
   parameter int unsigned MMIO_BYTES  = 65536,
-  parameter logic [31:0] TOHOST_ADDR = 32'hffff_fff0
+  parameter logic [31:0] TOHOST_ADDR = 32'hffff_fff0,
+  parameter bit          ASYNC_CDC   = 1'b0
 ) (
   input  logic        clk,
   input  logic        rst,
+  input  logic        clk_periph,
+  input  logic        rst_periph,
 
   // Instruction memory interface (to IROM / sim_mem)
   output logic        imem_req_valid,
@@ -34,6 +37,8 @@ module dc_soc_top #(
 
   // Peripherals
   output logic [15:0] o_led,
+  output logic        o_uart_tx,
+  input  logic        i_uart_rx,
 
   // Trace & Debug
   output logic        trace_valid,
@@ -151,20 +156,150 @@ module dc_soc_top #(
     .mmio_rsp_error  (mmio_rsp_error)
   );
 
-  led_controller u_led_controller (
-    .clk       (clk),
-    .rst       (rst),
-    .req_valid (mmio_req_valid),
-    .req_ready (mmio_req_ready),
-    .req_addr  (mmio_req_addr),
-    .req_write (mmio_req_write),
-    .req_size  (mmio_req_size),
-    .req_wdata (mmio_req_wdata),
-    .req_wstrb (mmio_req_wstrb),
-    .rsp_valid (mmio_rsp_valid),
-    .rsp_ready (mmio_rsp_ready),
-    .rsp_rdata (mmio_rsp_rdata),
-    .rsp_error (mmio_rsp_error),
+  // Periph bus after CDC bridge (clk_periph domain)
+  logic        periph_bus_req_valid;
+  logic        periph_bus_req_ready;
+  logic [31:0] periph_bus_req_addr;
+  logic        periph_bus_req_write;
+  logic [1:0]  periph_bus_req_size;
+  logic [31:0] periph_bus_req_wdata;
+  logic [3:0]  periph_bus_req_wstrb;
+  logic        periph_bus_rsp_valid;
+  logic        periph_bus_rsp_ready;
+  logic [31:0] periph_bus_rsp_rdata;
+  logic        periph_bus_rsp_error;
+
+  mmio_cdc_bridge #(
+    .ASYNC_CDC (ASYNC_CDC)
+  ) u_cdc_bridge (
+    .clk_cpu          (clk),
+    .rst_cpu          (rst),
+    .cpu_req_valid    (mmio_req_valid),
+    .cpu_req_ready    (mmio_req_ready),
+    .cpu_req_addr     (mmio_req_addr),
+    .cpu_req_write    (mmio_req_write),
+    .cpu_req_size     (mmio_req_size),
+    .cpu_req_wdata    (mmio_req_wdata),
+    .cpu_req_wstrb    (mmio_req_wstrb),
+    .cpu_rsp_valid    (mmio_rsp_valid),
+    .cpu_rsp_ready    (mmio_rsp_ready),
+    .cpu_rsp_rdata    (mmio_rsp_rdata),
+    .cpu_rsp_error    (mmio_rsp_error),
+    .clk_periph       (clk_periph),
+    .rst_periph       (rst_periph),
+    .periph_req_valid (periph_bus_req_valid),
+    .periph_req_ready (periph_bus_req_ready),
+    .periph_req_addr  (periph_bus_req_addr),
+    .periph_req_write (periph_bus_req_write),
+    .periph_req_size  (periph_bus_req_size),
+    .periph_req_wdata (periph_bus_req_wdata),
+    .periph_req_wstrb (periph_bus_req_wstrb),
+    .periph_rsp_valid (periph_bus_rsp_valid),
+    .periph_rsp_ready (periph_bus_rsp_ready),
+    .periph_rsp_rdata (periph_bus_rsp_rdata),
+    .periph_rsp_error (periph_bus_rsp_error)
+  );
+
+  // Per-peripheral interconnect buses
+  logic        uart_req_valid, uart_req_ready;
+  logic [31:0] uart_req_addr;
+  logic        uart_req_write;
+  logic [1:0]  uart_req_size;
+  logic [31:0] uart_req_wdata;
+  logic [3:0]  uart_req_wstrb;
+  logic        uart_rsp_valid, uart_rsp_ready;
+  logic [31:0] uart_rsp_rdata;
+  logic        uart_rsp_error;
+
+  logic        led_req_valid, led_req_ready;
+  logic [31:0] led_req_addr;
+  logic        led_req_write;
+  logic [1:0]  led_req_size;
+  logic [31:0] led_req_wdata;
+  logic [3:0]  led_req_wstrb;
+  logic        led_rsp_valid, led_rsp_ready;
+  logic [31:0] led_rsp_rdata;
+  logic        led_rsp_error;
+
+  periph_interconnect #(
+    .UART_BASE (32'h1000_0000),
+    .LED_BASE  (32'h1000_0100)
+  ) u_periph_interconnect (
+    .clk             (clk_periph),
+    .rst             (rst_periph),
+    .s_req_valid     (periph_bus_req_valid),
+    .s_req_ready     (periph_bus_req_ready),
+    .s_req_addr      (periph_bus_req_addr),
+    .s_req_write     (periph_bus_req_write),
+    .s_req_size      (periph_bus_req_size),
+    .s_req_wdata     (periph_bus_req_wdata),
+    .s_req_wstrb     (periph_bus_req_wstrb),
+    .s_rsp_valid     (periph_bus_rsp_valid),
+    .s_rsp_ready     (periph_bus_rsp_ready),
+    .s_rsp_rdata     (periph_bus_rsp_rdata),
+    .s_rsp_error     (periph_bus_rsp_error),
+    .uart_req_valid  (uart_req_valid),
+    .uart_req_ready  (uart_req_ready),
+    .uart_req_addr   (uart_req_addr),
+    .uart_req_write  (uart_req_write),
+    .uart_req_size   (uart_req_size),
+    .uart_req_wdata  (uart_req_wdata),
+    .uart_req_wstrb  (uart_req_wstrb),
+    .uart_rsp_valid  (uart_rsp_valid),
+    .uart_rsp_ready  (uart_rsp_ready),
+    .uart_rsp_rdata  (uart_rsp_rdata),
+    .uart_rsp_error  (uart_rsp_error),
+    .led_req_valid   (led_req_valid),
+    .led_req_ready   (led_req_ready),
+    .led_req_addr    (led_req_addr),
+    .led_req_write   (led_req_write),
+    .led_req_size    (led_req_size),
+    .led_req_wdata   (led_req_wdata),
+    .led_req_wstrb   (led_req_wstrb),
+    .led_rsp_valid   (led_rsp_valid),
+    .led_rsp_ready   (led_rsp_ready),
+    .led_rsp_rdata   (led_rsp_rdata),
+    .led_rsp_error   (led_rsp_error)
+  );
+
+  uart_controller #(
+    .ADDR_BASE  (32'h1000_0000),
+    .BAUD_DIV   (432),
+    .FIFO_DEPTH (16)
+  ) u_uart_controller (
+    .clk       (clk_periph),
+    .rst       (rst_periph),
+    .req_valid (uart_req_valid),
+    .req_ready (uart_req_ready),
+    .req_addr  (uart_req_addr),
+    .req_write (uart_req_write),
+    .req_size  (uart_req_size),
+    .req_wdata (uart_req_wdata),
+    .req_wstrb (uart_req_wstrb),
+    .rsp_valid (uart_rsp_valid),
+    .rsp_ready (uart_rsp_ready),
+    .rsp_rdata (uart_rsp_rdata),
+    .rsp_error (uart_rsp_error),
+    .o_uart_tx (o_uart_tx),
+    .i_uart_rx (i_uart_rx)
+  );
+
+  led_controller #(
+    .ADDR_BASE (32'h1000_0100)
+  ) u_led_controller (
+    .clk       (clk_periph),
+    .rst       (rst_periph),
+    .req_valid (led_req_valid),
+    .req_ready (led_req_ready),
+    .req_addr  (led_req_addr),
+    .req_write (led_req_write),
+    .req_size  (led_req_size),
+    .req_wdata (led_req_wdata),
+    .req_wstrb (led_req_wstrb),
+    .rsp_valid (led_rsp_valid),
+    .rsp_ready (led_rsp_ready),
+    .rsp_rdata (led_rsp_rdata),
+    .rsp_error (led_rsp_error),
     .o_led     (o_led)
   );
 

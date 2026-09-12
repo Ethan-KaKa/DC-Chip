@@ -38,8 +38,11 @@ UNIT_TBS := sim/tb/tb_alu.sv \
 	sim/tb/tb_decoder.sv \
 	sim/tb/tb_regfile.sv \
 	sim/tb/tb_cpu_core.sv
-PERIPH_RTL := rtl/periph/led_controller.sv
-SOC_RTL := rtl/soc/soc_interconnect.sv \
+PERIPH_RTL := rtl/periph/led_controller.sv \
+	rtl/periph/uart_controller.sv
+SOC_RTL := rtl/soc/mmio_cdc_bridge.sv \
+	rtl/soc/periph_interconnect.sv \
+	rtl/soc/soc_interconnect.sv \
 	rtl/soc/dc_soc_top.sv
 MEM_RTL := sim/verilator/sim_mem.sv
 MEM_TEST_CPP := sim/tests/test_memory.cpp
@@ -105,7 +108,7 @@ NVBOARD_LDFLAGS := $(NVBOARD_ARCHIVE) $(shell sdl2-config --libs 2>/dev/null) -l
 
 .PHONY: check-tools help defconfig menuconfig config-show test-config \
 	lint-isa lint-comb lint lint-mem test-isa test-alu test-decoder test-regfile test-core \
-	test-led test-interconnect test-soc test-unit \
+	test-led test-uart test-periph-interconnect test-cdc test-interconnect test-soc test-unit \
 	test-disasm test-memory test-reference sim-build sim test-simulation test-difftest \
 	test-integration test-wave test-sdb sw test-sw test \
 	nvboard-build nvboard-run clean
@@ -214,6 +217,15 @@ $(UNIT_DIR)/tb_cpu_core.vvp: $(CORE_RTL) sim/tb/tb_cpu_core.sv | $(UNIT_DIR)
 $(UNIT_DIR)/tb_led_controller.vvp: rtl/periph/led_controller.sv sim/tb/tb_led_controller.sv | $(UNIT_DIR)
 	$(IVERILOG) -g2012 -s tb_led_controller -Irtl/periph -o $@ $^
 
+$(UNIT_DIR)/tb_uart_controller.vvp: rtl/periph/uart_controller.sv sim/tb/tb_uart_controller.sv | $(UNIT_DIR)
+	$(IVERILOG) -g2012 -s tb_uart_controller -Irtl/periph -o $@ $^
+
+$(UNIT_DIR)/tb_periph_interconnect.vvp: rtl/soc/periph_interconnect.sv sim/tb/tb_periph_interconnect.sv | $(UNIT_DIR)
+	$(IVERILOG) -g2012 -s tb_periph_interconnect -Irtl/soc -o $@ $^
+
+$(UNIT_DIR)/tb_mmio_cdc_bridge.vvp: rtl/soc/mmio_cdc_bridge.sv sim/tb/tb_mmio_cdc_bridge.sv | $(UNIT_DIR)
+	$(IVERILOG) -g2012 -s tb_mmio_cdc_bridge -Irtl/soc -o $@ $^
+
 $(UNIT_DIR)/tb_soc_interconnect.vvp: rtl/soc/soc_interconnect.sv sim/tb/tb_soc_interconnect.sv | $(UNIT_DIR)
 	$(IVERILOG) -g2012 -s tb_soc_interconnect -Irtl/soc -o $@ $^
 
@@ -235,6 +247,15 @@ test-core: $(UNIT_DIR)/tb_cpu_core.vvp
 test-led: $(UNIT_DIR)/tb_led_controller.vvp
 	$(VVP) $<
 
+test-uart: $(UNIT_DIR)/tb_uart_controller.vvp
+	$(VVP) $<
+
+test-periph-interconnect: $(UNIT_DIR)/tb_periph_interconnect.vvp
+	$(VVP) $<
+
+test-cdc: $(UNIT_DIR)/tb_mmio_cdc_bridge.vvp
+	$(VVP) $<
+
 test-interconnect: $(UNIT_DIR)/tb_soc_interconnect.vvp
 	$(VVP) $<
 
@@ -247,6 +268,9 @@ test-unit:
 	$(MAKE) --no-print-directory test-regfile
 	$(MAKE) --no-print-directory test-core
 	$(MAKE) --no-print-directory test-led
+	$(MAKE) --no-print-directory test-uart
+	$(MAKE) --no-print-directory test-periph-interconnect
+	$(MAKE) --no-print-directory test-cdc
 	$(MAKE) --no-print-directory test-interconnect
 	$(MAKE) --no-print-directory test-soc
 
@@ -474,21 +498,21 @@ nvboard-run: sw $(NVBOARD_BIN)
 		printf 'error: instruction image not found: %s. Build with make sw.\n' "$$inst_bin" >&2; \
 		exit 1; \
 	fi; \
-	cmd="$(NVBOARD_BIN) --image-inst $$inst_bin"; \
+	set -- --image-inst "$$inst_bin"; \
 	if [ -f "$$data_bin" ] && [ -s "$$data_bin" ]; then \
-		cmd="$$cmd --image-data $$data_bin"; \
+		set -- "$$@" --image-data "$$data_bin"; \
 	fi; \
 	if [ '$(BATCH)' = 1 ]; then \
-		cmd="$$cmd --batch"; \
+		set -- "$$@" --batch; \
 	fi; \
 	if [ -n '$(strip $(STEPS))' ]; then \
-		cmd="$$cmd --steps '$(STEPS)'"; \
+		set -- "$$@" --steps '$(strip $(STEPS))'; \
 	fi; \
 	if [ -n '$(strip $(MAX_CYCLES))' ]; then \
-		cmd="$$cmd --max-cycles '$(MAX_CYCLES)'"; \
+		set -- "$$@" --max-cycles '$(strip $(MAX_CYCLES))'; \
 	fi; \
 	printf 'Running %s on NVBoard...\n' "$$app"; \
-	$$cmd
+	"$(NVBOARD_BIN)" "$$@"
 
 test:
 	$(MAKE) --no-print-directory test-config
@@ -538,9 +562,12 @@ help:
 		'  make test-regfile Run the self-checking register-file testbench' \
 		'  make test-core    Run the self-checking CPU-core testbench' \
 		'  make test-led     Run the self-checking LED controller testbench' \
+		'  make test-uart    Run the self-checking UART controller testbench' \
+		'  make test-periph-interconnect Run the self-checking periph interconnect testbench' \
+		'  make test-cdc     Run the self-checking MMIO CDC bridge testbench' \
 		'  make test-interconnect Run the self-checking interconnect testbench' \
 		'  make test-soc     Run the self-checking SoC top testbench' \
-		'  make test-unit    Run all seven unit testbenches in order' \
+		'  make test-unit    Run all ten unit testbenches in order' \
 		'  make test-disasm  Test directed v0.2 ISA disassemblies' \
 		'  make test-memory  Run self-checking simulation memory tests' \
 		'  make test-reference Run self-checking C++ reference model tests' \

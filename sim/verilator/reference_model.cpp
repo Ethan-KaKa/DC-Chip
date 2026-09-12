@@ -437,6 +437,10 @@ ReferenceStepResult ReferenceModel::step() {
             rdata = read_dram_word(addr);
           } else if (is_mmio && addr == kMmioLedAddr) {
             rdata = static_cast<std::uint32_t>(led_reg_);
+          } else if (is_mmio && addr == kMmioUartStatusAddr) {
+            rdata = 0x00000002U; // tx_ready = 1, rx_ready = 0
+          } else if (is_mmio && (addr == kMmioUartRxAddr || addr == kMmioUartTxAddr)) {
+            rdata = 0;
           } else {
             return fail_load_access();
           }
@@ -448,6 +452,10 @@ ReferenceStepResult ReferenceModel::step() {
             rdata = static_cast<std::uint32_t>(read_dram_byte(addr));
           } else if (is_mmio && (addr == kMmioLedAddr || addr == kMmioLedAddr + 1U)) {
             rdata = static_cast<std::uint32_t>((led_reg_ >> ((addr & 1U) * 8U)) & 0xffU);
+          } else if (is_mmio && addr == kMmioUartStatusAddr) {
+            rdata = 0x02U;
+          } else if (is_mmio && (addr == kMmioUartRxAddr || addr == kMmioUartTxAddr)) {
+            rdata = 0;
           } else {
             return fail_load_access();
           }
@@ -534,6 +542,8 @@ ReferenceStepResult ReferenceModel::step() {
           write_dram_word(addr, regs_[rs2]);
         } else if (is_mmio && addr == kMmioLedAddr) {
           led_reg_ = static_cast<std::uint16_t>(regs_[rs2] & 0xffffU);
+        } else if (is_mmio && addr == kMmioUartTxAddr) {
+          // Accepted MMIO UART TX write
         } else {
           return fail_store_access();
         }
@@ -579,6 +589,8 @@ ReferenceStepResult ReferenceModel::step() {
           led_reg_ = (led_reg_ & 0xff00U) | static_cast<std::uint16_t>(regs_[rs2] & 0xffU);
         } else if (is_mmio && addr == kMmioLedAddr + 1U) {
           led_reg_ = (led_reg_ & 0x00ffU) | static_cast<std::uint16_t>((regs_[rs2] & 0xffU) << 8U);
+        } else if (is_mmio && addr == kMmioUartTxAddr) {
+          // Accepted MMIO UART TX byte write
         } else {
           return fail_store_access();
         }

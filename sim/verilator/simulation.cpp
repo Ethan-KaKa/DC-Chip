@@ -15,6 +15,7 @@
 #include <nvboard.h>
 void nvboard_bind_all_pins(Vsim_top *top);
 #endif
+#include <iostream>
 #include <stdexcept>
 
 namespace dc_sim {
@@ -295,3 +296,12 @@ const std::string &Simulation::wave_path() const {
 #endif
 
 }  // namespace dc_sim
+
+extern "C" {
+
+void sim_uart_putc(std::uint8_t data) {
+  std::cout.put(static_cast<char>(data));
+  std::cout.flush();
+}
+
+}

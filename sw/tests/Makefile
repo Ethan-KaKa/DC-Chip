@@ -25,11 +25,12 @@ LDFLAGS := -nostdlib -static -mcmodel=medlow \
 	-lgcc
 
 AM_OBJS := $(BUILD_DIR)/am/start.S.o $(BUILD_DIR)/am/trm.c.o $(BUILD_DIR)/am/klib.c.o $(BUILD_DIR)/am/ioe.c.o
+AM_SRCS := $(wildcard $(AM_ROOT)/src/*) $(wildcard $(AM_ROOT)/include/*)
 
 TESTS := trm_smoke trm_exit_code calc_add dram_access heap_smoke jump_table \
 	cpu_dummy cpu_add cpu_sub_longlong cpu_bit cpu_bubble_sort cpu_select_sort \
 	cpu_fib cpu_recursion cpu_string cpu_leap_year cpu_if_else cpu_load_store \
-	led_marquee
+	led_marquee uart_hello
 
 TARGET_INST_BINS := $(foreach t,$(TESTS),$(TEST_BUILD_DIR)/$(t)/$(t).inst.bin)
 
@@ -37,7 +38,7 @@ TARGET_INST_BINS := $(foreach t,$(TESTS),$(TEST_BUILD_DIR)/$(t)/$(t).inst.bin)
 
 all: $(TARGET_INST_BINS)
 
-$(AM_OBJS):
+$(AM_OBJS): $(AM_SRCS)
 	@$(MAKE) -C $(AM_ROOT) BUILD_DIR=$(BUILD_DIR)
 
 # Rule for each test
