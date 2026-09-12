@@ -1,7 +1,7 @@
 #ifndef DC_CHIP_SIM_VERILATOR_DIFFTEST_H_
 #define DC_CHIP_SIM_VERILATOR_DIFFTEST_H_
 
-#include "reference_model.h"
+#include "ref_backend.h"
 #include "simulation.h"
 
 #include <cstdint>
@@ -20,7 +20,7 @@ struct DifftestMismatch {
 
 class Difftest {
  public:
-  Difftest(Simulation &dut, ReferenceModel &ref);
+  Difftest(Simulation &dut, IRefBackend &ref);
 
   // Sync reference memory with simulation memory
   void sync_memory();
@@ -38,7 +38,7 @@ class Difftest {
 
  private:
   Simulation &dut_;
-  ReferenceModel &ref_;
+  IRefBackend &ref_;
   bool last_tohost_exit_ = false;
 };
 

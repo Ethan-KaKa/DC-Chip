@@ -58,7 +58,7 @@ SIM_CLI_CPP := sim/verilator/numeric.cpp \
 SIM_TEST_CPP := sim/tests/test_simulation.cpp
 REF_CPP := sim/verilator/reference_model.cpp sim/verilator/memory.cpp
 REF_TEST_CPP := sim/tests/test_reference.cpp
-DIFF_CPP := sim/verilator/difftest.cpp $(REF_CPP)
+DIFF_CPP := sim/verilator/difftest.cpp sim/verilator/dynamic_ref_backend.cpp $(REF_CPP)
 DIFF_TEST_CPP := sim/tests/test_difftest.cpp
 DISASM_CPP := sim/verilator/disasm.cpp
 DISASM_TEST_CPP := sim/tests/test_disasm.cpp
@@ -85,6 +85,7 @@ endif
 
 ifeq ($(CONFIG_DC_SIM_DIFFTEST),y)
 SIM_CLI_CPP += sim/verilator/reference_model.cpp \
+	sim/verilator/dynamic_ref_backend.cpp \
 	sim/verilator/difftest.cpp
 endif
 SIM_CPP := $(SIM_ENGINE_CPP) $(SIM_CLI_CPP)
@@ -93,8 +94,10 @@ ifeq ($(CONFIG_DC_SIM_WAVE),y)
 SIM_TRACE_FLAGS := --trace
 endif
 
-YSYX_WORKBENCH ?= /home/kaka/ysyx-workbench
-NVBOARD_HOME ?= $(YSYX_WORKBENCH)/nvboard
+NVBOARD_HOME ?= $(abspath tools/nvboard)
+ifneq ($(wildcard $(abspath tools/nvboard)/scripts/nvboard.mk),)
+override NVBOARD_HOME := $(abspath tools/nvboard)
+endif
 NVBOARD_NXDC := constr/nvboard.nxdc
 NVBOARD_DIR := $(BUILD_DIR)/nvboard-sim
 NVBOARD_CONFIG_DIR := $(NVBOARD_DIR)/config
@@ -116,7 +119,8 @@ NVBOARD_LDFLAGS := $(NVBOARD_ARCHIVE) $(shell sdl2-config --libs 2>/dev/null) -l
 	test-led test-uart test-periph-interconnect test-cdc test-interconnect test-soc test-unit \
 	test-disasm test-memory test-reference sim-build sim test-simulation test-difftest \
 	test-integration test-wave test-sdb sw test-sw test \
-	nvboard-build nvboard-run clean
+	init-nvboard nvboard-build nvboard-run \
+	init-spike spike-build test-difftest-spike clean
 
 check-tools:
 	@set -eu; \
@@ -332,6 +336,7 @@ $(SIM_BIN): $(SIM_RTL) $(SIM_CPP) sim/verilator/memory.h \
 		$(SIM_TRACE_FLAGS) \
 		--Mdir $(SIM_DIR) \
 		-CFLAGS "-std=c++17 $(SIM_CONFIG_CXXFLAGS)" \
+		-LDFLAGS "-ldl" \
 		$(SIM_RTL) $(SIM_CPP)
 	@verilator_root=$$($(VERILATOR) --getenv VERILATOR_ROOT); \
 	CCACHE_DISABLE=1 $(CXX) $(SIM_CXXFLAGS) -fsyntax-only \
@@ -379,6 +384,7 @@ $(DIFF_TEST_BIN): $(SIM_RTL) $(SIM_ENGINE_CPP) $(DIFF_CPP) $(DIFF_TEST_CPP) \
 		$(SIM_TRACE_FLAGS) \
 		--Mdir $(DIFF_TEST_DIR) -o test_difftest \
 		-CFLAGS "-std=c++17 $(SIM_CONFIG_CXXFLAGS)" \
+		-LDFLAGS "-ldl" \
 		$(SIM_RTL) $(SIM_ENGINE_CPP) $(DIFF_CPP) $(DIFF_TEST_CPP)
 	@verilator_root=$$($(VERILATOR) --getenv VERILATOR_ROOT); \
 	CCACHE_DISABLE=1 $(CXX) $(SIM_CXXFLAGS) -fsyntax-only \
@@ -464,17 +470,22 @@ test-sdb:
 		--iverilog "$(IVERILOG)" --vvp "$(VVP)" \
 		--cxx "$(CXX)" --python "$(PYTHON)"
 
+init-nvboard:
+	@if [ ! -d "tools/nvboard/.git" ]; then \
+		git submodule update --init --recursive tools/nvboard; \
+	fi
+
 $(NVBOARD_ARCHIVE):
-	@if [ ! -d "$(NVBOARD_HOME)" ]; then \
-		printf 'error: NVBOARD_HOME not found at %s. Set NVBOARD_HOME or YSYX_WORKBENCH.\n' '$(NVBOARD_HOME)' >&2; \
+	@if [ ! -d "$(NVBOARD_HOME)" ] || [ ! -f "$(NVBOARD_HOME)/scripts/nvboard.mk" ]; then \
+		printf 'error: NVBOARD_HOME not found or uninitialized at %s. Run "make init-nvboard" or set NVBOARD_HOME.\n' '$(NVBOARD_HOME)' >&2; \
 		exit 1; \
 	fi
-	$(MAKE) -C $(NVBOARD_HOME) nvboard-archive
+	$(MAKE) -f $(NVBOARD_HOME)/scripts/nvboard.mk -C $(NVBOARD_HOME) nvboard-archive NVBOARD_HOME=$(NVBOARD_HOME)
 
 $(NVBOARD_BIND_CPP): $(NVBOARD_NXDC)
 	@mkdir -p $(dir $@)
-	@if [ ! -d "$(NVBOARD_HOME)" ]; then \
-		printf 'error: NVBOARD_HOME not found at %s. Set NVBOARD_HOME or YSYX_WORKBENCH.\n' '$(NVBOARD_HOME)' >&2; \
+	@if [ ! -d "$(NVBOARD_HOME)" ] || [ ! -f "$(NVBOARD_HOME)/scripts/auto_pin_bind.py" ]; then \
+		printf 'error: NVBOARD_HOME not found or uninitialized at %s. Run "make init-nvboard" or set NVBOARD_HOME.\n' '$(NVBOARD_HOME)' >&2; \
 		exit 1; \
 	fi
 	$(PYTHON) $(NVBOARD_HOME)/scripts/auto_pin_bind.py $< $@
@@ -521,6 +532,31 @@ nvboard-run: sw $(NVBOARD_BIN)
 	fi; \
 	printf 'Running %s on NVBoard...\n' "$$app"; \
 	"$(NVBOARD_BIN)" "$$@"
+
+SPIKE_SRC_DIR ?= $(abspath tools/spike)
+SPIKE_SO := $(BUILD_DIR)/dc-spike-so
+
+init-spike:
+	@if [ ! -d "tools/spike/.git" ]; then \
+		git submodule update --init --recursive tools/spike; \
+	fi
+	@if [ -d "tools/spike" ] && git -C "$(SPIKE_SRC_DIR)" diff --quiet riscv/platform.h; then \
+		patch -d "$(SPIKE_SRC_DIR)" -p1 < tools/spike-diff/spike.patch; \
+	fi
+
+$(SPIKE_SO): init-spike
+	@if [ ! -f "$(SPIKE_SRC_DIR)/build/Makefile" ]; then \
+		mkdir -p "$(SPIKE_SRC_DIR)/build" && \
+		cd "$(SPIKE_SRC_DIR)/build" && ../configure; \
+	fi
+	$(MAKE) -C "$(SPIKE_SRC_DIR)/build" -j$$(nproc) CFLAGS="-fPIC -O2" CXXFLAGS="-fPIC -O2"
+	$(MAKE) -C tools/spike-diff
+
+spike-build: $(SPIKE_SO)
+
+test-difftest-spike: sw $(DIFF_TEST_BIN) $(SPIKE_SO)
+	@mkdir -p "$(abspath $(BUILD_DIR))/test-fixtures/difftest"
+	@DIFF_REF_SO="$(abspath $(SPIKE_SO))" $(DIFF_TEST_BIN) "$(abspath $(BUILD_DIR))/test-fixtures/difftest"
 
 test:
 	$(MAKE) --no-print-directory test-config
@@ -585,6 +621,8 @@ help:
 		'  make sim [IMG=<hex|bin>] [DATA_IMG=<bin>] [APP=<name>] [STEPS=<n>] [TRACE=1] [BATCH=1]' \
 		'  make test-simulation  Test the reusable Simulation engine' \
 		'  make test-difftest    Run lockstep differential testing' \
+		'  make spike-build      Build official Spike Golden Model shared library' \
+		'  make test-difftest-spike Run software regression against official Spike Golden Model' \
 		'  make test-integration  Run positive and negative integration cases' \
 		'  make test-wave    Test isolated WAVE-off/on simulator builds' \
 		'  make test-sdb     Test isolated SDB-off/on and SDB+WAVE builds' \

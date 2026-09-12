@@ -1,0 +1,8 @@
+[submodule "tools/nvboard"]
+	path = tools/nvboard
+	url = https://github.com/NJU-ProjectN/nvboard.git
+	branch = master
+[submodule "tools/spike"]
+	path = tools/spike
+	url = https://github.com/riscv-software-src/riscv-isa-sim.git
+	branch = master

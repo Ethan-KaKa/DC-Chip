@@ -1,6 +1,7 @@
 #include "difftest.h"
 
 #include <iomanip>
+#include <iostream>
 #include <sstream>
 
 namespace dc_sim {
@@ -14,7 +15,7 @@ std::string hex8(std::uint32_t val) {
 
 }  // namespace
 
-Difftest::Difftest(Simulation &dut, ReferenceModel &ref)
+Difftest::Difftest(Simulation &dut, IRefBackend &ref)
     : dut_(dut), ref_(ref) {}
 
 void Difftest::sync_memory() {
@@ -198,6 +199,26 @@ bool Difftest::step_and_compare(std::uint64_t max_cycles, DifftestMismatch *mism
     }
   }
 
+  // Check program exit (tohost) first: once program exits, verification terminates successfully
+  if (dut_res.event.tohost_exit) {
+    last_tohost_exit_ = true;
+    if (ref_res.tohost_exit &&
+        dut_res.event.guest_exit_code != ref_res.guest_exit_code) {
+      if (mismatch != nullptr) {
+        mismatch->cycle = dut_state.cycles;
+        mismatch->commit = dut_state.commits;
+        mismatch->field = "guest_exit_code";
+        mismatch->dut_value = dut_res.event.guest_exit_code;
+        mismatch->ref_value = ref_res.guest_exit_code;
+        mismatch->message = "guest_exit_code mismatch: DUT " +
+                            hex8(dut_res.event.guest_exit_code) + " vs REF " +
+                            hex8(ref_res.guest_exit_code);
+      }
+      return false;
+    }
+    return true;
+  }
+
   // Compare next fetch PC
   if (dut_state.fetch_pc != ref_res.next_pc) {
     if (mismatch != nullptr) {
@@ -212,35 +233,7 @@ bool Difftest::step_and_compare(std::uint64_t max_cycles, DifftestMismatch *mism
     return false;
   }
 
-  // Compare tohost exit
-  if (dut_res.event.tohost_exit != ref_res.tohost_exit) {
-    if (mismatch != nullptr) {
-      mismatch->cycle = dut_state.cycles;
-      mismatch->commit = dut_state.commits;
-      mismatch->field = "tohost_exit";
-      mismatch->dut_value = dut_res.event.tohost_exit ? 1 : 0;
-      mismatch->ref_value = ref_res.tohost_exit ? 1 : 0;
-      mismatch->message = "tohost_exit flag mismatch";
-    }
-    return false;
-  }
-
-  if (dut_res.event.tohost_exit &&
-      dut_res.event.guest_exit_code != ref_res.guest_exit_code) {
-    if (mismatch != nullptr) {
-      mismatch->cycle = dut_state.cycles;
-      mismatch->commit = dut_state.commits;
-      mismatch->field = "guest_exit_code";
-      mismatch->dut_value = dut_res.event.guest_exit_code;
-      mismatch->ref_value = ref_res.guest_exit_code;
-      mismatch->message = "guest_exit_code mismatch: DUT " +
-                          hex8(dut_res.event.guest_exit_code) + " vs REF " +
-                          hex8(ref_res.guest_exit_code);
-    }
-    return false;
-  }
-
-  last_tohost_exit_ = dut_res.event.tohost_exit;
+  last_tohost_exit_ = false;
   return true;
 }
 

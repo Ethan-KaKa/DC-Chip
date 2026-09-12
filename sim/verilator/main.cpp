@@ -6,11 +6,13 @@
 #endif
 #ifdef CONFIG_DC_SIM_DIFFTEST
 #include "difftest.h"
+#include "dynamic_ref_backend.h"
 #include "reference_model.h"
 #endif
 
 #include <array>
 #include <cstdint>
+#include <cstdlib>
 #include <iomanip>
 #include <iostream>
 #include <limits>
@@ -32,6 +34,7 @@ constexpr int kGuestFailure = 5;
 struct Options {
   std::string inst_image_path;
   std::string data_image_path;
+  std::string diff_ref_so_path;
   dc_sim::ImageFormat format = dc_sim::ImageFormat::kAuto;
   std::optional<std::uint64_t> steps;
   std::optional<std::uint64_t> max_cycles;
@@ -54,6 +57,7 @@ void print_usage(std::ostream &output) {
       << "  --trace                     Print one line per committed instruction\n"
       << "  --expect <name=value>       Check x0..x15 or pc\n"
       << "  --batch                     Use non-interactive batch execution\n"
+      << "  --diff-ref-so <path>        Path to external reference shared library (.so)\n"
       << "  --help                      Show this help (must be the only option)\n";
 }
 
@@ -240,6 +244,13 @@ bool parse_options(int argc, char **argv, Options *options,
       saw_batch = true;
       continue;
     }
+    if (argument == "--diff-ref-so") {
+      if (!take_value(argc, argv, &index, argument, &value, error)) {
+        return false;
+      }
+      options->diff_ref_so_path = std::string(value);
+      continue;
+    }
 
     *error = "unknown argument '" + std::string(argument) + "'";
     return false;
@@ -387,8 +398,27 @@ int main(int argc, char **argv) {
   std::uint32_t final_guest_exit_code = 0;
 
 #ifdef CONFIG_DC_SIM_DIFFTEST
-  dc_sim::ReferenceModel reference_model;
-  dc_sim::Difftest difftest(*simulation, reference_model);
+  std::unique_ptr<dc_sim::IRefBackend> ref_backend;
+  std::string ref_so = options.diff_ref_so_path;
+  if (ref_so.empty()) {
+    const char *env_so = std::getenv("DIFF_REF_SO");
+    if (env_so != nullptr && env_so[0] != '\0') {
+      ref_so = env_so;
+    }
+  }
+
+  if (!ref_so.empty()) {
+    try {
+      ref_backend = std::make_unique<dc_sim::DynamicRefBackend>(ref_so);
+    } catch (const std::exception &e) {
+      std::cerr << "error: failed to load dynamic reference model: " << e.what() << '\n';
+      return kInputError;
+    }
+  } else {
+    ref_backend = std::make_unique<dc_sim::ReferenceModel>();
+  }
+
+  dc_sim::Difftest difftest(*simulation, *ref_backend);
   difftest.sync_memory();
   dc_sim::DifftestMismatch mismatch;
 #endif

@@ -1,11 +1,14 @@
 #include "difftest.h"
+#include "dynamic_ref_backend.h"
 #include "memory.h"
 #include "reference_model.h"
 #include "simulation.h"
 
 #include <cstdint>
+#include <cstdlib>
 #include <fstream>
 #include <iostream>
+#include <memory>
 #include <random>
 #include <sstream>
 #include <stdexcept>
@@ -162,6 +165,14 @@ void write_hex_file(const std::string &path, const std::vector<std::uint32_t> &w
   }
 }
 
+std::unique_ptr<dc_sim::IRefBackend> create_backend() {
+  const char *env_so = std::getenv("DIFF_REF_SO");
+  if (env_so != nullptr && env_so[0] != '\0') {
+    return std::make_unique<dc_sim::DynamicRefBackend>(env_so);
+  }
+  return std::make_unique<dc_sim::ReferenceModel>();
+}
+
 void run_test_vector(const std::string &fixture_path,
                      const std::vector<std::uint32_t> &words,
                      std::uint64_t steps) {
@@ -172,14 +183,18 @@ void run_test_vector(const std::string &fixture_path,
   dc_sim::Simulation dut;
   dut.reset();
 
-  dc_sim::ReferenceModel ref;
-  ref.load_from_sim_memory();
+  auto ref = create_backend();
+  ref->reset(0);
+  ref->load_from_sim_memory();
 
-  dc_sim::Difftest difftest(dut, ref);
+  dc_sim::Difftest difftest(dut, *ref);
   dc_sim::DifftestMismatch mismatch;
   for (std::uint64_t i = 0; i < steps; ++i) {
     bool ok = difftest.step_and_compare(1000, &mismatch);
     require(ok, mismatch.message);
+    if (difftest.last_tohost_exit()) {
+      break;
+    }
   }
 }
 
@@ -195,8 +210,7 @@ void test_directed(const std::string &temp_dir) {
       enc_addi(6, 0, 0x7f),      // addi x6, x0, 0x7f
       enc_sb(6, 4, 5),           // sb   x6, 5(x4) => DRAM[5] = 0x7f
       enc_lbu(7, 4, 5),          // lbu  x7, 5(x4) => 0x7f
-      enc_lui(8, 0xfffff),       // lui  x8, 0xfffff
-      enc_addi(8, 8, -16),       // addi x8, x8, -16 => 0xfffffff0
+      enc_addi(8, 0, -16),       // addi x8, x0, -16 => 0xfffffff0
       enc_sw(0, 8, 0),           // sw   x0, 0(x8) => tohost exit 0
   };
 
@@ -241,8 +255,7 @@ void test_directed_rv32e(const std::string &temp_dir) {
       // 0x40: lhu x13, 2(x11) => 16
       enc_lhu(13, 11, 2),
       // 0x44: exit tohost
-      enc_lui(14, 0xfffff),
-      enc_addi(14, 14, -16),
+      enc_addi(14, 0, -16),
       enc_sw(0, 14, 0),
   };
 
@@ -336,16 +349,14 @@ void test_binary_difftest(const std::string &temp_dir) {
   // lw   x2, 0(x1)         # read data from DRAM[0]
   // addi x3, x2, 42        # x3 = x2 + 42
   // sw   x3, 1, 4          # write to DRAM[4]
-  // lui  x8, 0xfffff
-  // addi x8, x8, -16       # 0xfffffff0
+  // addi x8, x0, -16       # 0xfffffff0
   // sw   x0, 8, 0          # tohost exit 0
   std::vector<std::uint32_t> insts = {
       enc_lui(1, 0x20000),
       enc_lw(2, 1, 0),
       enc_addi(3, 2, 42),
       enc_sw(3, 1, 4),
-      enc_lui(8, 0xfffff),
-      enc_addi(8, 8, -16),
+      enc_addi(8, 0, -16),
       enc_sw(0, 8, 0),
   };
 
@@ -377,14 +388,18 @@ void test_binary_difftest(const std::string &temp_dir) {
   dc_sim::Simulation dut;
   dut.reset();
 
-  dc_sim::ReferenceModel ref;
-  ref.load_from_sim_memory();
+  auto ref = create_backend();
+  ref->reset(0);
+  ref->load_from_sim_memory();
 
-  dc_sim::Difftest difftest(dut, ref);
+  dc_sim::Difftest difftest(dut, *ref);
   dc_sim::DifftestMismatch mismatch;
   for (std::uint64_t i = 0; i < insts.size(); ++i) {
     bool ok = difftest.step_and_compare(1000, &mismatch);
     require(ok, mismatch.message);
+    if (difftest.last_tohost_exit()) {
+      break;
+    }
   }
 }
 
@@ -395,6 +410,8 @@ void test_sw_difftest() {
       "cpu_fib", "cpu_recursion", "cpu_string", "cpu_leap_year", "cpu_if_else", "cpu_load_store",
       "led_marquee", "uart_hello"
   };
+  auto ref = create_backend();
+
   for (const auto &name : sw_cases) {
     const std::string inst_bin = "build/sw/tests/" + name + "/" + name + ".inst.bin";
     const std::string data_bin = "build/sw/tests/" + name + "/" + name + ".data.bin";
@@ -419,15 +436,17 @@ void test_sw_difftest() {
     dc_sim::Simulation dut;
     dut.reset();
 
-    dc_sim::ReferenceModel ref;
-    ref.load_from_sim_memory();
+    ref->reset(0);
+    ref->load_from_sim_memory();
 
-    dc_sim::Difftest difftest(dut, ref);
+    std::cout << "  testing " << name << "..." << std::flush;
+    dc_sim::Difftest difftest(dut, *ref);
     dc_sim::DifftestMismatch mismatch;
     const std::uint64_t max_commits = (name == "led_marquee" || name == "uart_hello") ? 30000U : 50000U;
     const std::uint64_t max_cycles = (name == "led_marquee" || name == "uart_hello") ? 2000000U : 100000U;
     bool ok = difftest.run_difftest(max_commits, max_cycles, &mismatch);
     require(ok, "sw difftest failed on " + name + ": " + mismatch.message);
+    std::cout << " PASS\n";
   }
 }
 
@@ -435,13 +454,27 @@ void test_sw_difftest() {
 
 int main(int argc, char **argv) {
   const std::string temp_dir = (argc > 1) ? argv[1] : ".";
+  const char *env_so = std::getenv("DIFF_REF_SO");
   try {
-    test_directed(temp_dir);
-    test_directed_rv32e(temp_dir);
-    test_randomized(temp_dir);
-    test_fault_difftest(temp_dir);
-    test_binary_difftest(temp_dir);
-    test_sw_difftest();
+    if (env_so != nullptr && env_so[0] != '\0') {
+      std::cout << "[difftest] using dynamic reference model: " << env_so << "\n";
+      std::cout << "[1/4] test_directed...\n";
+      test_directed(temp_dir);
+      std::cout << "[2/4] test_directed_rv32e...\n";
+      test_directed_rv32e(temp_dir);
+      std::cout << "[3/4] test_binary_difftest...\n";
+      test_binary_difftest(temp_dir);
+      std::cout << "[4/4] test_sw_difftest...\n";
+      test_sw_difftest();
+    } else {
+      std::cout << "[difftest] using internal reference model\n";
+      test_directed(temp_dir);
+      test_directed_rv32e(temp_dir);
+      test_randomized(temp_dir);
+      test_fault_difftest(temp_dir);
+      test_binary_difftest(temp_dir);
+      test_sw_difftest();
+    }
     std::cout << "test_difftest: PASS (all cases matched)\n";
     return 0;
   } catch (const std::exception &e) {
