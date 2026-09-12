@@ -11,6 +11,10 @@
 #include <filesystem>
 #include <system_error>
 #endif
+#ifdef CONFIG_DC_SIM_NVBOARD
+#include <nvboard.h>
+void nvboard_bind_all_pins(Vsim_top *top);
+#endif
 #include <stdexcept>
 
 namespace dc_sim {
@@ -43,9 +47,16 @@ class Simulation::Impl {
 #ifdef CONFIG_DC_SIM_WAVE
     tracer->dump(context->time());
 #endif
+#ifdef CONFIG_DC_SIM_NVBOARD
+    nvboard_bind_all_pins(top.get());
+    nvboard_init();
+#endif
   }
 
   ~Impl() {
+#ifdef CONFIG_DC_SIM_NVBOARD
+    nvboard_quit();
+#endif
 #ifdef CONFIG_DC_SIM_WAVE
     if (tracer != nullptr) {
       tracer->flush();
@@ -79,6 +90,11 @@ class Simulation::Impl {
 #ifdef CONFIG_DC_SIM_WAVE
     if (wave_dump_enabled) {
       tracer->dump(context->time());
+    }
+#endif
+#ifdef CONFIG_DC_SIM_NVBOARD
+    if (clock_level == 0) {
+      nvboard_update();
     }
 #endif
   }

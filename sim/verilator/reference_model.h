@@ -64,6 +64,7 @@ class ReferenceModel {
   bool in_fault() const { return in_fault_; }
   std::uint8_t fault_cause() const { return fault_cause_; }
   std::uint32_t fault_pc() const { return fault_pc_; }
+  std::uint16_t led() const { return led_reg_; }
 
   // Step single instruction
   ReferenceStepResult step();
@@ -73,6 +74,7 @@ class ReferenceModel {
   std::array<std::uint32_t, 16> regs_{};
   std::array<std::uint32_t, 16384> irom_{};    // 64 KiB = 16384 words
   std::array<std::uint8_t, 65536> dram_{};     // 64 KiB
+  std::uint16_t led_reg_ = 0;
 
   bool in_fault_ = false;
   std::uint8_t fault_cause_ = 0;

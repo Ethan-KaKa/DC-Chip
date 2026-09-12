@@ -51,6 +51,7 @@ void ReferenceModel::reset(std::uint32_t reset_pc) {
   pc_ = reset_pc;
   regs_.fill(0);
   dram_.fill(0);
+  led_reg_ = 0;
   in_fault_ = false;
   fault_cause_ = 0;
   fault_pc_ = 0;
@@ -400,39 +401,68 @@ ReferenceStepResult ReferenceModel::step() {
       std::uint32_t rdata = 0;
       std::uint8_t access_size = 0;
 
+      const bool is_dram = (addr >= kDramBase && addr < kDramBase + kDramBytes);
+      const bool is_mmio = (addr >= kMmioBase && addr < kMmioBase + kMmioCapacityBytes);
+
       switch (funct3) {
         case 0: { // lb
-          if (addr < kDramBase || addr >= kDramBase + kDramBytes) return fail_load_access();
-          const std::uint8_t byte_val = read_dram_byte(addr);
-          rdata = static_cast<std::uint32_t>(static_cast<std::int32_t>(static_cast<std::int8_t>(byte_val)));
+          if (is_dram) {
+            const std::uint8_t byte_val = read_dram_byte(addr);
+            rdata = static_cast<std::uint32_t>(static_cast<std::int32_t>(static_cast<std::int8_t>(byte_val)));
+          } else if (is_mmio && (addr == kMmioLedAddr || addr == kMmioLedAddr + 1U)) {
+            const std::uint8_t byte_val = static_cast<std::uint8_t>((led_reg_ >> ((addr & 1U) * 8U)) & 0xffU);
+            rdata = static_cast<std::uint32_t>(static_cast<std::int32_t>(static_cast<std::int8_t>(byte_val)));
+          } else {
+            return fail_load_access();
+          }
           access_size = 1;
           break;
         }
         case 1: { // lh
           if ((addr & 1U) != 0) return fail_load_misaligned();
-          if (addr < kDramBase || addr + 2U > kDramBase + kDramBytes) return fail_load_access();
-          const std::uint16_t half_val = read_dram_half(addr);
-          rdata = static_cast<std::uint32_t>(static_cast<std::int32_t>(static_cast<std::int16_t>(half_val)));
+          if (is_dram && addr + 2U <= kDramBase + kDramBytes) {
+            const std::uint16_t half_val = read_dram_half(addr);
+            rdata = static_cast<std::uint32_t>(static_cast<std::int32_t>(static_cast<std::int16_t>(half_val)));
+          } else if (is_mmio && addr == kMmioLedAddr) {
+            rdata = static_cast<std::uint32_t>(static_cast<std::int32_t>(static_cast<std::int16_t>(led_reg_)));
+          } else {
+            return fail_load_access();
+          }
           access_size = 2;
           break;
         }
         case 2: { // lw
           if ((addr & 3U) != 0) return fail_load_misaligned();
-          if (addr < kDramBase || addr + 4U > kDramBase + kDramBytes) return fail_load_access();
-          rdata = read_dram_word(addr);
+          if (is_dram && addr + 4U <= kDramBase + kDramBytes) {
+            rdata = read_dram_word(addr);
+          } else if (is_mmio && addr == kMmioLedAddr) {
+            rdata = static_cast<std::uint32_t>(led_reg_);
+          } else {
+            return fail_load_access();
+          }
           access_size = 4;
           break;
         }
         case 4: { // lbu
-          if (addr < kDramBase || addr >= kDramBase + kDramBytes) return fail_load_access();
-          rdata = static_cast<std::uint32_t>(read_dram_byte(addr));
+          if (is_dram) {
+            rdata = static_cast<std::uint32_t>(read_dram_byte(addr));
+          } else if (is_mmio && (addr == kMmioLedAddr || addr == kMmioLedAddr + 1U)) {
+            rdata = static_cast<std::uint32_t>((led_reg_ >> ((addr & 1U) * 8U)) & 0xffU);
+          } else {
+            return fail_load_access();
+          }
           access_size = 1;
           break;
         }
         case 5: { // lhu
           if ((addr & 1U) != 0) return fail_load_misaligned();
-          if (addr < kDramBase || addr + 2U > kDramBase + kDramBytes) return fail_load_access();
-          rdata = static_cast<std::uint32_t>(read_dram_half(addr));
+          if (is_dram && addr + 2U <= kDramBase + kDramBytes) {
+            rdata = static_cast<std::uint32_t>(read_dram_half(addr));
+          } else if (is_mmio && addr == kMmioLedAddr) {
+            rdata = static_cast<std::uint32_t>(led_reg_);
+          } else {
+            return fail_load_access();
+          }
           access_size = 2;
           break;
         }
@@ -485,6 +515,9 @@ ReferenceStepResult ReferenceModel::step() {
         return result;
       };
 
+      const bool is_dram = (addr >= kDramBase && addr < kDramBase + kDramBytes);
+      const bool is_mmio = (addr >= kMmioBase && addr < kMmioBase + kMmioCapacityBytes);
+
       if (funct3 == 2) { // sw
         if (addr == kTohostAddr) {
           result.committed = true;
@@ -497,9 +530,14 @@ ReferenceStepResult ReferenceModel::step() {
           return result;
         }
         if ((addr & 3U) != 0) return fail_store_misaligned();
-        if (addr < kDramBase || addr + 4U > kDramBase + kDramBytes) return fail_store_access();
+        if (is_dram && addr + 4U <= kDramBase + kDramBytes) {
+          write_dram_word(addr, regs_[rs2]);
+        } else if (is_mmio && addr == kMmioLedAddr) {
+          led_reg_ = static_cast<std::uint16_t>(regs_[rs2] & 0xffffU);
+        } else {
+          return fail_store_access();
+        }
 
-        write_dram_word(addr, regs_[rs2]);
         result.committed = true;
         result.commit_pc = pc_;
         result.commit_inst = inst;
@@ -514,9 +552,14 @@ ReferenceStepResult ReferenceModel::step() {
         return result;
       } else if (funct3 == 1) { // sh
         if ((addr & 1U) != 0) return fail_store_misaligned();
-        if (addr < kDramBase || addr + 2U > kDramBase + kDramBytes) return fail_store_access();
+        if (is_dram && addr + 2U <= kDramBase + kDramBytes) {
+          write_dram_half(addr, static_cast<std::uint16_t>(regs_[rs2] & 0xffffU));
+        } else if (is_mmio && addr == kMmioLedAddr) {
+          led_reg_ = static_cast<std::uint16_t>(regs_[rs2] & 0xffffU);
+        } else {
+          return fail_store_access();
+        }
 
-        write_dram_half(addr, static_cast<std::uint16_t>(regs_[rs2] & 0xffffU));
         result.committed = true;
         result.commit_pc = pc_;
         result.commit_inst = inst;
@@ -530,9 +573,16 @@ ReferenceStepResult ReferenceModel::step() {
         pc_ += 4U;
         return result;
       } else if (funct3 == 0) { // sb
-        if (addr < kDramBase || addr >= kDramBase + kDramBytes) return fail_store_access();
+        if (is_dram) {
+          write_dram_byte(addr, static_cast<std::uint8_t>(regs_[rs2] & 0xffU));
+        } else if (is_mmio && addr == kMmioLedAddr) {
+          led_reg_ = (led_reg_ & 0xff00U) | static_cast<std::uint16_t>(regs_[rs2] & 0xffU);
+        } else if (is_mmio && addr == kMmioLedAddr + 1U) {
+          led_reg_ = (led_reg_ & 0x00ffU) | static_cast<std::uint16_t>((regs_[rs2] & 0xffU) << 8U);
+        } else {
+          return fail_store_access();
+        }
 
-        write_dram_byte(addr, static_cast<std::uint8_t>(regs_[rs2] & 0xffU));
         const std::uint8_t lane = static_cast<std::uint8_t>(addr & 3U);
         result.committed = true;
         result.commit_pc = pc_;

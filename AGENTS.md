@@ -15,13 +15,19 @@
 5. Vivado 综合、实现、时序约束和 FPGA 上板验证；
 6. 面积、性能与功耗结果，以及课程报告材料。
 
-## 当前状态（2026-09-11）
+## 当前状态（2026-09-12）
 
 - 当前目录已初始化为 Git 仓库，默认分支为 `main`。
 - 阶段 1 已完成八指令基线全链路迁移；阶段 2 已完成 64 KiB IROM（`0x00000000`）与 64 KiB DRAM（`0x20000000`）的 Harvard 架构隔离与双 `.bin` 镜像装载；阶段 3 已完成仓库内自包含的 AM-like 裸机中间层（`sw/am/`）、`scripts/check_isa_subset.py` 自动化审计工具与 6 项定向软件测试套件；阶段 4 已全面补全 RV32E v1.0（37 条标准基础整数指令、`x0`--`x15` 严格边界）、`sw/am/` 自包含 `klib`（含 `memset/memcpy/memcmp/strlen/strcmp/strcpy/strcat/check`）、12 项 `am-kernels` 基准测试（总计 18 项软件回归测试）以及软硬件仿真/差分全闭环。
-- 构建系统与回归闭环已全面扩充：`make test-unit`、`make test-isa`、`make test-disasm`、`make test-memory`、`make test-reference`、`make test-simulation`、`make sw`、`make test-sw`、`make test-difftest`、`make test-integration`、`make test-wave`、`make test-sdb` 以及最高层 `make test` 全面 PASS，端到端仿真执行与回归闭环已建立。
+- 阶段 5 Phase 1 已完成：
+  - RTL：16 位 GPIO LED 控制器（`rtl/periph/led_controller.sv`，MMIO `0x10000100`）、SoC 总线互连交叉开关（`rtl/soc/soc_interconnect.sv`，支持 DRAM/MMIO/未映射错误地址路由并使用纯连续赋值杜绝调度环）以及顶层 SoC（`rtl/soc/dc_soc_top.sv`，导出 `o_led[15:0]` 并接入 `sim/verilator/sim_top.sv`）。
+  - AM 设备层：建立 `sw/am/include/amdev.h`（标准设备抽象）与 `sw/am/src/ioe.c`（支持 `AM_GPIO_LED` 读写及 `led_write`/`led_read` 封装）。
+  - 软件与测试：新增 `sw/tests/led_marquee/` 跑马灯自检程序，全套软件测试增至 19 项。
+  - 参考模型与差分：`sim/verilator/reference_model.cpp` 扩充 MMIO LED 读写与未映射 MMIO fault 检查，`test_reference` 与 `test_difftest` 适配并全 PASS。
+  - NVBoard 虚拟外设：引入 `CONFIG_DC_SIM_NVBOARD` Kconfig 配置（默认 `n` 保持 CI headless），通过 `constr/nvboard.nxdc` 绑定 16 颗虚拟 LED，提供独立隔离构建 `make nvboard-build` 与运行 `make nvboard-run [APP=led_marquee]`。
+- 构建系统与回归闭环全面增强：新增 `make test-led`、`make test-interconnect`、`make test-soc`，单元测试套件增至 7 个；`make test-unit`、`make test-isa`、`make test-disasm`、`make test-memory`、`make test-reference`、`make test-simulation`、`make sw`、`make test-sw`（19 项）、`make test-difftest`、`make test-integration`、`make test-wave`、`make test-sdb` 以及最高层 `make test` 全面 PASS。
 - v0.1 可执行基线冻结在 commit `9bfb9a97153be05de34c6d2311c09f41cb6f43ab`；不提供双 ISA 开关，旧语义只由 Git历史和迁移前验证记录保留。
-- 正式 MMIO 地址（timer/UART 等）、板卡具体型号/封装、时钟频率、板级复位极性和演示传感器仍未定稿（属于阶段 5 SoC 扩展）。
+- 正式 MMIO 扩展（timer/UART/sensor）、板卡具体型号/封装、时钟频率、板级复位极性仍属于阶段 5 后续子阶段规划中。
 - 在对应规格落盘前，不得把上述未决项当成既定事实写入 RTL 或测试。
 
 ## 设计原则
@@ -228,6 +234,9 @@ make lint
 make lint-mem
 make test-regfile
 make test-core
+make test-led
+make test-interconnect
+make test-soc
 make test-unit
 make test-disasm
 make test-memory
@@ -237,6 +246,8 @@ make test-simulation
 make sw
 make test-sw
 make sim [IMG=<hex|bin>] [DATA_IMG=<bin>] [APP=<name>] [STEPS=<n>] [TRACE=1] [BATCH=1]
+make nvboard-build
+make nvboard-run [APP=<name>] [BATCH=1] [STEPS=<n>]
 make test-difftest
 make test-integration
 make test-wave

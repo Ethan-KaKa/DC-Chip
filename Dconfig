@@ -16,4 +16,11 @@ config DC_SIM_WAVE
 	  Build and enable Verilator VCD waveform recording. The simulator writes
 	  one dump.vcd file in its configured build directory.
 
+config DC_SIM_NVBOARD
+	bool "Build NVBoard graphical board simulation"
+	default n
+	help
+	  Build and link the NVBoard graphical virtual FPGA board environment.
+	  When enabled, pin bindings and SDL2 GUI are initialized during simulation.
+
 endmenu

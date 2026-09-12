@@ -1,8 +1,8 @@
 # DC-Chip v0.2 地址与存储模型
 
 - 版本：v0.2
-- 状态：阶段 2 冻结 IROM 与 DRAM 区域及权限契约；MMIO 仍为 `TODO`
-- 更新日期：2026-09-11
+- 状态：阶段 5 Phase 1 完成 MMIO 基地址（`0x10000000`）与 LED 控制器（`0x10000100`）规格冻结；timer/UART 待 Phase 2/3
+- 更新日期：2026-09-12
 - ISA 规范：`docs/isa/isa.md` v0.2
 
 ## 1. 地址模型
@@ -62,20 +62,37 @@ bit 1，若为一则在 `jalr` 上报告 instruction address misaligned，不发
 
 ## 5. 正式区域表
 
-阶段 2 正式冻结 IROM 与 DRAM 的基地址、容量与访问权限，确立逻辑隔离的 Harvard 架构模型：
+阶段 5 正式冻结 IROM、DRAM 以及 MMIO 外设区域的基地址、容量与访问权限：
 
 | 区域/属性 | 地址范围 | 基线容量 | 权限与访问模型 | 错误行为 | 物理实现 |
 | --- | --- | ---: | --- | --- | --- |
 | **IROM** | `0x00000000`--`0x0000ffff` | 64 KiB | **只读/可执行**（仅允许 IFU 取指，四字节对齐） | LSU 读写触发 load/store access fault；未对齐取指触发 instruction misaligned | 片上 BRAM / 仿真 IROM 数组 |
 | **DRAM** | `0x20000000`--`0x2000ffff` | 64 KiB | **可读/可写**（仅允许 LSU 访存，仿真支持扩展至 256 KiB） | IFU 取指触发 instruction access fault；未对齐 word 触发 misaligned | 片上 BRAM / 仿真 DRAM 数组 |
-| MMIO 总区域 | `TODO` | `TODO` | `TODO` | `TODO` | `TODO` |
-| timer/GPIO/UART/sensor | `TODO` | `TODO` | `TODO` | `TODO` | `TODO` |
+| **MMIO 总区域** | `0x10000000`--`0x1000ffff` | 64 KiB | **设备寄存器**（仅允许 LSU 访存，由总线路由至各外设） | IFU 取指触发 instruction access fault；未分配外设子空间触发 access fault | SoC Interconnect 译码 |
+| **GPIO LED 控制器** | `0x10000100`--`0x10000103` | 4 字节 | **可读/可写**（低 16 位映射到 16 颗 LED，高 16 位保留为 0） | IFU 取指或未对齐多字节读写按规范返回错误 | `rtl/periph/led_controller.sv` |
+| timer/UART/sensor | `0x10000200` 等 | 待定 | 阶段 5 后续子阶段规划中 | 访问未就绪外设地址触发 access fault | `TODO` |
 
 ### 5.1 Harvard 访问隔离与 Fault 契约
 
-- **IFU 专属 IROM**：取指请求地址必须处于 `[0x00000000, 0x00010000)` 内且四字节对齐。若 IFU 尝试对 DRAM 区域（`0x20000000` 起）或任何未映射空间取指，存储子系统返回错误，核心产生粘滞的 `instruction access fault`（`fault_cause = 3'd2`）；
-- **LSU 专属 DRAM 与 tohost**：数据请求地址必须处于 `[0x20000000, 0x20010000)` 内或等于私有 `0xfffffff0`（`tohost`）。若 LSU 尝试对 IROM 区域（`0x00000000` 起）执行 load/store，或访问未映射空间，存储子系统返回错误，核心产生粘滞的 `load access fault`（`fault_cause = 3'd5`）或 `store access fault`（`fault_cause = 3'd7`）；
+- **IFU 专属 IROM**：取指请求地址必须处于 `[0x00000000, 0x00010000)` 内且四字节对齐。若 IFU 尝试对 DRAM 区域（`0x20000000` 起）、MMIO 区域（`0x10000000` 起）或任何未映射空间取指，存储子系统返回错误，核心产生粘滞的 `instruction access fault`（`fault_cause = 3'd2`）；
+- **LSU 路由与访问**：数据请求由 `soc_interconnect` 译码路由：
+  - DRAM 区域：`[0x20000000, 0x20010000)` 内，转发至 DRAM 存储；
+  - 私有 `tohost`：`0xfffffff0`，转发至仿真/主机监控；
+  - MMIO 区域：`[0x10000000, 0x10010000)` 内，仅已实现外设（如 `0x10000100` LED）返回正常握手响应；未实现的外设地址直接返回 `rsp_error = 1`；
+  - 未映射区域或尝试对 IROM 执行 load/store：总线互连立即返回 `rsp_error = 1`；
+- 核心收到 `rsp_error` 时产生粘滞的 `load access fault`（`fault_cause = 3'd5`）或 `store access fault`（`fault_cause = 3'd7`）；
 - 跨区域非法访问不会产生任何局部数据写入或寄存器写回，故障状态保持至复位。
+
+### 5.2 GPIO LED 控制器寄存器定义（`0x10000100`）
+
+| 偏移/地址 | 字段 | 位宽 | 读写权限 | 描述 |
+| --- | --- | ---: | --- | --- |
+| `0x10000100` | `LED[15:0]` | 16 | R/W | 16 颗用户发光二极管状态。写 1 点亮，写 0 熄灭。复位为 `0x0000`。 |
+| `0x10000102` | 保留 | 16 | RO | 读恒为 0，写忽略。 |
+
+- 支持 8 位（`sb`/`lbu`）、16 位（`sh`/`lhu`）和 32 位（`sw`/`lw`）对齐读写。
+- 读操作直接返回当前寄存器锁存的值；写操作在请求握手成功拍同步更新寄存器并反映到输出管脚 `o_led[15:0]`。
+
 
 ## 6. 仿真私有机制边界
 

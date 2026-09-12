@@ -392,7 +392,8 @@ void test_sw_difftest() {
   const std::vector<std::string> sw_cases = {
       "trm_smoke", "trm_exit_code", "calc_add", "dram_access", "heap_smoke", "jump_table",
       "cpu_dummy", "cpu_add", "cpu_sub_longlong", "cpu_bit", "cpu_bubble_sort", "cpu_select_sort",
-      "cpu_fib", "cpu_recursion", "cpu_string", "cpu_leap_year", "cpu_if_else", "cpu_load_store"
+      "cpu_fib", "cpu_recursion", "cpu_string", "cpu_leap_year", "cpu_if_else", "cpu_load_store",
+      "led_marquee"
   };
   for (const auto &name : sw_cases) {
     const std::string inst_bin = "build/sw/tests/" + name + "/" + name + ".inst.bin";
@@ -423,7 +424,9 @@ void test_sw_difftest() {
 
     dc_sim::Difftest difftest(dut, ref);
     dc_sim::DifftestMismatch mismatch;
-    bool ok = difftest.run_difftest(50000, 100000, &mismatch);
+    const std::uint64_t max_commits = (name == "led_marquee") ? 5000U : 50000U;
+    const std::uint64_t max_cycles = (name == "led_marquee") ? 10000U : 100000U;
+    bool ok = difftest.run_difftest(max_commits, max_cycles, &mismatch);
     require(ok, "sw difftest failed on " + name + ": " + mismatch.message);
   }
 }

@@ -38,9 +38,14 @@ UNIT_TBS := sim/tb/tb_alu.sv \
 	sim/tb/tb_decoder.sv \
 	sim/tb/tb_regfile.sv \
 	sim/tb/tb_cpu_core.sv
+PERIPH_RTL := rtl/periph/led_controller.sv
+SOC_RTL := rtl/soc/soc_interconnect.sv \
+	rtl/soc/dc_soc_top.sv
 MEM_RTL := sim/verilator/sim_mem.sv
 MEM_TEST_CPP := sim/tests/test_memory.cpp
 SIM_RTL := $(CORE_RTL) \
+	$(PERIPH_RTL) \
+	$(SOC_RTL) \
 	$(MEM_RTL) \
 	sim/verilator/sim_top.sv
 SIM_ENGINE_CPP := sim/verilator/memory.cpp \
@@ -80,12 +85,30 @@ ifeq ($(CONFIG_DC_SIM_WAVE),y)
 SIM_TRACE_FLAGS := --trace
 endif
 
+YSYX_WORKBENCH ?= /home/kaka/ysyx-workbench
+NVBOARD_HOME ?= $(YSYX_WORKBENCH)/nvboard
+NVBOARD_NXDC := constr/nvboard.nxdc
+NVBOARD_DIR := $(BUILD_DIR)/nvboard-sim
+NVBOARD_CONFIG_DIR := $(NVBOARD_DIR)/config
+NVBOARD_BIND_CPP := $(NVBOARD_DIR)/auto_bind.cpp
+NVBOARD_ARCHIVE := $(NVBOARD_HOME)/build/nvboard.a
+NVBOARD_BIN := $(NVBOARD_DIR)/Vsim_top
+
+NVBOARD_CXXFLAGS := -std=c++17 -Wall -Wextra -Wpedantic \
+	-I$(abspath $(NVBOARD_CONFIG_DIR)) \
+	-I$(abspath sim/verilator) \
+	-include $(abspath $(NVBOARD_CONFIG_DIR)/config.h) \
+	-I$(NVBOARD_HOME)/usr/include $(shell sdl2-config --cflags 2>/dev/null)
+NVBOARD_LDFLAGS := $(NVBOARD_ARCHIVE) $(shell sdl2-config --libs 2>/dev/null) -lSDL2_image -lSDL2_ttf
+
 .DEFAULT_GOAL := help
 
 .PHONY: check-tools help defconfig menuconfig config-show test-config \
-	lint-isa lint-comb lint lint-mem test-isa test-alu test-decoder test-regfile test-core test-unit \
+	lint-isa lint-comb lint lint-mem test-isa test-alu test-decoder test-regfile test-core \
+	test-led test-interconnect test-soc test-unit \
 	test-disasm test-memory test-reference sim-build sim test-simulation test-difftest \
-	test-integration test-wave test-sdb sw test-sw test clean
+	test-integration test-wave test-sdb sw test-sw test \
+	nvboard-build nvboard-run clean
 
 check-tools:
 	@set -eu; \
@@ -188,6 +211,15 @@ $(UNIT_DIR)/tb_regfile.vvp: $(ISA_PKG) rtl/core/regfile.sv sim/tb/tb_regfile.sv 
 $(UNIT_DIR)/tb_cpu_core.vvp: $(CORE_RTL) sim/tb/tb_cpu_core.sv | $(UNIT_DIR)
 	$(IVERILOG) -g2012 -s tb_cpu_core -o $@ $^
 
+$(UNIT_DIR)/tb_led_controller.vvp: rtl/periph/led_controller.sv sim/tb/tb_led_controller.sv | $(UNIT_DIR)
+	$(IVERILOG) -g2012 -s tb_led_controller -Irtl/periph -o $@ $^
+
+$(UNIT_DIR)/tb_soc_interconnect.vvp: rtl/soc/soc_interconnect.sv sim/tb/tb_soc_interconnect.sv | $(UNIT_DIR)
+	$(IVERILOG) -g2012 -s tb_soc_interconnect -Irtl/soc -o $@ $^
+
+$(UNIT_DIR)/tb_dc_soc_top.vvp: $(CORE_RTL) $(PERIPH_RTL) $(SOC_RTL) sim/tb/tb_dc_soc_top.sv | $(UNIT_DIR)
+	$(IVERILOG) -g2012 -s tb_dc_soc_top -Irtl/core -Irtl/soc -Irtl/periph -o $@ $^
+
 test-alu: $(UNIT_DIR)/tb_alu.vvp
 	$(VVP) $<
 
@@ -200,11 +232,23 @@ test-regfile: $(UNIT_DIR)/tb_regfile.vvp
 test-core: $(UNIT_DIR)/tb_cpu_core.vvp
 	$(VVP) $<
 
+test-led: $(UNIT_DIR)/tb_led_controller.vvp
+	$(VVP) $<
+
+test-interconnect: $(UNIT_DIR)/tb_soc_interconnect.vvp
+	$(VVP) $<
+
+test-soc: $(UNIT_DIR)/tb_dc_soc_top.vvp
+	$(VVP) $<
+
 test-unit:
 	$(MAKE) --no-print-directory test-alu
 	$(MAKE) --no-print-directory test-decoder
 	$(MAKE) --no-print-directory test-regfile
 	$(MAKE) --no-print-directory test-core
+	$(MAKE) --no-print-directory test-led
+	$(MAKE) --no-print-directory test-interconnect
+	$(MAKE) --no-print-directory test-soc
 
 $(DISASM_TEST_DIR):
 	mkdir -p $@
@@ -388,6 +432,64 @@ test-sdb:
 		--iverilog "$(IVERILOG)" --vvp "$(VVP)" \
 		--cxx "$(CXX)" --python "$(PYTHON)"
 
+$(NVBOARD_ARCHIVE):
+	@if [ ! -d "$(NVBOARD_HOME)" ]; then \
+		printf 'error: NVBOARD_HOME not found at %s. Set NVBOARD_HOME or YSYX_WORKBENCH.\n' '$(NVBOARD_HOME)' >&2; \
+		exit 1; \
+	fi
+	$(MAKE) -C $(NVBOARD_HOME) nvboard-archive
+
+$(NVBOARD_BIND_CPP): $(NVBOARD_NXDC)
+	@mkdir -p $(dir $@)
+	@if [ ! -d "$(NVBOARD_HOME)" ]; then \
+		printf 'error: NVBOARD_HOME not found at %s. Set NVBOARD_HOME or YSYX_WORKBENCH.\n' '$(NVBOARD_HOME)' >&2; \
+		exit 1; \
+	fi
+	$(PYTHON) $(NVBOARD_HOME)/scripts/auto_pin_bind.py $< $@
+
+$(NVBOARD_DIR)/.sync.stamp: Dconfig $(CONFIG_INPUTS)
+	@mkdir -p $(NVBOARD_CONFIG_DIR)
+	@$(PYTHON) scripts/config.py --config $(NVBOARD_DIR)/.config --output-dir $(NVBOARD_CONFIG_DIR) set DC_SIM_NVBOARD=y
+	@touch $@
+
+$(NVBOARD_BIN): $(SIM_RTL) $(SIM_CPP) $(NVBOARD_BIND_CPP) $(NVBOARD_ARCHIVE) $(NVBOARD_DIR)/.sync.stamp Makefile
+	@mkdir -p $(NVBOARD_DIR)
+	CCACHE_DISABLE=1 CXX="$(CXX)" $(VERILATOR) --cc --exe --build \
+		--language 1800-2012 -Wall --top-module sim_top \
+		$(SIM_TRACE_FLAGS) \
+		--Mdir $(NVBOARD_DIR) \
+		-CFLAGS "$(NVBOARD_CXXFLAGS)" \
+		-LDFLAGS "$(NVBOARD_LDFLAGS)" \
+		$(SIM_RTL) $(SIM_CPP) $(NVBOARD_BIND_CPP)
+
+nvboard-build: $(NVBOARD_BIN)
+
+nvboard-run: sw $(NVBOARD_BIN)
+	@set -eu; \
+	app='$(strip $(APP))'; \
+	if [ -z "$$app" ]; then app='led_marquee'; fi; \
+	inst_bin="$(abspath $(BUILD_DIR))/sw/tests/$$app/$$app.inst.bin"; \
+	data_bin="$(abspath $(BUILD_DIR))/sw/tests/$$app/$$app.data.bin"; \
+	if [ ! -f "$$inst_bin" ]; then \
+		printf 'error: instruction image not found: %s. Build with make sw.\n' "$$inst_bin" >&2; \
+		exit 1; \
+	fi; \
+	cmd="$(NVBOARD_BIN) --image-inst $$inst_bin"; \
+	if [ -f "$$data_bin" ] && [ -s "$$data_bin" ]; then \
+		cmd="$$cmd --image-data $$data_bin"; \
+	fi; \
+	if [ '$(BATCH)' = 1 ]; then \
+		cmd="$$cmd --batch"; \
+	fi; \
+	if [ -n '$(strip $(STEPS))' ]; then \
+		cmd="$$cmd --steps '$(STEPS)'"; \
+	fi; \
+	if [ -n '$(strip $(MAX_CYCLES))' ]; then \
+		cmd="$$cmd --max-cycles '$(MAX_CYCLES)'"; \
+	fi; \
+	printf 'Running %s on NVBoard...\n' "$$app"; \
+	$$cmd
+
 test:
 	$(MAKE) --no-print-directory test-config
 	$(MAKE) --no-print-directory test-isa
@@ -435,7 +537,10 @@ help:
 		'  make lint-mem     Lint the simulation memory subsystem' \
 		'  make test-regfile Run the self-checking register-file testbench' \
 		'  make test-core    Run the self-checking CPU-core testbench' \
-		'  make test-unit    Run all four unit testbenches in order' \
+		'  make test-led     Run the self-checking LED controller testbench' \
+		'  make test-interconnect Run the self-checking interconnect testbench' \
+		'  make test-soc     Run the self-checking SoC top testbench' \
+		'  make test-unit    Run all seven unit testbenches in order' \
 		'  make test-disasm  Test directed v0.2 ISA disassemblies' \
 		'  make test-memory  Run self-checking simulation memory tests' \
 		'  make test-reference Run self-checking C++ reference model tests' \
@@ -448,6 +553,8 @@ help:
 		'  make test-integration  Run positive and negative integration cases' \
 		'  make test-wave    Test isolated WAVE-off/on simulator builds' \
 		'  make test-sdb     Test isolated SDB-off/on and SDB+WAVE builds' \
+		'  make nvboard-build Build the NVBoard graphical simulator' \
+		'  make nvboard-run [APP=<name>] Run an application on NVBoard graphical simulator' \
 		'  make test         Run all config, disasm, RTL, ref, sw, difftest, and CLI regression' \
 		'  make clean        Remove only the repository-root build directory' \
 		'' \

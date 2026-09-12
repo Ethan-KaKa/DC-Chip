@@ -345,7 +345,11 @@ int main(int argc, char **argv) {
   }
 
 
-  std::uint64_t max_cycles = 100000U;
+#ifdef CONFIG_DC_SIM_NVBOARD
+  std::uint64_t max_cycles = 1000000000ULL;
+#else
+  std::uint64_t max_cycles = 20000000U;
+#endif
   if (options.max_cycles.has_value()) {
     max_cycles = *options.max_cycles;
   }

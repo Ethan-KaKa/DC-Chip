@@ -1,8 +1,8 @@
 # DC-Chip RV32E 过渡子集微架构
 
 - 版本：v0.2
-- 状态：阶段 1 核心 RTL 与仿真存储已实现；Verilator wrapper 与 SDB 尚未迁移
-- 更新日期：2026-09-11
+- 状态：阶段 5 Phase 1 完成 SoC 互连（`soc_interconnect`）、LED 外设控制器（`led_controller`）与 `dc_soc_top` 顶层集成；全套软硬件闭环及 NVBoard 支持
+- 更新日期：2026-09-12
 - ISA 规范：`docs/isa/isa.md` v0.2
 
 ## 1. 目标模型与当前实现边界
@@ -15,12 +15,10 @@ v0.2 核心采用顺序、单发射、非流水模型：同一时刻最多处理
 的周期数，也不要求零等待存储。实现可以在没有 stall 时优化周期数，但不得改变
 可见顺序或副作用边界。
 
-截至 2026-09-11，`cpu_core` 与仿真存储子系统 `sim_mem.sv` 已实现下述 32 位
-接口、16×32-bit regfile、单 outstanding 取指/数据控制器、结构化 fault、
-异步 IROM、单口同步 read-first DRAM、byte-strobe 与私有 `tohost`，并通过
-`make lint`、`make lint-mem`、`make test-unit` 与 `make test-memory`。
-Verilator wrapper (`sim_top.sv`)、Simulation 引擎与端到端执行仍待步骤 2.5，
-当前结果不代表 Simulation、difftest、综合或 FPGA 已验证。
+截至 2026-09-12，`cpu_core`、SoC 交叉互连总线 `soc_interconnect.sv`、GPIO LED 控制器
+`led_controller.sv` 与 SoC 顶层 `dc_soc_top.sv` 均已实现并全部通过模块级测试、
+存储测试、仿真引擎自检、C++ 独立参考模型差分测试与 19 项软件集成回归。
+仿真器 wrapper (`sim_top.sv`) 封装 `dc_soc_top` 并支持 NVBoard 虚拟管脚映射。
 
 ## 2. 目标数据通路
 
@@ -186,3 +184,43 @@ link。成功取指后发现非法编码时 `fault_inst_valid=1`；取指响应�
 - DPI-C、文件操作、`$finish`、ILA 和厂商原语不得进入可移植核心；
 - 未来流水化、并行取指或多个在途事务必须先修订本规范的提交、flush 和 ID
   规则，不能在当前接口上隐式加入。
+
+## 10. SoC 架构与总线互连
+
+阶段 5 引入顶层 SoC（`dc_soc_top.sv`）与总线交叉互连（`soc_interconnect.sv`）：
+
+```text
+               +-------------------------------------------+
+               |                 dc_soc_top                |
+               |                                           |
+               |   +--------------+      +-------------+   |
+               |   |   cpu_core   |      |   sim_mem   |   |
+               |   |              |      | (IROM 64KB) |   |
+               |   |    imem =====+======+             |   |
+               |   |              |      +-------------+   |
+               |   |     dmem     |                        |
+               |   +-------+------+                        |
+               |           | (valid/ready req/rsp)         |
+               |           v                               |
+               |   +-------------------+                   |
+               |   | soc_interconnect  |                   |
+               |   +---+-----------+---+                   |
+               |       |           |                       |
+               |       v (DRAM)    v (MMIO 0x1000_0000)    |
+               |  +---------+  +--------------------+      |
+               |  | sim_mem |  |   led_controller   |      |
+               |  | (DRAM)  |  |   (0x1000_0100)    |      |
+               |  +---------+  +---------+----------+      |
+               +-------------------------|-----------------+
+                                         v
+                                    o_led[15:0] (to NVBoard / FPGA pins)
+```
+
+### 10.1 总线路由与响应契约
+- **DRAM 通道**：解码范围 `[0x20000000, 0x2000ffff]` 与私有 `0xfffffff0`（`tohost`），直通片上 DRAM 存储控制器。
+- **MMIO 通道**：解码范围 `[0x10000000, 0x1000ffff]`：
+  - `0x10000100`--`0x10000103` 映射至 `led_controller`，支持单周期 valid-ready 握手。
+  - MMIO 空间内其他未分配地址直接返回单周期 `rsp_error = 1`。
+- **未映射空间与只读区非法写**：访问未映射地址（如 `[0x00000000, 0x0fffffff]` 或 `[0x30000000, 0xffffffef]`）时，总线内部错误发生器立即返回 `rsp_error = 1`，核心产生对应的 load/store access fault。
+- **连续赋值（Continuous Assignment）无循环保证**：
+  为避免 Verilog-XL/Icarus 事件调度中组合逻辑对输出端口的误触发循环，`soc_interconnect` 内部采用精确的 net 级连续赋值（`assign`），确保 `req_channel` 与 `rsp_channel` 不产生 delta-cycle 抖动。

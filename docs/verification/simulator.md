@@ -397,10 +397,45 @@ Simulation 引擎单个周期内的停止判定优先级严格为：
 
 | 命令 | 覆盖范围 |
 | --- | --- |
-| `make test-reference` | C++ 独立参考模型指令与 fault 单元测试 |
+| `make test-led` | 16 位 GPIO LED 控制器模块级测试（包含字/半字/字节读写、对齐与 ready 握手） |
+| `make test-interconnect` | SoC 总线互连测试（DRAM/MMIO/未映射错误地址路由与连续赋值稳定性） |
+| `make test-soc` | SoC 顶层软硬件集成自检（包含核心、互连、LED 与私有 tohost） |
+| `make test-unit` | 7 个模块与子系统测试集合（ALU、译码器、寄存器堆、CPU核、LED、互连、SoC） |
+| `make test-reference` | C++ 独立参考模型指令、MMIO LED 与 fault 单元测试 |
 | `make test-simulation` | C++ Simulation 驱动引擎自检 |
-| `make test-difftest` | RTL 与独立参考模型的 lockstep 差分测试 |
+| `make test-sw` | 19 项 AM 裸机软件测试（含 `led_marquee`）端到端运行验证 |
+| `make test-difftest` | RTL 与独立参考模型的 lockstep 差分测试（含 19 项软件及随机用例） |
 | `make test-integration` | 22 项端到端 CLI 集成测试（覆盖退出码 0, 1, 2, 3, 4, 5） |
 | `make test-wave` | WAVE 宏开关、VCD 导出、暂停恢复与 CLI 回归 |
 | `make test-sdb` | SDB 交互调试器命令、单步、断点、错误诊断与 CLI 回归 |
-| `make test` | 包含 config、ISA、disasm、lint、unit、mem、ref、sim、difftest、integration 的全回归 |
+| `make test` | 包含全部配置、ISA、disasm、lint、unit、mem、ref、sim、sw、difftest、integration 的全回归 |
+
+### 12.7 NVBoard 虚拟外设验证环境（阶段 5 Phase 1）
+
+为在无需下载真实 FPGA 板卡的情况下直观验证外设（如 LED 跑马灯、开关、数码管），仿真系统集成了 NVBoard 虚拟板卡支持：
+
+1. **零污染隔离构建**：
+   - Kconfig 宏 `CONFIG_DC_SIM_NVBOARD` 默认置为 `n`，确保默认仿真构建（`build/verilator/Vsim_top`）及 `make test` 全回归完全保持纯无界面（Headless）状态，无需 SDL2 窗口或图形依赖。
+   - 专用构建目标 `make nvboard-build` 将构建输出严格隔离至 `build/nvboard-sim/`，独立生成支持 GUI 渲染的 `build/nvboard-sim/Vsim_top`。
+2. **引脚映射 (`constr/nvboard.nxdc`)**：
+   ```text
+   top=sim_top
+   o_led (LD15, LD14, LD13, LD12, LD11, LD10, LD9, LD8, LD7, LD6, LD5, LD4, LD3, LD2, LD1, LD0)
+   ```
+   通过 NVBoard 的自动绑定生成工具 `python3 $(NVBOARD_HOME)/scripts/auto_pin_bind.py` 将 `dc_soc_top` 导出的 `o_led[15:0]` 信号映射到虚拟面板上的 16 颗 LED。
+3. **主循环更新与生命周期**：
+   在 `sim/verilator/simulation.cpp` 中：
+   - 启动时调用 `nvboard_bind_all_pins(sim_top)` 与 `nvboard_init()`；
+   - 每个时钟周期在DUT求值（`context_->timeInc(1)`）后调用 `nvboard_update()` 刷新界面；
+   - 仿真退出时调用 `nvboard_quit()` 释放 SDL2 窗口资源。
+4. **运行与交互命令**：
+   ```bash
+   # 编译 NVBoard 仿真器
+   make nvboard-build
+
+   # 运行 LED 跑马灯程序（弹出 SDL2 虚拟面板窗口）
+   make nvboard-run APP=led_marquee
+
+   # 无界面批量回归或 CI 测试（使用 SDL 虚拟驱动）
+   SDL_VIDEODRIVER=dummy make nvboard-run APP=led_marquee BATCH=1
+   ```

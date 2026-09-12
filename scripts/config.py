@@ -18,7 +18,7 @@ import kconfiglib  # noqa: E402
 
 DCONFIG = REPO_ROOT / "Dconfig"
 DEFAULT_DEFCONFIG = REPO_ROOT / "configs" / "default_defconfig"
-SYMBOL_NAMES = ("DC_SIM_SDB", "DC_SIM_WAVE")
+SYMBOL_NAMES = ("DC_SIM_SDB", "DC_SIM_WAVE", "DC_SIM_NVBOARD")
 
 
 class ConfigError(Exception):

@@ -122,6 +122,12 @@ TEST_CASES = [
         "expected_guest_exit": 0,
         "expect_regs": {"x10": 0},
     },
+    {
+        "name": "led_marquee",
+        "expected_sim_exit": 0,
+        "expected_guest_exit": 0,
+        "expect_regs": {"x10": 0},
+    },
 ]
 
 def parse_summary_line(line):

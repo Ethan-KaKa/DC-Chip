@@ -22,7 +22,8 @@ AM_LDFLAGS := -nostdlib -static -mcmodel=medlow \
 
 AM_SRCS := $(AM_ROOT)/src/start.S \
 	$(AM_ROOT)/src/trm.c \
-	$(AM_ROOT)/src/klib.c
+	$(AM_ROOT)/src/klib.c \
+	$(AM_ROOT)/src/ioe.c
 
 AM_OBJS := $(patsubst $(AM_ROOT)/src/%,$(AM_BUILD_DIR)/%.o,$(AM_SRCS))
 

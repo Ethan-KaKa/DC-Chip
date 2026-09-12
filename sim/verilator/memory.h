@@ -15,6 +15,10 @@ constexpr std::uint32_t kDramBase = 0x20000000U;
 constexpr std::size_t kDramCapacityBytes = 65536U;
 constexpr std::size_t kDramCapacityWords = 16384U;
 
+constexpr std::uint32_t kMmioBase = 0x10000000U;
+constexpr std::size_t kMmioCapacityBytes = 65536U;
+constexpr std::uint32_t kMmioLedAddr = 0x10000100U;
+
 constexpr std::uint32_t kTohostAddr = 0xfffffff0U;
 
 enum class MemoryRegion {

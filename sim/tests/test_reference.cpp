@@ -210,6 +210,45 @@ void test_faults() {
   }
 }
 
+void test_mmio_led() {
+  dc_sim::ReferenceModel model;
+  model.load_irom({
+      enc_lui(1, 0x10000),      // lui x1, 0x10000 => x1 = 0x10000000
+      enc_addi(2, 0, 0x123),    // addi x2, x0, 0x123
+      enc_sw(2, 1, 0x100),      // sw x2, 0x100(x1) => writes 0x123 to 0x10000100 (LED)
+      enc_lw(3, 1, 0x100),      // lw x3, 0x100(x1) => reads LED
+      enc_addi(4, 0, 0x45),     // addi x4, x0, 0x45
+      enc_sb(4, 1, 0x101),      // sb x4, 0x101(x1) => byte write high byte
+      enc_lbu(5, 1, 0x101),     // lbu x5, 0x101(x1) => read high byte
+      enc_lbu(6, 1, 0x100),     // lbu x6, 0x100(x1) => read low byte
+      enc_lw(7, 1, 0x200),      // lw x7, 0x200(x1) => unmapped MMIO -> fault 5
+  });
+
+  model.step(); // lui
+  model.step(); // addi
+  auto r_sw = model.step(); // sw
+  require(r_sw.committed && !r_sw.faulted, "sw to LED should commit");
+  require(model.led() == 0x0123, "led value should be 0x0123");
+
+  auto r_lw = model.step(); // lw
+  require(r_lw.committed && !r_lw.faulted, "lw from LED should commit");
+  require(model.reg(3) == 0x0123, "reg x3 should be 0x0123");
+
+  model.step(); // addi
+  auto r_sb = model.step(); // sb
+  require(r_sb.committed && !r_sb.faulted, "sb to LED should commit");
+  require(model.led() == 0x4523, "led value after sb should be 0x4523");
+
+  model.step(); // lbu high byte
+  require(model.reg(5) == 0x45, "reg x5 should be 0x45");
+
+  model.step(); // lbu low byte
+  require(model.reg(6) == 0x23, "reg x6 should be 0x23");
+
+  auto r_unmapped = model.step(); // unmapped MMIO
+  require(r_unmapped.faulted && r_unmapped.fault_cause == 5, "unmapped MMIO load should fault with cause 5");
+}
+
 }  // namespace
 
 int main() {
@@ -218,6 +257,7 @@ int main() {
     test_memory_access();
     test_control_and_tohost();
     test_faults();
+    test_mmio_led();
     std::cout << "test_reference: PASS (all tests passed)\n";
     return 0;
   } catch (const std::exception &e) {

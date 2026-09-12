@@ -24,11 +24,12 @@ LDFLAGS := -nostdlib -static -mcmodel=medlow \
 	-Wl,--build-id=none \
 	-lgcc
 
-AM_OBJS := $(BUILD_DIR)/am/start.S.o $(BUILD_DIR)/am/trm.c.o $(BUILD_DIR)/am/klib.c.o
+AM_OBJS := $(BUILD_DIR)/am/start.S.o $(BUILD_DIR)/am/trm.c.o $(BUILD_DIR)/am/klib.c.o $(BUILD_DIR)/am/ioe.c.o
 
 TESTS := trm_smoke trm_exit_code calc_add dram_access heap_smoke jump_table \
 	cpu_dummy cpu_add cpu_sub_longlong cpu_bit cpu_bubble_sort cpu_select_sort \
-	cpu_fib cpu_recursion cpu_string cpu_leap_year cpu_if_else cpu_load_store
+	cpu_fib cpu_recursion cpu_string cpu_leap_year cpu_if_else cpu_load_store \
+	led_marquee
 
 TARGET_INST_BINS := $(foreach t,$(TESTS),$(TEST_BUILD_DIR)/$(t)/$(t).inst.bin)
 

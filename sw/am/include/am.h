@@ -4,6 +4,7 @@
 #include <stdint.h>
 #include <stddef.h>
 #include <stdbool.h>
+#include <amdev.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -18,6 +19,13 @@ extern Area heap;
 
 void _trm_init(void);
 void putch(char ch);
+
+bool ioe_init(void);
+void ioe_read(int reg, void *buf);
+void ioe_write(int reg, void *buf);
+
+void led_write(uint16_t val);
+uint16_t led_read(void);
 
 static inline void halt(int code) __attribute__((__noreturn__));
 static inline void halt(int code) {

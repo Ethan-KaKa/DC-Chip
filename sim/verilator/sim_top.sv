@@ -24,7 +24,10 @@ module sim_top (
 
   // Current fetch state for debug/SDB
   output logic [31:0] fetch_pc,
-  output logic [31:0] fetch_inst
+  output logic [31:0] fetch_inst,
+
+  // Peripheral output pins (LEDs)
+  output logic [15:0] o_led
 );
 
   logic        imem_req_valid;
@@ -35,19 +38,19 @@ module sim_top (
   logic [31:0] imem_rsp_rdata;
   logic        imem_rsp_error;
 
-  logic        dmem_req_valid;
-  logic        dmem_req_ready;
-  logic [31:0] dmem_req_addr;
-  logic        dmem_req_write;
-  logic [1:0]  dmem_req_size;
-  logic [31:0] dmem_req_wdata;
-  logic [3:0]  dmem_req_wstrb;
-  logic        dmem_rsp_valid;
-  logic        dmem_rsp_ready;
-  logic [31:0] dmem_rsp_rdata;
-  logic        dmem_rsp_error;
+  logic        dram_req_valid;
+  logic        dram_req_ready;
+  logic [31:0] dram_req_addr;
+  logic        dram_req_write;
+  logic [1:0]  dram_req_size;
+  logic [31:0] dram_req_wdata;
+  logic [3:0]  dram_req_wstrb;
+  logic        dram_rsp_valid;
+  logic        dram_rsp_ready;
+  logic [31:0] dram_rsp_rdata;
+  logic        dram_rsp_error;
 
-  cpu_core u_cpu_core (
+  dc_soc_top u_dc_soc_top (
     .clk              (clk),
     .rst              (rst),
     .imem_req_valid   (imem_req_valid),
@@ -57,17 +60,18 @@ module sim_top (
     .imem_rsp_ready   (imem_rsp_ready),
     .imem_rsp_rdata   (imem_rsp_rdata),
     .imem_rsp_error   (imem_rsp_error),
-    .dmem_req_valid   (dmem_req_valid),
-    .dmem_req_ready   (dmem_req_ready),
-    .dmem_req_addr    (dmem_req_addr),
-    .dmem_req_write   (dmem_req_write),
-    .dmem_req_size    (dmem_req_size),
-    .dmem_req_wdata   (dmem_req_wdata),
-    .dmem_req_wstrb   (dmem_req_wstrb),
-    .dmem_rsp_valid   (dmem_rsp_valid),
-    .dmem_rsp_ready   (dmem_rsp_ready),
-    .dmem_rsp_rdata   (dmem_rsp_rdata),
-    .dmem_rsp_error   (dmem_rsp_error),
+    .dram_req_valid   (dram_req_valid),
+    .dram_req_ready   (dram_req_ready),
+    .dram_req_addr    (dram_req_addr),
+    .dram_req_write   (dram_req_write),
+    .dram_req_size    (dram_req_size),
+    .dram_req_wdata   (dram_req_wdata),
+    .dram_req_wstrb   (dram_req_wstrb),
+    .dram_rsp_valid   (dram_rsp_valid),
+    .dram_rsp_ready   (dram_rsp_ready),
+    .dram_rsp_rdata   (dram_rsp_rdata),
+    .dram_rsp_error   (dram_rsp_error),
+    .o_led            (o_led),
     .trace_valid      (trace_valid),
     .trace_pc         (trace_pc),
     .trace_inst       (trace_inst),
@@ -90,17 +94,17 @@ module sim_top (
     .imem_rsp_ready   (imem_rsp_ready),
     .imem_rsp_rdata   (imem_rsp_rdata),
     .imem_rsp_error   (imem_rsp_error),
-    .dmem_req_valid   (dmem_req_valid),
-    .dmem_req_ready   (dmem_req_ready),
-    .dmem_req_addr    (dmem_req_addr),
-    .dmem_req_write   (dmem_req_write),
-    .dmem_req_size    (dmem_req_size),
-    .dmem_req_wdata   (dmem_req_wdata),
-    .dmem_req_wstrb   (dmem_req_wstrb),
-    .dmem_rsp_valid   (dmem_rsp_valid),
-    .dmem_rsp_ready   (dmem_rsp_ready),
-    .dmem_rsp_rdata   (dmem_rsp_rdata),
-    .dmem_rsp_error   (dmem_rsp_error),
+    .dmem_req_valid   (dram_req_valid),
+    .dmem_req_ready   (dram_req_ready),
+    .dmem_req_addr    (dram_req_addr),
+    .dmem_req_write   (dram_req_write),
+    .dmem_req_size    (dram_req_size),
+    .dmem_req_wdata   (dram_req_wdata),
+    .dmem_req_wstrb   (dram_req_wstrb),
+    .dmem_rsp_valid   (dram_rsp_valid),
+    .dmem_rsp_ready   (dram_rsp_ready),
+    .dmem_rsp_rdata   (dram_rsp_rdata),
+    .dmem_rsp_error   (dram_rsp_error),
     .tohost_exit      (tohost_exit),
     .guest_exit_code  (guest_exit_code)
   );
