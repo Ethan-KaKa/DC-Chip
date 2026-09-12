@@ -22,11 +22,31 @@ while IFS= read -r -d '' path; do
                 *) reject "refusing possible secret configuration: ${path}" ;;
             esac
             ;;
+        AGENTS.local.md|*/AGENTS.local.md|.localset.md|*/.localset.md|*.local.md|*/*.local.md)
+            case "$path" in
+                AGENTS.local.example.md|*/AGENTS.local.example.md) ;;
+                *) reject "refusing private local configuration: ${path}. See BUILD_RULES.md." ;;
+            esac
+            ;;
         *.key|*.pem|id_rsa|*/id_rsa|id_ed25519|*/id_ed25519)
             reject "refusing possible private key: ${path}"
             ;;
         .venv/*|*/.venv/*|venv/*|*/venv/*|__pycache__/*|*/__pycache__/*|*.pyc|*.pyo|*/.pytest_cache/*|*/.mypy_cache/*|*/.ruff_cache/*)
             reject "refusing environment or cache artifact: ${path}"
+            ;;
+    esac
+
+    # Reject hardcoded absolute host paths in staged source and build files
+    case "$path" in
+        *.sv|*.v|*.c|*.h|*.cpp|*.cc|*.py|*.sh|Makefile|*.mk)
+            case "$path" in
+                scripts/check_repo_rules.py|AGENTS.md|BUILD_RULES.md|GIT_RULES.md|AGENTS.local.example.md) ;;
+                *)
+                    if git diff --cached -U0 -- "$path" | grep -E '^\+[^+]' | grep -qE '(/home/[a-zA-Z0-9_\.\-]+|/Users/[a-zA-Z0-9_\.\-]+)'; then
+                        reject "staged addition in ${path} contains forbidden hardcoded absolute host path (/home/ or /Users/). See BUILD_RULES.md."
+                    fi
+                    ;;
+            esac
             ;;
     esac
 

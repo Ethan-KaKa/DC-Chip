@@ -41,3 +41,9 @@ docs/sources/
 /.config
 /.config.old
 /build/
+
+# Local developer settings and AI customizations
+/AGENTS.local.md
+/.localset.md
+*/*.local.md
+*.local.md

@@ -114,19 +114,26 @@ NVBOARD_LDFLAGS := $(NVBOARD_ARCHIVE) $(shell sdl2-config --libs 2>/dev/null) -l
 
 .DEFAULT_GOAL := help
 
-.PHONY: check-tools help defconfig menuconfig config-show test-config \
+.PHONY: check-tools check-paths init help defconfig menuconfig config-show test-config \
 	lint-isa lint-comb lint lint-mem test-isa test-alu test-decoder test-regfile test-core \
 	test-led test-uart test-periph-interconnect test-cdc test-interconnect test-soc test-unit \
 	test-disasm test-memory test-reference sim-build sim test-simulation test-difftest \
 	test-integration test-wave test-sdb sw test-sw test \
 	init-nvboard nvboard-build nvboard-run \
-	init-spike spike-build test-difftest-spike clean
+	init-spike spike-build test-difftest-spike clean tools-clean distclean
+
+
+check-paths:
+	@$(PYTHON) scripts/check_repo_rules.py
+
+init:
+	@bash scripts/bootstrap.sh
 
 check-tools:
 	@set -eu; \
 	check_tool() { \
 		if ! command -v "$$1" >/dev/null 2>&1; then \
-			printf 'error: required tool not found: %s\n' "$$1" >&2; \
+			printf 'error: required tool not found: %s. Run "make init" for setup advice.\n' "$$1" >&2; \
 			exit 1; \
 		fi; \
 	}; \
@@ -559,6 +566,7 @@ test-difftest-spike: sw $(DIFF_TEST_BIN) $(SPIKE_SO)
 	@DIFF_REF_SO="$(abspath $(SPIKE_SO))" $(DIFF_TEST_BIN) "$(abspath $(BUILD_DIR))/test-fixtures/difftest"
 
 test:
+	$(MAKE) --no-print-directory check-paths
 	$(MAKE) --no-print-directory test-config
 	$(MAKE) --no-print-directory test-isa
 	$(MAKE) --no-print-directory test-disasm
@@ -583,14 +591,40 @@ clean:
 		printf 'error: refusing to clean non-default BUILD_DIR: %s\n' "$$build_dir" >&2; \
 		exit 1; \
 	fi; \
-	rm -rf -- "$$build_dir"
+	rm -rf -- "$$build_dir"/unit "$$build_dir"/verilator "$$build_dir"/nvboard-sim \
+		"$$build_dir"/sw "$$build_dir"/test-fixtures "$$build_dir"/verilator-test \
+		"$$build_dir"/reference-test "$$build_dir"/difftest-test \
+		"$$build_dir"/disasm-test "$$build_dir"/memory-test "$$build_dir"/dump.vcd
+
+tools-clean:
+	@if [ -d tools/nvboard ]; then \
+		$(MAKE) -C tools/nvboard clean >/dev/null 2>&1 || true; \
+	fi
+	@if [ -d tools/spike/build ]; then \
+		rm -rf tools/spike/build; \
+	fi
+	@if [ -d tools/spike-diff ]; then \
+		$(MAKE) -C tools/spike-diff clean >/dev/null 2>&1 || true; \
+	fi
+	@rm -f "$(BUILD_DIR)/dc-spike-so"
+
+distclean: clean tools-clean
+	@set -eu; \
+	repo_root='$(abspath .)'; \
+	build_dir='$(abspath $(BUILD_DIR))'; \
+	if [ "$$build_dir" = "$$repo_root/build" ]; then \
+		rm -rf -- "$$build_dir"; \
+	fi; \
+	rm -f .config .config.old
 
 help:
 	@printf '%s\n' \
 		'DC-Chip build entry points' \
 		'' \
 		'Repository targets (see docs for the current migration boundary):' \
+		'  make init         One-command repository bootstrap (submodules, tools, hooks)' \
 		'  make check-tools  Check required tools, Python curses, and C++17' \
+		'  make check-paths  Check repository path and local configuration compliance' \
 		'  make help         Show this help without creating build output' \
 		'  make defconfig    Reset .config to configs/default_defconfig' \
 		'  make menuconfig   Edit .config with the vendored curses frontend' \
@@ -628,8 +662,11 @@ help:
 		'  make test-sdb     Test isolated SDB-off/on and SDB+WAVE builds' \
 		'  make nvboard-build Build the NVBoard graphical simulator' \
 		'  make nvboard-run [APP=<name>] Run an application on NVBoard graphical simulator' \
-		'  make test         Run all config, disasm, RTL, ref, sw, difftest, and CLI regression' \
-		'  make clean        Remove only the repository-root build directory' \
+		'  make test         Run all compliance, RTL, ref, sw, difftest, and CLI regression' \
+		'  make clean        Remove high-frequency project outputs (preserves tools and .config)' \
+		'  make tools-clean  Clean external tools intermediate build outputs' \
+		'  make distclean    Completely remove build/ and local .config (fresh clone state)' \
+
 		'' \
 		'Configurable variables:' \
 		'  VERILATOR, IVERILOG, VVP, CXX, PYTHON, BUILD_DIR' \
