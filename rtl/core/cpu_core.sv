@@ -25,10 +25,12 @@ module cpu_core #(
   output logic                                  dmem_rsp_ready,
   input  logic [dc_isa_pkg::DATA_WIDTH-1:0]    dmem_rsp_rdata,
   input  logic                                  dmem_rsp_error,
+  input  logic                                  dmem_rsp_skip_ref,
 
   output logic                                  trace_valid,
   output logic [dc_isa_pkg::PC_WIDTH-1:0]      trace_pc,
   output logic [dc_isa_pkg::INST_WIDTH-1:0]    trace_inst,
+  output logic                                  trace_skip_ref,
   input  logic [dc_isa_pkg::REG_ADDR_WIDTH-1:0] debug_reg_addr,
   output logic [dc_isa_pkg::DATA_WIDTH-1:0]    debug_reg_data,
 
@@ -318,13 +320,15 @@ module cpu_core #(
       trace_valid      <= 1'b0;
       trace_pc         <= '0;
       trace_inst       <= '0;
+      trace_skip_ref   <= 1'b0;
       fault_valid      <= 1'b0;
       fault_cause      <= dc_isa_pkg::FAULT_NONE;
       fault_pc         <= '0;
       fault_inst_valid <= 1'b0;
       fault_inst       <= '0;
     end else begin
-      trace_valid <= 1'b0;
+      trace_valid    <= 1'b0;
+      trace_skip_ref <= 1'b0;
 
       case (state_q)
         STATE_FETCH_REQ, STATE_FETCH_WAIT: begin
@@ -421,9 +425,10 @@ module cpu_core #(
               end else begin
                 pc_q <= pc_q + 32'd4;
               end
-              trace_valid <= 1'b1;
-              trace_pc    <= pc_q;
-              trace_inst  <= imem_rsp_rdata;
+              trace_valid    <= 1'b1;
+              trace_pc       <= pc_q;
+              trace_inst     <= imem_rsp_rdata;
+              trace_skip_ref <= 1'b0;
             end
           end else if ((state_q == STATE_FETCH_REQ) && imem_req_ready) begin
             state_q <= STATE_FETCH_WAIT;
@@ -448,11 +453,12 @@ module cpu_core #(
               fault_inst_valid <= 1'b1;
               fault_inst       <= mem_inst_q;
             end else begin
-              state_q     <= STATE_FETCH_REQ;
-              pc_q        <= mem_pc_q + 32'd4;
-              trace_valid <= 1'b1;
-              trace_pc    <= mem_pc_q;
-              trace_inst  <= mem_inst_q;
+              state_q        <= STATE_FETCH_REQ;
+              pc_q           <= mem_pc_q + 32'd4;
+              trace_valid    <= 1'b1;
+              trace_pc       <= mem_pc_q;
+              trace_inst     <= mem_inst_q;
+              trace_skip_ref <= dmem_rsp_skip_ref;
             end
           end else if ((state_q == STATE_DMEM_REQ) && dmem_req_ready) begin
             state_q <= STATE_DMEM_WAIT;

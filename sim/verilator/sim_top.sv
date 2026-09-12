@@ -8,6 +8,7 @@ module sim_top (
   output logic        trace_valid,
   output logic [31:0] trace_pc,
   output logic [31:0] trace_inst,
+  output logic        is_skip_ref,
   input  logic [3:0]  debug_reg_addr,
   output logic [31:0] debug_reg_data,
 
@@ -81,6 +82,7 @@ module sim_top (
     .trace_valid      (trace_valid),
     .trace_pc         (trace_pc),
     .trace_inst       (trace_inst),
+    .trace_skip_ref   (is_skip_ref),
     .debug_reg_addr   (debug_reg_addr),
     .debug_reg_data   (debug_reg_data),
     .fault_valid      (fault_valid),

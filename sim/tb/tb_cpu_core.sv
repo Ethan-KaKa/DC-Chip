@@ -24,10 +24,12 @@ module tb_cpu_core;
   logic        dmem_rsp_ready;
   logic [31:0] dmem_rsp_rdata;
   logic        dmem_rsp_error;
+  logic        dmem_rsp_skip_ref;
 
   logic        trace_valid;
   logic [31:0] trace_pc;
   logic [31:0] trace_inst;
+  logic        trace_skip_ref;
   logic [3:0]  debug_reg_addr;
   logic [31:0] debug_reg_data;
   logic        fault_valid;
@@ -37,29 +39,31 @@ module tb_cpu_core;
   logic [31:0] fault_inst;
 
   cpu_core dut (
-    .clk              (clk),
-    .rst              (rst),
-    .imem_req_valid   (imem_req_valid),
-    .imem_req_ready   (imem_req_ready),
-    .imem_req_addr    (imem_req_addr),
-    .imem_rsp_valid   (imem_rsp_valid),
-    .imem_rsp_ready   (imem_rsp_ready),
-    .imem_rsp_rdata   (imem_rsp_rdata),
-    .imem_rsp_error   (imem_rsp_error),
-    .dmem_req_valid   (dmem_req_valid),
-    .dmem_req_ready   (dmem_req_ready),
-    .dmem_req_addr    (dmem_req_addr),
-    .dmem_req_write   (dmem_req_write),
-    .dmem_req_size    (dmem_req_size),
-    .dmem_req_wdata   (dmem_req_wdata),
-    .dmem_req_wstrb   (dmem_req_wstrb),
-    .dmem_rsp_valid   (dmem_rsp_valid),
-    .dmem_rsp_ready   (dmem_rsp_ready),
-    .dmem_rsp_rdata   (dmem_rsp_rdata),
-    .dmem_rsp_error   (dmem_rsp_error),
-    .trace_valid      (trace_valid),
-    .trace_pc         (trace_pc),
-    .trace_inst       (trace_inst),
+    .clk               (clk),
+    .rst               (rst),
+    .imem_req_valid    (imem_req_valid),
+    .imem_req_ready    (imem_req_ready),
+    .imem_req_addr     (imem_req_addr),
+    .imem_rsp_valid    (imem_rsp_valid),
+    .imem_rsp_ready    (imem_rsp_ready),
+    .imem_rsp_rdata    (imem_rsp_rdata),
+    .imem_rsp_error    (imem_rsp_error),
+    .dmem_req_valid    (dmem_req_valid),
+    .dmem_req_ready    (dmem_req_ready),
+    .dmem_req_addr     (dmem_req_addr),
+    .dmem_req_write    (dmem_req_write),
+    .dmem_req_size     (dmem_req_size),
+    .dmem_req_wdata    (dmem_req_wdata),
+    .dmem_req_wstrb    (dmem_req_wstrb),
+    .dmem_rsp_valid    (dmem_rsp_valid),
+    .dmem_rsp_ready    (dmem_rsp_ready),
+    .dmem_rsp_rdata    (dmem_rsp_rdata),
+    .dmem_rsp_error    (dmem_rsp_error),
+    .dmem_rsp_skip_ref (dmem_rsp_skip_ref),
+    .trace_valid       (trace_valid),
+    .trace_pc          (trace_pc),
+    .trace_inst        (trace_inst),
+    .trace_skip_ref    (trace_skip_ref),
     .debug_reg_addr   (debug_reg_addr),
     .debug_reg_data   (debug_reg_data),
     .fault_valid      (fault_valid),

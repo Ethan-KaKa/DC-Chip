@@ -55,16 +55,30 @@ class ReferenceModel {
   std::uint16_t read_dram_half(std::uint32_t addr) const;
   std::uint32_t read_dram_word(std::uint32_t addr) const;
 
-  // State queries
+  // State queries and modification
   std::uint32_t pc() const { return pc_; }
+  void set_pc(std::uint32_t val) { pc_ = val; }
   std::uint32_t reg(std::size_t index) const {
     return (index < 16) ? regs_[index] : 0U;
+  }
+  void set_reg(std::size_t index, std::uint32_t val) {
+    if (index > 0 && index < 16) {
+      regs_[index] = val;
+    }
   }
   const std::array<std::uint32_t, 16> &regs() const { return regs_; }
   bool in_fault() const { return in_fault_; }
   std::uint8_t fault_cause() const { return fault_cause_; }
   std::uint32_t fault_pc() const { return fault_pc_; }
   std::uint16_t led() const { return led_reg_; }
+
+  // Skip instruction with DUT synchronization
+  void skip_instruction(std::uint32_t rd, std::uint32_t dut_rd_val, std::uint32_t next_pc) {
+    if (rd > 0 && rd < 16) {
+      regs_[rd] = dut_rd_val;
+    }
+    pc_ = next_pc;
+  }
 
   // Step single instruction
   ReferenceStepResult step();

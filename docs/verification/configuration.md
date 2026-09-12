@@ -8,16 +8,19 @@
 
 ## 1. 范围与默认值
 
-当前配置系统把两个独立布尔选项传递给 Make 和 C++ 构建：
+当前配置系统把独立布尔选项传递给 Make 和 C++ 构建：
 
 | 名称 | 默认值 | 当前状态 |
 | --- | --- | --- |
 | `DC_SIM_SDB` | `n` | `y` 时编译 SDB，reset 后默认进入交互模式 |
 | `DC_SIM_WAVE` | `n` | `y` 时编译并启用 VCD；`n` 时不编译 VCD 支持 |
+| `DC_SIM_NVBOARD` | `n` | `y` 时编译并链接 NVBoard 虚拟板卡交互环境 |
+| `DC_SIM_DIFFTEST` | `n` | `y` 时将 ReferenceModel 与 Difftest 编入主仿真器，全程进行指令级锁步差分验证 |
 
-tracked `configs/default_defconfig` 显式关闭两个选项。本地选择保存在被 Git
+tracked `configs/default_defconfig` 显式关闭这些选项。本地选择保存在被 Git
 忽略的仓库根 `.config`。`DC_SIM_SDB=y` 时正式仿真器额外编译 SDB 与反汇编
-实现；`--batch` 可在该构建中恢复原有非交互执行。
+实现；`--batch` 可在该构建中恢复原有非交互执行。`DC_SIM_DIFFTEST=y` 时正式
+仿真器在主循环中全程锁步运行差分测试。
 
 ## 2. 人工入口
 

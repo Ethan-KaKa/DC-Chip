@@ -82,6 +82,11 @@ ifeq ($(CONFIG_DC_SIM_SDB),y)
 SIM_CLI_CPP += sim/verilator/disasm.cpp \
 	sim/verilator/sdb.cpp
 endif
+
+ifeq ($(CONFIG_DC_SIM_DIFFTEST),y)
+SIM_CLI_CPP += sim/verilator/reference_model.cpp \
+	sim/verilator/difftest.cpp
+endif
 SIM_CPP := $(SIM_ENGINE_CPP) $(SIM_CLI_CPP)
 
 ifeq ($(CONFIG_DC_SIM_WAVE),y)
@@ -392,9 +397,12 @@ sim:
 	data_img='$(strip $(DATA_IMG))'; \
 	app='$(strip $(APP))'; \
 	if [ -n "$$app" ]; then \
-		$(MAKE) --no-print-directory sw; \
 		if [ -z "$$img" ]; then \
 			img='$(abspath $(BUILD_DIR))/sw/tests/'"$$app/$$app.inst.bin"; \
+		fi; \
+		if [ ! -f "$$img" ]; then \
+			printf 'error: image not found for APP=%s (%s)\nPlease build software first using "make sw" or specify IMG=<path>\n' "$$app" "$$img" >&2; \
+			exit 1; \
 		fi; \
 		if [ -z "$$data_img" ] && [ -f '$(abspath $(BUILD_DIR))/sw/tests/'"$$app/$$app.data.bin" ]; then \
 			data_img='$(abspath $(BUILD_DIR))/sw/tests/'"$$app/$$app.data.bin"; \

@@ -38,6 +38,7 @@ struct StepEvent {
   bool committed = false;
   std::uint32_t commit_pc = 0;
   std::uint32_t commit_inst = 0;
+  bool is_skip_ref = false;
   bool tohost_exit = false;
   std::uint32_t guest_exit_code = 0;
   bool entered_fault = false;

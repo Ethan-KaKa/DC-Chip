@@ -336,6 +336,7 @@ SDB-only 和 SDB+WAVE。它检查条件编译、提示符与逐字命令输出�
 `sim/verilator/sim_top.sv` 实例化 `cpu_core` 与 `sim_mem`，对外暴露：
 
 - 32 位 `trace_pc` 和 `trace_inst`，仅在合法提交时由 `trace_valid` 脉冲指示；
+- 1 位 `is_skip_ref`，指示当前提交指令是否命中未在参考模型中精确建模的 MMIO 外设空间（difftest 据此同步目标寄存器并跳过比对）；
 - 4 位 `debug_reg_addr` 输入与 32 位 `debug_reg_data` 输出，遍历 `x0`--`x15`；
 - `fault_valid`、3 位 `fault_cause`、32 位 `fault_pc`、`fault_inst_valid` 和 32 位 `fault_inst`；
 - 私有 `tohost_exit` 与 32 位 `guest_exit_code`；

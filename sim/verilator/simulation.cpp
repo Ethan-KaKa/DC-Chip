@@ -200,6 +200,7 @@ StepEvent Simulation::step_cycle() {
     ++impl_->commits;
     event.commit_pc = impl_->top->trace_pc;
     event.commit_inst = impl_->top->trace_inst;
+    event.is_skip_ref = (impl_->top->is_skip_ref != 0);
   }
   event.tohost_exit = impl_->top->tohost_exit != 0;
   event.guest_exit_code = impl_->top->guest_exit_code;

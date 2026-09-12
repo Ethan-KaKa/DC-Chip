@@ -18,6 +18,7 @@ module tb_soc_interconnect;
   logic        cpu_rsp_ready;
   logic [31:0] cpu_rsp_rdata;
   logic        cpu_rsp_error;
+  logic        cpu_rsp_skip_ref;
 
   // DRAM
   logic        dram_req_valid;
@@ -46,20 +47,21 @@ module tb_soc_interconnect;
   logic        mmio_rsp_error;
 
   soc_interconnect u_dut (
-    .clk            (clk),
-    .rst            (rst),
-    .cpu_req_valid  (cpu_req_valid),
-    .cpu_req_ready  (cpu_req_ready),
-    .cpu_req_addr   (cpu_req_addr),
-    .cpu_req_write  (cpu_req_write),
-    .cpu_req_size   (cpu_req_size),
-    .cpu_req_wdata  (cpu_req_wdata),
-    .cpu_req_wstrb  (cpu_req_wstrb),
-    .cpu_rsp_valid  (cpu_rsp_valid),
-    .cpu_rsp_ready  (cpu_rsp_ready),
-    .cpu_rsp_rdata  (cpu_rsp_rdata),
-    .cpu_rsp_error  (cpu_rsp_error),
-    .dram_req_valid (dram_req_valid),
+    .clk              (clk),
+    .rst              (rst),
+    .cpu_req_valid    (cpu_req_valid),
+    .cpu_req_ready    (cpu_req_ready),
+    .cpu_req_addr     (cpu_req_addr),
+    .cpu_req_write    (cpu_req_write),
+    .cpu_req_size     (cpu_req_size),
+    .cpu_req_wdata    (cpu_req_wdata),
+    .cpu_req_wstrb    (cpu_req_wstrb),
+    .cpu_rsp_valid    (cpu_rsp_valid),
+    .cpu_rsp_ready    (cpu_rsp_ready),
+    .cpu_rsp_rdata    (cpu_rsp_rdata),
+    .cpu_rsp_error    (cpu_rsp_error),
+    .cpu_rsp_skip_ref (cpu_rsp_skip_ref),
+    .dram_req_valid   (dram_req_valid),
     .dram_req_ready (dram_req_ready),
     .dram_req_addr  (dram_req_addr),
     .dram_req_write (dram_req_write),
@@ -162,8 +164,8 @@ module tb_soc_interconnect;
     cpu_req_valid <= 1'b0;
 
     while (!cpu_rsp_valid) step_cycle();
-    if (cpu_rsp_rdata !== 32'h2000_0104 || cpu_rsp_error) begin
-      $display("tb_soc_interconnect: FAIL - dram data mismatch: %h err=%b", cpu_rsp_rdata, cpu_rsp_error);
+    if (cpu_rsp_rdata !== 32'h2000_0104 || cpu_rsp_error || cpu_rsp_skip_ref !== 1'b0) begin
+      $display("tb_soc_interconnect: FAIL - dram data mismatch: %h err=%b skip_ref=%b", cpu_rsp_rdata, cpu_rsp_error, cpu_rsp_skip_ref);
       $finish(1);
     end
     step_cycle();
@@ -183,6 +185,10 @@ module tb_soc_interconnect;
     cpu_req_valid <= 1'b0;
 
     while (!cpu_rsp_valid) step_cycle();
+    if (cpu_rsp_skip_ref !== 1'b0) begin
+      $display("tb_soc_interconnect: FAIL - tohost cpu_rsp_skip_ref should be 0");
+      $finish(1);
+    end
     step_cycle();
 
     // 3. Route to MMIO: 0x1000_0100
@@ -200,8 +206,8 @@ module tb_soc_interconnect;
     cpu_req_valid <= 1'b0;
 
     while (!cpu_rsp_valid) step_cycle();
-    if (cpu_rsp_rdata !== 32'hcafe_0100 || cpu_rsp_error) begin
-      $display("tb_soc_interconnect: FAIL - mmio data mismatch: %h err=%b", cpu_rsp_rdata, cpu_rsp_error);
+    if (cpu_rsp_rdata !== 32'hcafe_0100 || cpu_rsp_error || cpu_rsp_skip_ref !== 1'b1) begin
+      $display("tb_soc_interconnect: FAIL - mmio data mismatch: %h err=%b skip_ref=%b", cpu_rsp_rdata, cpu_rsp_error, cpu_rsp_skip_ref);
       $finish(1);
     end
     step_cycle();

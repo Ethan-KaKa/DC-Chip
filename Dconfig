@@ -23,4 +23,12 @@ config DC_SIM_NVBOARD
 	  Build and link the NVBoard graphical virtual FPGA board environment.
 	  When enabled, pin bindings and SDL2 GUI are initialized during simulation.
 
+config DC_SIM_DIFFTEST
+	bool "Enable lockstep differential testing with reference model"
+	default n
+	help
+	  Build and link the ReferenceModel and Difftest engine into the simulator.
+	  When enabled, the simulator steps the reference model in lockstep with the
+	  CPU for every committed instruction and checks architectural state.
+
 endmenu

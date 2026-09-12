@@ -14,7 +14,7 @@ import sys
 REPO_ROOT = Path(__file__).resolve().parents[1]
 CONFIG_SCRIPT = REPO_ROOT / "scripts" / "config.py"
 VENDOR_DIR = REPO_ROOT / "tools" / "kconfiglib"
-SYMBOLS = ("DC_SIM_SDB", "DC_SIM_WAVE", "DC_SIM_NVBOARD")
+SYMBOLS = ("DC_SIM_SDB", "DC_SIM_WAVE", "DC_SIM_NVBOARD", "DC_SIM_DIFFTEST")
 
 
 class TestFailure(Exception):
@@ -79,15 +79,16 @@ def file_snapshot(paths: list[Path]) -> dict[Path, bytes | None]:
     return {path: path.read_bytes() if path.is_file() else None for path in paths}
 
 
-def expected_show(sdb: bool, wave: bool, nvboard: bool = False) -> str:
+def expected_show(sdb: bool, wave: bool, nvboard: bool = False, difftest: bool = False) -> str:
     return (
         f"CONFIG_DC_SIM_SDB={'y' if sdb else 'n'}\n"
         f"CONFIG_DC_SIM_WAVE={'y' if wave else 'n'}\n"
         f"CONFIG_DC_SIM_NVBOARD={'y' if nvboard else 'n'}\n"
+        f"CONFIG_DC_SIM_DIFFTEST={'y' if difftest else 'n'}\n"
     )
 
 
-def verify_generated(output_dir: Path, sdb: bool, wave: bool, nvboard: bool = False) -> None:
+def verify_generated(output_dir: Path, sdb: bool, wave: bool, nvboard: bool = False, difftest: bool = False) -> None:
     auto_conf = (output_dir / "auto.conf").read_text(encoding="utf-8")
     header = (output_dir / "config.h").read_text(encoding="utf-8")
     require(
@@ -102,7 +103,11 @@ def verify_generated(output_dir: Path, sdb: bool, wave: bool, nvboard: bool = Fa
         f"CONFIG_DC_SIM_NVBOARD={'y' if nvboard else 'n'}\n" in auto_conf,
         "auto.conf has the wrong NVBOARD value",
     )
-    for name, enabled in zip(SYMBOLS, (sdb, wave, nvboard)):
+    require(
+        f"CONFIG_DC_SIM_DIFFTEST={'y' if difftest else 'n'}\n" in auto_conf,
+        "auto.conf has the wrong DIFFTEST value",
+    )
+    for name, enabled in zip(SYMBOLS, (sdb, wave, nvboard, difftest)):
         definition = f"#define CONFIG_{name} 1"
         require(
             (definition in header) == enabled,
@@ -110,9 +115,10 @@ def verify_generated(output_dir: Path, sdb: bool, wave: bool, nvboard: bool = Fa
         )
 
 
-def compile_header(cxx: str, output_dir: Path, sdb: bool, wave: bool, nvboard: bool = False) -> None:
+def compile_header(cxx: str, output_dir: Path, sdb: bool, wave: bool, nvboard: bool = False, difftest: bool = False) -> None:
     checks: list[str] = []
-    for name, enabled in zip(SYMBOLS, (sdb, wave, nvboard)):
+    for name, enabled in zip(SYMBOLS, (sdb, wave, nvboard, difftest)):
+
         if enabled:
             checks.extend(
                 [
@@ -287,12 +293,14 @@ def run_tests(fixture_root: Path, cxx: str) -> None:
     )
     expect_success(import_result, "vendored menuconfig and curses imports")
 
-    for sdb, wave, nvboard in (
-        (False, False, False),
-        (True, False, False),
-        (False, True, False),
-        (True, True, False),
-        (False, False, True),
+    for sdb, wave, nvboard, difftest in (
+        (False, False, False, False),
+        (True, False, False, False),
+        (False, True, False, False),
+        (True, True, False, False),
+        (False, False, True, False),
+        (False, False, False, True),
+        (True, False, False, True),
     ):
         matrix = run(
             config_command(
@@ -302,14 +310,15 @@ def run_tests(fixture_root: Path, cxx: str) -> None:
                 f"DC_SIM_SDB={'y' if sdb else 'n'}",
                 f"DC_SIM_WAVE={'y' if wave else 'n'}",
                 f"DC_SIM_NVBOARD={'y' if nvboard else 'n'}",
+                f"DC_SIM_DIFFTEST={'y' if difftest else 'n'}",
             )
         )
-        expect_success(matrix, f"configuration matrix SDB={sdb}, WAVE={wave}, NVBOARD={nvboard}")
+        expect_success(matrix, f"configuration matrix SDB={sdb}, WAVE={wave}, NVBOARD={nvboard}, DIFFTEST={difftest}")
         matrix_show = run(config_command(config_path, output_dir, "show"))
         expect_success(matrix_show, "matrix show")
-        require(matrix_show.stdout == expected_show(sdb, wave, nvboard), "wrong matrix values")
-        verify_generated(output_dir, sdb, wave, nvboard)
-        compile_header(cxx, output_dir, sdb, wave, nvboard)
+        require(matrix_show.stdout == expected_show(sdb, wave, nvboard, difftest), "wrong matrix values")
+        verify_generated(output_dir, sdb, wave, nvboard, difftest)
+        compile_header(cxx, output_dir, sdb, wave, nvboard, difftest)
 
 
 def parse_args(argv: list[str]) -> argparse.Namespace:

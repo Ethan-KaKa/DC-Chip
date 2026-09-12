@@ -27,7 +27,8 @@ class Difftest {
 
   // Run difftest step on single committed instruction or fault
   // Returns true if matched, false if mismatch occurred.
-  bool step_and_compare(std::uint64_t max_cycles, DifftestMismatch *mismatch = nullptr);
+  bool step_and_compare(std::uint64_t max_cycles, DifftestMismatch *mismatch = nullptr,
+                        RunResult *out_dut_res = nullptr);
 
   // Run until tohost exit, fault, or max commits
   bool run_difftest(std::uint64_t max_commits, std::uint64_t max_cycles,

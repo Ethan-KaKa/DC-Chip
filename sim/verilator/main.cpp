@@ -4,6 +4,10 @@
 #ifdef CONFIG_DC_SIM_SDB
 #include "sdb.h"
 #endif
+#ifdef CONFIG_DC_SIM_DIFFTEST
+#include "difftest.h"
+#include "reference_model.h"
+#endif
 
 #include <array>
 #include <cstdint>
@@ -382,9 +386,34 @@ int main(int argc, char **argv) {
   bool stopped_on_program_exit = false;
   std::uint32_t final_guest_exit_code = 0;
 
+#ifdef CONFIG_DC_SIM_DIFFTEST
+  dc_sim::ReferenceModel reference_model;
+  dc_sim::Difftest difftest(*simulation, reference_model);
+  difftest.sync_memory();
+  dc_sim::DifftestMismatch mismatch;
+#endif
+
   const std::uint64_t max_steps = options.steps.value_or(std::numeric_limits<std::uint64_t>::max());
   for (std::uint64_t step = 0; step < max_steps; ++step) {
-    const dc_sim::RunResult result = simulation->step_instruction(max_cycles);
+    dc_sim::RunResult result;
+#ifdef CONFIG_DC_SIM_DIFFTEST
+    const bool difftest_ok = difftest.step_and_compare(max_cycles, &mismatch, &result);
+    if (!difftest_ok) {
+      if (result.reason == dc_sim::StopReason::timeout) {
+        std::cerr << "error: timeout after " << result.state.cycles
+                  << " cycles and " << result.state.commits << " commits\n";
+        return kTimeout;
+      }
+      std::cerr << "error: difftest mismatch at cycle=" << mismatch.cycle
+                << " commit=" << mismatch.commit << " field=" << mismatch.field
+                << ": DUT " << hex_value(mismatch.dut_value, 8)
+                << " vs REF " << hex_value(mismatch.ref_value, 8) << '\n'
+                << "  " << mismatch.message << '\n';
+      return kStateMismatch;
+    }
+#else
+    result = simulation->step_instruction(max_cycles);
+#endif
     if (result.reason == dc_sim::StopReason::commits_complete) {
       if (options.trace) {
         print_trace(result.event, result.state);

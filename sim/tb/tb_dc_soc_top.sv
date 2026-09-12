@@ -37,6 +37,7 @@ module tb_dc_soc_top;
   logic        trace_valid;
   logic [31:0] trace_pc;
   logic [31:0] trace_inst;
+  logic        trace_skip_ref;
   logic [3:0]  debug_reg_addr;
   logic [31:0] debug_reg_data;
   logic        fault_valid;
@@ -74,6 +75,7 @@ module tb_dc_soc_top;
     .trace_valid      (trace_valid),
     .trace_pc         (trace_pc),
     .trace_inst       (trace_inst),
+    .trace_skip_ref   (trace_skip_ref),
     .debug_reg_addr   (debug_reg_addr),
     .debug_reg_data   (debug_reg_data),
     .fault_valid      (fault_valid),

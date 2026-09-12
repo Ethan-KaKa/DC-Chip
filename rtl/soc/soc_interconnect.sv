@@ -22,6 +22,7 @@ module soc_interconnect #(
   input  logic        cpu_rsp_ready,
   output logic [31:0] cpu_rsp_rdata,
   output logic        cpu_rsp_error,
+  output logic        cpu_rsp_skip_ref,
 
   // DRAM / Memory slave interface
   output logic        dram_req_valid,
@@ -110,6 +111,7 @@ module soc_interconnect #(
   assign cpu_rsp_error  = (state_q == STATE_ERR_RSP) ? 1'b1 :
                           (state_q == STATE_WAIT_RSP && target_q == TARGET_DRAM) ? dram_rsp_error :
                           (state_q == STATE_WAIT_RSP && target_q == TARGET_MMIO) ? mmio_rsp_error : 1'b0;
+  assign cpu_rsp_skip_ref = (state_q == STATE_WAIT_RSP && target_q == TARGET_MMIO);
   assign dram_rsp_ready = !rst && (state_q == STATE_WAIT_RSP) && (target_q == TARGET_DRAM) && cpu_rsp_ready;
   assign mmio_rsp_ready = !rst && (state_q == STATE_WAIT_RSP) && (target_q == TARGET_MMIO) && cpu_rsp_ready;
 

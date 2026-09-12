@@ -26,6 +26,10 @@
   - 参考模型与差分：`sim/verilator/reference_model.cpp` 扩充 MMIO UART 读写与状态位建模，`test_reference` 与 `test_difftest` 适配并全 PASS。
   - NVBoard 终端：`constr/nvboard.nxdc` 绑定 `o_uart_tx UART_TX` 与 `i_uart_rx UART_RX`，NVBoard 虚拟终端打通，支持 `make nvboard-run [APP=uart_hello]`。
 - 构建系统与回归闭环全面增强：新增 `make test-uart`、`make test-periph-interconnect`、`make test-cdc`，单元测试套件增至 10 个；`make test-unit`、`make test-isa`、`make test-disasm`、`make test-memory`、`make test-reference`、`make test-simulation`、`make sw`、`make test-sw`（20 项）、`make test-difftest`、`make test-integration`（32 项）、`make test-wave`、`make test-sdb` 以及最高层 `make test` 全面 PASS。
+- 阶段 5 Phase 2.5 差分测试架构对齐已完成：
+  - Kconfig 配置化：`Dconfig`、`configs/default_defconfig` 与 `scripts/config.py` 扩展支持 `DC_SIM_DIFFTEST`。开启后主仿真器 `Vsim_top` 自动编入 ReferenceModel 与 Difftest 引擎，并在仿真执行主循环中对每条提交指令全程进行 lockstep 逐条比对。
+  - 构建解耦：上层软件编译（`make sw`）与仿真系统编译（`make sim-build`）完全解耦独立；`make sim APP=<name>` 消除隐式内联编译软件的依赖，改为清晰的镜像存在性检查与诊断提示。
+  - 硬件 `is_skip_ref` 地址分流机制：`soc_interconnect` 在 CPU 访存命中 MMIO/未建模外设空间时生成 `cpu_rsp_skip_ref`；`cpu_core` 在访存指令提交拍通过 `trace_skip_ref` 导出；`dc_soc_top` 与 `sim_top` 导出 `is_skip_ref` 信号；`Difftest` 引擎在捕获到 `is_skip_ref` 时跳过严格比较并将 DUT 寄存器值同步至 ReferenceModel，避免外设动态状态发散。`uart_hello` 纳入 `test_difftest` 软件测试集并全 PASS。
 - v0.1 可执行基线冻结在 commit `9bfb9a97153be05de34c6d2311c09f41cb6f43ab`；不提供双 ISA 开关，旧语义只由 Git历史和迁移前验证记录保留。
 - 正式 MMIO 扩展（timer/sensor）、板卡具体型号/封装、板级复位极性仍属于阶段 5 后续子阶段规划中。
 - 在对应规格落盘前，不得把上述未决项当成既定事实写入 RTL 或测试。

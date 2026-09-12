@@ -21,8 +21,12 @@ void Difftest::sync_memory() {
   ref_.load_from_sim_memory();
 }
 
-bool Difftest::step_and_compare(std::uint64_t max_cycles, DifftestMismatch *mismatch) {
+bool Difftest::step_and_compare(std::uint64_t max_cycles, DifftestMismatch *mismatch,
+                                RunResult *out_dut_res) {
   const RunResult dut_res = dut_.step_instruction(max_cycles);
+  if (out_dut_res != nullptr) {
+    *out_dut_res = dut_res;
+  }
 
   if (dut_res.reason == StopReason::timeout) {
     if (mismatch != nullptr) {
@@ -32,6 +36,67 @@ bool Difftest::step_and_compare(std::uint64_t max_cycles, DifftestMismatch *mism
       mismatch->message = "DUT timed out before completing instruction step";
     }
     return false;
+  }
+
+  if (dut_res.event.is_skip_ref) {
+    if (dut_res.event.commit_pc != ref_.pc()) {
+      if (mismatch != nullptr) {
+        mismatch->cycle = dut_res.state.cycles;
+        mismatch->commit = dut_res.state.commits;
+        mismatch->field = "commit_pc";
+        mismatch->dut_value = dut_res.event.commit_pc;
+        mismatch->ref_value = ref_.pc();
+        mismatch->message = "commit_pc mismatch on skip_ref: DUT " + hex8(dut_res.event.commit_pc) +
+                            " vs REF " + hex8(ref_.pc());
+      }
+      return false;
+    }
+
+    const std::uint32_t inst = dut_res.event.commit_inst;
+    const std::uint32_t opcode = inst & 0x7fU;
+    const std::uint32_t rd = (inst >> 7U) & 0x1fU;
+    const ArchitecturalState &dut_state = dut_res.state;
+    const std::uint32_t next_pc = dut_res.event.commit_pc + 4U;
+
+    // Load instruction: opcode 0b0000011 (0x03)
+    if (opcode == 0x03U) {
+      ref_.skip_instruction(rd, dut_state.registers[rd], next_pc);
+    } else {
+      ref_.skip_instruction(0, 0, next_pc);
+    }
+
+    // Compare all 16 registers
+    for (std::size_t i = 0; i < 16; ++i) {
+      if (dut_state.registers[i] != ref_.reg(i)) {
+        if (mismatch != nullptr) {
+          mismatch->cycle = dut_state.cycles;
+          mismatch->commit = dut_state.commits;
+          mismatch->field = "x" + std::to_string(i);
+          mismatch->dut_value = dut_state.registers[i];
+          mismatch->ref_value = ref_.reg(i);
+          mismatch->message = "Register x" + std::to_string(i) + " mismatch after skip_ref: DUT " +
+                              hex8(dut_state.registers[i]) + " vs REF " + hex8(ref_.reg(i));
+        }
+        return false;
+      }
+    }
+
+    // Compare next fetch PC
+    if (dut_state.fetch_pc != next_pc) {
+      if (mismatch != nullptr) {
+        mismatch->cycle = dut_state.cycles;
+        mismatch->commit = dut_state.commits;
+        mismatch->field = "next_pc";
+        mismatch->dut_value = dut_state.fetch_pc;
+        mismatch->ref_value = next_pc;
+        mismatch->message = "Next PC mismatch after skip_ref: DUT " + hex8(dut_state.fetch_pc) +
+                            " vs REF " + hex8(next_pc);
+      }
+      return false;
+    }
+
+    last_tohost_exit_ = dut_res.event.tohost_exit;
+    return true;
   }
 
   const ReferenceStepResult ref_res = ref_.step();
