@@ -26,6 +26,8 @@ void ioe_write(int reg, void *buf);
 
 void led_write(uint16_t val);
 uint16_t led_read(void);
+void uart_write(char ch);
+int uart_read(char *ch);
 
 static inline void halt(int code) __attribute__((__noreturn__));
 static inline void halt(int code) {

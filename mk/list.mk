@@ -56,6 +56,10 @@ else ifeq ($(CLI_SECOND),riscv-tests)
 ifeq ($(filter $(CLI_GOALS_KEY),sw:riscv-tests sw:riscv-tests:list sw:riscv-tests:batch),)
 $(error invalid command "make $(CLI_GOALS)"; run "make list")
 endif
+else ifeq ($(CLI_SECOND),demo)
+ifeq ($(filter $(CLI_GOALS_KEY),sw:demo:list sw:demo:build sw:demo:run),)
+$(error invalid command "make $(CLI_GOALS)"; run "make list")
+endif
 else ifneq ($(CLI_SECOND),)
 $(error invalid command "make $(CLI_GOALS)"; run "make help" or "make list")
 endif
@@ -73,7 +77,7 @@ endif
 ifneq ($(strip $(ALL)),)
 ifeq ($(filter _%,$(firstword $(CLI_GOALS))),)
 CLI_ALL_PREFIX := $(word 1,$(CLI_GOALS))$(if $(word 2,$(CLI_GOALS)),:$(word 2,$(CLI_GOALS)))
-CLI_ALL_GOALS := testunit testinfra sw:tests sw:riscv-tests
+CLI_ALL_GOALS := testunit testinfra sw:tests sw:riscv-tests sw:demo
 ifeq ($(filter $(CLI_ALL_PREFIX),$(CLI_ALL_GOALS)),)
 $(error ALL is only valid with testunit, testinfra, "sw tests", or "sw riscv-tests", without list/batch)
 endif
@@ -97,7 +101,7 @@ list:
 endif
 
 # 这些 goal 只承载分层命令的语法位置；实际行为由首个 goal 分派。
-batch tests riscv-tests sdboff nvboardoff waveoff:
+batch tests riscv-tests demo build run sdboff nvboardoff waveoff:
 	@:
 
 help:

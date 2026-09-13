@@ -50,6 +50,7 @@ def main():
     require("make testunit list" in suite_list.stdout, "test index omits unit discovery")
     require("make testinfra list" in suite_list.stdout, "test index omits infra discovery")
     require("make sw tests list" in suite_list.stdout, "test index omits software discovery")
+    require("make sw demo list" in suite_list.stdout, "test index omits demo discovery")
 
     unified_build = run(args.make, "-B", "-n", "sim-build")
     require(unified_build.returncode == 0, "unified sim-build dry-run failed", unified_build.stdout)
@@ -68,6 +69,9 @@ def main():
         ("sw", "tests", "nvboardoff", "waveoff", "sdboff"),
         ("sw", "tests", "waveoff", "sdboff", "nvboardoff"),
         ("sw", "tests", "batch"),
+        ("sw", "demo", "list"),
+        ("sw", "demo", "build"),
+        ("sw", "demo", "run"),
     ):
         dry_run = ("CLI_CHECK_ONLY=1", *command) if len(command) > 2 and command[2] != "list" else command
         result = run(args.make, *dry_run)
@@ -82,6 +86,7 @@ def main():
         ("sw", "tests", "sdboff", "sdboff"),
         ("sw", "tests", "batch", "waveoff"),
         ("sw", "tests", "list", "nvboardoff"),
+        ("sw", "demo", "typo"),
     )
     for command in invalid_commands:
         result = run(args.make, *command)
@@ -91,6 +96,9 @@ def main():
     unknown_filter = run(args.make, "testunit", "ALL=does-not-exist")
     require(unknown_filter.returncode != 0, "unknown ALL filter succeeded")
     require(">>> 开始执行" not in unknown_filter.stdout, "unknown filter started tests", unknown_filter.stdout)
+
+    unknown_demo = run(args.make, "sw", "demo", "build", "ALL=does-not-exist")
+    require(unknown_demo.returncode != 0, "unknown demo filter succeeded")
 
     unavailable = run(args.make, "sw", "riscv-tests", "batch")
     require(unavailable.returncode != 0, "unavailable riscv-tests suite reported success")

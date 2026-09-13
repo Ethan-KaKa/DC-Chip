@@ -8,6 +8,7 @@ DC-Chip 统一自省与测试调度引擎。
   - make testunit list | batch | ALL=alu,uart,...
   - make testinfra list | batch | ALL=memory,reference,...
   - make sw tests list | batch | ALL=cpu_fib,uart_hello,...
+  - make sw demo list | build | run
   - make sw riscv-tests list | batch | ALL=...
 """
 
@@ -105,7 +106,12 @@ def cmd_list_suites():
     print("                      临时关闭: make sw tests sdboff nvboardoff waveoff")
     print("                      指定运行: make sw tests ALL=cpu_fib,uart_hello")
     print("")
-    print("  4. sw riscv-tests - RISC-V 体系结构合规测试套件 (预留，当前不可执行)")
+    print("  4. sw demo        - 面向展示的交互式软件演示")
+    print("                      查看列表: make sw demo list")
+    print("                      构建镜像: make sw demo build")
+    print("                      交互运行: make sw demo run")
+    print("")
+    print("  5. sw riscv-tests - RISC-V 体系结构合规测试套件 (预留，当前不可执行)")
     print("                      查看列表: make sw riscv-tests list")
     print("----------------------------------------------------------------------")
     print("  提示: testunit/testinfra 默认 batch；裸 sw tests 完全服从 .config。")
@@ -287,7 +293,8 @@ def run_infra_tests(filter_str=None, make_command="make", build_dir=None, config
 # -----------------------------------------------------------------------------
 # 4. 全系统软件测试 (sw tests / sw riscv-tests)
 # -----------------------------------------------------------------------------
-def list_sw_suite(suite_dir, title, command_prefix="make sw tests", runnable=True):
+def list_sw_suite(suite_dir, title, command_prefix="make sw tests", runnable=True,
+                  examples=None):
     full_path = os.path.join(REPO_ROOT, suite_dir)
     print("\n" + "=" * 70)
     print(f"      [Layer 3: {title} ({suite_dir})]")
@@ -313,7 +320,10 @@ def list_sw_suite(suite_dir, title, command_prefix="make sw tests", runnable=Tru
 
     print("----------------------------------------------------------------------")
     print("用法示例:")
-    if runnable:
+    if examples is not None:
+        for example in examples:
+            print(f"  {example}")
+    elif runnable:
         print(f"  {command_prefix} batch")
         print(f"  {command_prefix} ALL=cpu_fib,uart_hello")
     else:
@@ -375,7 +385,7 @@ def run_sw_tests(filter_str=None, simulator=None, test_dir=None, make_command="m
 def main():
     parser = argparse.ArgumentParser(description="DC-Chip Test Runner & Introspection Tool")
     parser.add_argument("--list-suites", action="store_true", help="List all top-level test suites")
-    parser.add_argument("--suite", choices=["unit", "infra", "sw-tests", "riscv-tests"], help="Select suite")
+    parser.add_argument("--suite", choices=["unit", "infra", "sw-tests", "sw-demos", "riscv-tests"], help="Select suite")
     parser.add_argument("--list", action="store_true", help="List tests in selected suite")
     parser.add_argument("--batch", action="store_true", help="Run all tests in suite")
     parser.add_argument("--filter", default=None, help="Filter test names, comma-separated")
@@ -444,6 +454,16 @@ def main():
             )
         else:
             print("error: sw riscv-tests 尚未导入，当前只支持 make sw riscv-tests list", file=sys.stderr)
+            sys.exit(2)
+
+    elif args.suite == "sw-demos":
+        if args.list:
+            list_sw_suite("sw/demo", "交互式软件演示清单 (sw demo)",
+                          command_prefix="make sw demo", runnable=True,
+                          examples=("make sw demo list", "make sw demo build",
+                                    "make sw demo run"))
+        else:
+            print("error: sw demo 目前只支持 make sw demo list", file=sys.stderr)
             sys.exit(2)
 
 if __name__ == "__main__":

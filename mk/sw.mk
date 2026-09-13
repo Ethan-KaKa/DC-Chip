@@ -4,6 +4,7 @@
 #   make sw                             -> 仅编译所有软件镜像
 #   make sw tests [list|batch|ALL=...]  -> 运行全系统微测试
 #   make sw riscv-tests [list|batch...] -> 运行合规套件
+#   make sw demo [list|build|run]       -> 构建或运行交互式演示
 SW_TEST_TAIL := $(wordlist 3,$(words $(MAKECMDGOALS)),$(MAKECMDGOALS))
 SW_TEST_BATCH := $(filter batch,$(SW_TEST_TAIL))
 SW_TEST_SDB_OFF := $(filter sdboff,$(SW_TEST_TAIL))$(SW_TEST_BATCH)
@@ -52,9 +53,20 @@ sw:
 					   else \
 						$(PYTHON) scripts/test_runner.py --suite riscv-tests --batch --make "$(MAKE)"; \
 						   fi ;; \
+						esac ;; \
+			demo) \
+				case "$(ALL)" in ""|uart_led_demo) ;; *) printf 'error: unknown demo in ALL: %s\n' "$(ALL)" >&2; exit 1 ;; esac; \
+				case "$(word 3,$(MAKECMDGOALS))" in \
+				list)  $(PYTHON) scripts/test_runner.py --suite sw-demos --list ;; \
+				build) $(MAKE) -C sw/demo BUILD_DIR=$(abspath $(BUILD_DIR))/sw build ;; \
+				run)   $(MAKE) --no-print-directory sim-build && \
+					$(MAKE) -C sw/demo BUILD_DIR=$(abspath $(BUILD_DIR))/sw build && \
+					$(if $(filter y,$(CONFIG_DC_SIM_NVBOARD)),,if [ "$(CONFIG_DC_SIM_NVBOARD)" != "y" ]; then printf 'error: demo run requires DC_SIM_NVBOARD=y in .config\n' >&2; exit 1; fi;) \
+					$(abspath $(SIM_BIN)) --image-inst $(abspath $(BUILD_DIR))/sw/demo/uart_led_demo/uart_led_demo.inst.bin --image-data $(abspath $(BUILD_DIR))/sw/demo/uart_led_demo/uart_led_demo.data.bin --sdb-off ;; \
+				*) printf 'error: make sw demo requires list, build, or run\n' >&2; exit 1 ;; \
 				esac ;; \
 			*) \
-				printf 'error: 未知的 sw 子目标 "%s". 支持: make sw tests [list|batch|ALL=...] 或 make sw riscv-tests [list|batch]\n' "$(word 2,$(MAKECMDGOALS))" >&2; \
+				printf 'error: 未知的 sw 子目标 "%s". 支持: make sw tests [list|batch|ALL=...], make sw demo [list|build|run] 或 make sw riscv-tests [list|batch]\n' "$(word 2,$(MAKECMDGOALS))" >&2; \
 				exit 1 ;; \
 		 esac; \
 	fi

@@ -249,6 +249,9 @@ make sw tests                        # 完全按 .config 运行全部软件测�
 make sw tests ALL=cpu_fib,uart_hello # 只运行指定软件测试
 make sw tests sdboff waveoff ALL=cpu_fib # 临时关闭指定运行时功能
 make sw tests batch                  # 等价于 sdboff nvboardoff waveoff
+make sw demo list                    # 查看交互式演示清单
+make sw demo build                   # 构建演示镜像
+make sw demo run                     # 打开 NVBoard UART LED 演示
 ```
 
 ### 分层测试
@@ -302,7 +305,8 @@ DC-Chip/
 │   └── verilator/              # Verilator 顶层、仿真存储、Difftest、SDB、参考模型
 ├── sw/                         # 裸机软件生态
 │   ├── am/                     # 自包含 Abstract Machine 运行时与 klib
-│   └── tests/                  # 20 项软件回归测试程序源代码
+│   ├── tests/                  # 20 项软件回归测试程序源代码
+│   └── demo/                   # 面向展示的交互式软件演示
 ├── constr/                     # 引脚与物理约束 (包括 NVBoard 虚拟引脚映射)
 ├── configs/                    # 预置 Kconfig 配置文件
 ├── scripts/                    # 构建管理、配置生成与 ISA 审计脚本
