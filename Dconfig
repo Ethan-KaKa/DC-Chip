@@ -7,7 +7,8 @@ config DC_SIM_SDB
 	default n
 	help
 	  Build support for the compact interactive simulator debugger.
-	  When enabled, the simulator enters SDB after reset unless --batch is used.
+	  When enabled, software tests enter SDB after reset unless the sdboff
+	  runtime modifier is used.
 
 config DC_SIM_WAVE
 	bool "Build VCD waveform support"
@@ -20,8 +21,8 @@ config DC_SIM_NVBOARD
 	bool "Build NVBoard graphical board simulation"
 	default n
 	help
-	  Build and link the NVBoard graphical virtual FPGA board environment.
-	  When enabled, pin bindings and SDL2 GUI are initialized during simulation.
+	  Build and link NVBoard into the single Vsim_top simulator. Software tests
+	  initialize and update the board unless the nvboardoff modifier is used.
 
 config DC_SIM_DIFFTEST
 	bool "Enable lockstep differential testing with reference model"

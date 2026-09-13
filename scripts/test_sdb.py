@@ -78,7 +78,10 @@ def expect_exact(
     )
 
 
-def configure(config_path: Path, output_dir: Path, sdb: bool, wave: bool) -> None:
+def configure(
+    config_path: Path, output_dir: Path, sdb: bool, wave: bool,
+    difftest: bool = False,
+) -> None:
     result = run(
         [
             sys.executable,
@@ -90,6 +93,8 @@ def configure(config_path: Path, output_dir: Path, sdb: bool, wave: bool) -> Non
             "set",
             f"DC_SIM_SDB={'y' if sdb else 'n'}",
             f"DC_SIM_WAVE={'y' if wave else 'n'}",
+            "DC_SIM_NVBOARD=n",
+            f"DC_SIM_DIFFTEST={'y' if difftest else 'n'}",
         ]
     )
     expect_success(result, f"configure SDB={sdb}, WAVE={wave}")
@@ -190,12 +195,12 @@ def verify_sdb_off(
         simulator,
         "isa_smoke.hex",
         commands="q\n",
-        arguments=(*base_arguments, "--batch"),
+        arguments=(*base_arguments, "--sdb-off"),
     )
     expect_success(default, "SDB-off default batch")
-    expect_success(explicit, "SDB-off explicit batch")
-    require(default.stdout == explicit.stdout, "--batch changed SDB-off stdout")
-    require(default.stderr == explicit.stderr, "--batch changed SDB-off stderr")
+    expect_success(explicit, "SDB-off explicit runtime disable")
+    require(default.stdout == explicit.stdout, "--sdb-off changed SDB-off stdout")
+    require(default.stderr == explicit.stderr, "--sdb-off changed SDB-off stderr")
     expected_summary = (
         "summary commits=1 cycles=1 pc=0x00000004 "
         "x0=0x00000000 x1=0x00000002 x2=0x00000000 x3=0x00000000 "
@@ -422,7 +427,7 @@ def verify_cli_modes(
     simulator: Path,
 ) -> None:
     integration = run(
-        ["bash", str(INTEGRATION_SCRIPT), str(simulator), "--batch"],
+        ["bash", str(INTEGRATION_SCRIPT), str(simulator)],
         environment={"TEST_FIXTURE_DIR": str(build_dir / "integration")},
     )
     expect_success(integration, "SDB-on 32-case batch integration")
@@ -434,7 +439,7 @@ def verify_cli_modes(
         simulator,
         "isa_smoke.hex",
         commands="q\n",
-        arguments=("--steps", "1", "--batch"),
+        arguments=("--steps", "1", "--sdb-off", "--nvboard-off"),
     )
     expected_step1_summary = (
         "summary commits=1 cycles=1 pc=0x00000004 "
@@ -445,18 +450,18 @@ def verify_cli_modes(
     )
     require(
         batch_with_stdin.stdout == expected_step1_summary,
-        "SDB-on --batch read debugger commands from stdin",
+        "SDB-on --sdb-off read debugger commands from stdin",
     )
 
     conflicts = (
         (
             ("--expect", "x1=0", "--trace", "--steps", "1"),
-            "error: option --steps requires --batch when SDB is enabled\n",
+            "error: option --steps requires --sdb-off when SDB is enabled\n",
         ),
-        (("--trace",), "error: option --trace requires --batch when SDB is enabled\n"),
+        (("--trace",), "error: option --trace requires --sdb-off when SDB is enabled\n"),
         (
             ("--expect", "x1=0"),
-            "error: option --expect requires --batch when SDB is enabled\n",
+            "error: option --expect requires --sdb-off when SDB is enabled\n",
         ),
     )
     for arguments, expected_error in conflicts:
@@ -469,43 +474,16 @@ def verify_cli_modes(
             stderr=expected_error,
         )
 
-    duplicate_batch = cli(
+    duplicate_disable = cli(
         simulator,
         "isa_smoke.hex",
-        arguments=("--batch", "--batch"),
+        arguments=("--sdb-off", "--sdb-off"),
     )
-    require(duplicate_batch.returncode == 1, "duplicate --batch was accepted")
+    require(duplicate_disable.returncode == 1, "duplicate --sdb-off was accepted")
     require(
-        duplicate_batch.stderr.startswith("error: duplicate option --batch\n"),
-        "duplicate --batch diagnostic changed",
+        duplicate_disable.stderr.startswith("error: duplicate option --sdb-off\n"),
+        "duplicate --sdb-off diagnostic changed",
     )
-
-    make_batch = run(
-        make_command(
-            args,
-            build_dir,
-            config_path,
-            "sim",
-            variables=(
-                f"IMG={TEST_IMAGES / 'isa_smoke.hex'}",
-                "STEPS=1",
-                "BATCH=1",
-            ),
-        )
-    )
-    expect_success(make_batch, "make sim BATCH=1")
-    require("summary commits=1 cycles=1" in make_batch.stdout, "BATCH=1 was not forwarded")
-    invalid_batch = run(
-        make_command(
-            args,
-            build_dir,
-            config_path,
-            "sim",
-            variables=(f"IMG={TEST_IMAGES / 'isa_smoke.hex'}", "BATCH=2"),
-        )
-    )
-    require(invalid_batch.returncode != 0, "make sim accepted BATCH=2")
-    require("BATCH must be empty or 1" in invalid_batch.stderr, "wrong BATCH error")
 
 
 def verify_sdb_only(
@@ -513,7 +491,7 @@ def verify_sdb_only(
 ) -> tuple[Path, Path, Path]:
     build_dir = root / "build"
     config_path = root / ".config"
-    configure(config_path, build_dir / "config", True, False)
+    configure(config_path, build_dir / "config", True, False, difftest=True)
     make_targets(args, build_dir, config_path, "sim-build")
     simulator = build_dir / "verilator" / "Vsim_top"
     for object_name in ("sdb.o", "disasm.o"):
@@ -521,6 +499,8 @@ def verify_sdb_only(
             (build_dir / "verilator" / object_name).is_file(),
             f"SDB-on omitted {object_name}",
         )
+    generated_make = (build_dir / "verilator" / "Vsim_top.mk").read_text(encoding="utf-8")
+    require("difftest.o" in generated_make, "SDB test did not compile the difftest monitor")
     verify_help_and_quit(simulator)
     verify_state_and_steps(simulator)
     verify_breakpoints(simulator)
@@ -567,6 +547,21 @@ def verify_sdb_wave(args: argparse.Namespace, root: Path) -> None:
             f"pre-model case returned {failure.returncode}, expected {expected_exit}",
         )
         require(not wave_path.exists(), "pre-model SDB+WAVE failure created a VCD")
+
+    delayed = cli(
+        simulator,
+        "jump_loop.hex",
+        arguments=("--wave-off", "--max-cycles", "10"),
+        commands="info wave\nsc\nwave on\nsc\nq\n",
+        cwd=root,
+    )
+    expect_success(delayed, "SDB delayed wave enable")
+    require(wave_path.is_file(), "SDB wave on did not lazily create the VCD")
+    require(
+        f"wave=off path={wave_path.resolve()} time=4\n" in delayed.stdout,
+        "--wave-off did not reach SDB with recording disabled",
+    )
+    wave_path.unlink()
 
     commands = (
         "info wave\nwave off\nwave off\nwave invalid\ninfo wave\nsc 2\ninfo wave\n"

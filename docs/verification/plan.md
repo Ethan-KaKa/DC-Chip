@@ -2,7 +2,7 @@
 
 - 版本：v0.2
 - 状态：v0.2 阶段 1 核心与仿真全链路已完成迁移与验证闭环
-- 更新日期：2026-09-11
+- 更新日期：2026-09-13
 - ISA 规范：`docs/isa/isa.md` v0.2
 - 仿真器接口：[`simulator.md`](simulator.md)
 
@@ -17,16 +17,22 @@
 | 层次 | 状态 | 能作为何种证据 |
 | --- | --- | --- |
 | v0.2 ISA/微架构/存储规格 | 已冻结 | 正式规格源与验收依据 |
-| ISA package、decoder、编码器、反汇编器 | 已迁移至 v0.2 | `make test-isa` 的公共层专项证据 |
-| ALU、regfile、core | 已迁移至 v0.2 | `make lint` 与 `make test-unit` 的模块级 behavioral simulation 证据 |
-| 仿真存储与 32 位 HEX loader | 已迁移至 v0.2 | `make lint-mem` 与 `make test-memory` 的存储子系统证据 |
-| Verilator wrapper、Simulation、SDB | 已迁移至 v0.2 | `make sim-build`、`make test-simulation`、`make test-wave`、`make test-sdb` |
-| v0.2 独立参考模型与 lockstep difftest | 已迁移至 v0.2 | `make test-reference` 与 `make test-difftest` 独立验证证据 |
-| v0.2 CLI 22 项集成与全回归 | 已迁移至 v0.2 | `make test-integration` 与 `make test` 端到端闭环证据 |
+| ISA package、decoder、编码器、反汇编器 | 已迁移至 v0.2 | `make testinfra ALL=isa` 的公共层专项证据 |
+| ALU、regfile、core | 已迁移至 v0.2 | `make testunit` 的 lint 与模块级 behavioral simulation 证据 |
+| 仿真存储与 32 位 HEX loader | 已迁移至 v0.2 | `make testinfra ALL=memory` 的存储子系统证据 |
+| 统一 Vsim_top、Simulation、SDB/NVBoard/WAVE | 已迁移至 v0.2 | `make sim-build`、`make testinfra ALL=simulation,wave,sdb,unified-sim` |
+| v0.2 独立参考模型与 lockstep difftest | 已迁移至 v0.2 | `make testinfra ALL=reference,difftest-engine` 独立验证证据 |
+| v0.2 CLI 集成与全回归 | 已迁移至 v0.2 | `make testinfra ALL=integration` 与 `make test` 端到端闭环证据 |
 | Vivado、时序、资源、功耗、上板 | 未验证 | 不能从 behavioral simulation 推断 |
 
 步骤 2.5 完成后，`make test` 恢复为全部测试的最高层累计回归入口；
 已建立涵盖编码、模块、存储、独立参考模型、difftest 和端到端 CLI 的完整证据闭环。
+
+2026-09-13 起，软件仿真运行只通过 `make sw tests` 分层入口：裸命令服从
+`.config`，`sdboff`、`nvboardoff`、`waveoff` 是互相独立的运行时关闭项，
+`batch` 等价于三者组合且不关闭 difftest。SDB 与自动模式均通过同一个提交观察
+接口执行 lockstep；`make testinfra ALL=unified-sim` 使用 SDL dummy driver
+验证全开配置仍只产生一个正式 `Vsim_top`。
 
 ## 2. v0.1 迁移前冻结记录
 
@@ -47,7 +53,8 @@
 ### 2.2 已归档的 v0.1 累积执行记录
 
 下表保留原阶段 A--J 的已执行证据；结果均是 behavioral simulation 或构建
-门禁，不代表综合或硬件结果。
+门禁，不代表综合或硬件结果。表中的命令是当时实际使用的历史接口，部分名称
+现已由 `make list` 所示的分层测试入口替代。
 
 | 日期 | 命令/阶段 | 结果 | 已验证内容 |
 | --- | --- | --- | --- |
@@ -141,29 +148,29 @@ core BFM 覆盖请求背压、请求接受当周期响应、延迟响应、四�
 
 | 类别 | 必测内容 | 主要方法 |
 | --- | --- | --- |
-| 编码 | 八条指令的标准 `opcode/funct3/funct7` 与格式；其他编码非法 | **已完成**：decoder 定向与功能码空间枚举（`make test-isa`） |
-| 寄存器 | `x0` 恒零并忽略写；`x1`--`x15` 读写/reset | **已完成**：regfile 全寄存器与 core `rd=x0` 访问（`make test-regfile`） |
-| RV32E 上界 | 实际 `rd/rs1/rs2` 使用 `x16`--`x31` 时非法 | **已完成**：decoder/反汇编逐字段拒绝（`make test-decoder`） |
-| `lui` 特例 | 只检查 `rd`；立即数中与 `rs1/rs2` 重叠的位不得误判 | **已完成**：公共层定向测试（`make test-isa`） |
-| 立即数 | I/S 拼接、`-2048/-1/0/2047`，U 型最低 12 位清零 | **已完成**：decoder、编码器与 core 边界执行（`make test-unit`） |
-| 算术 | `add/addi` 只保留低 32 位，正负溢出均不 fault | **已完成**：ALU 边界、core 写回与参考模型（`make test-alu`、`make test-reference`） |
-| load | `lw` 小端与四字节对齐；`lbu` 任意 lane、零扩展；`rd=x0` 仍访问 | **已完成**：32 位小端、LBU 零扩展、DRAM 同步读与 read-first（`make test-memory`） |
-| store | `sw` 四 lane；`sb` 单 lane；错误响应无部分副作用 | **已完成**：4 位 byte-enable、握手沿生效、未映射无副作用（`make test-memory`） |
-| `jalr` | 旧 `rs1`、`rd==rs1`、`pc+4`、清 bit 0、bit 1 对齐 fault | **已完成**：core 定向测试与 difftest 比对（`make test-core`、`make test-difftest`） |
-| 取指 | 32 位 byte PC、每次 `+4`、四字节对齐、访问错误 | **已完成**：core 取指 BFM 与 IROM 协议自检（`make test-core`、`make test-memory`） |
-| fault | 七种 cause、PC/指令字段、无提交/写回、粘滞、reset 恢复 | **已完成**：core fault 注入、存储 access fault 与 CLI 报告（`make test-unit`、`make test-integration`） |
-| stall | 请求/响应任意背压、payload 稳定、无丢失/重复、最多一个在途 | **已完成**：背压保持、存储在握手沿写入（`make test-memory`） |
-| reset | 未握手请求取消、已握手旧响应冲刷、不接收迟到响应 | **已完成**：在途事务撤销与未完成 store 丢弃（`make test-core`、`make test-memory`） |
-| trace/debug | 32 位 PC/指令、每条成功指令一次提交、索引读取 16×32 位状态 | **已完成**：32 位 trace 捕获、debug regfile 读取（`make test-simulation`） |
-| tohost/镜像 | 8 字符 HEX 加载、`tohost=0xfffffff0` 退出码捕获 | **已完成**：`make test-memory`、`make test-integration` 覆盖 0 与非 0 退出 |
-| 程序 | 八指令 smoke、load/store lane、JALR loop、fault 负向镜像 | **已完成**：Verilator 22 项 CLI 集成与波形测试（`make test-integration`、`make test-wave`） |
-| 参考模型 | 与 RTL 独立实现，逐提交比较 PC/寄存器/内存副作用/fault | **已完成**：C++ 独立参考模型与 lockstep difftest（`make test-reference`、`make test-difftest`） |
+| 编码 | 八条指令的标准 `opcode/funct3/funct7` 与格式；其他编码非法 | **已完成**：decoder 定向与功能码空间枚举（`make testinfra ALL=isa`） |
+| 寄存器 | `x0` 恒零并忽略写；`x1`--`x15` 读写/reset | **已完成**：regfile 全寄存器与 core `rd=x0` 访问（`make testunit ALL=regfile,core`） |
+| RV32E 上界 | 实际 `rd/rs1/rs2` 使用 `x16`--`x31` 时非法 | **已完成**：decoder/反汇编逐字段拒绝（`make testunit ALL=decoder`） |
+| `lui` 特例 | 只检查 `rd`；立即数中与 `rs1/rs2` 重叠的位不得误判 | **已完成**：公共层定向测试（`make testinfra ALL=isa`） |
+| 立即数 | I/S 拼接、`-2048/-1/0/2047`，U 型最低 12 位清零 | **已完成**：decoder、编码器与 core 边界执行（`make testunit ALL=decoder,core`） |
+| 算术 | `add/addi` 只保留低 32 位，正负溢出均不 fault | **已完成**：ALU、core 与参考模型（`make testunit ALL=alu,core`、`make testinfra ALL=reference`） |
+| load | `lw` 小端与四字节对齐；`lbu` 任意 lane、零扩展；`rd=x0` 仍访问 | **已完成**：DRAM 与 load 行为（`make testinfra ALL=memory`） |
+| store | `sw` 四 lane；`sb` 单 lane；错误响应无部分副作用 | **已完成**：byte-enable、握手沿与未映射访问（`make testinfra ALL=memory`） |
+| `jalr` | 旧 `rs1`、`rd==rs1`、`pc+4`、清 bit 0、bit 1 对齐 fault | **已完成**：`make testunit ALL=core`、`make testinfra ALL=difftest-engine` |
+| 取指 | 32 位 byte PC、每次 `+4`、四字节对齐、访问错误 | **已完成**：`make testunit ALL=core`、`make testinfra ALL=memory` |
+| fault | 七种 cause、PC/指令字段、无提交/写回、粘滞、reset 恢复 | **已完成**：`make testunit ALL=core`、`make testinfra ALL=integration` |
+| stall | 请求/响应任意背压、payload 稳定、无丢失/重复、最多一个在途 | **已完成**：`make testinfra ALL=memory` |
+| reset | 未握手请求取消、已握手旧响应冲刷、不接收迟到响应 | **已完成**：`make testunit ALL=core`、`make testinfra ALL=memory` |
+| trace/debug | 32 位 PC/指令、每条成功指令一次提交、索引读取 16×32 位状态 | **已完成**：`make testinfra ALL=simulation` |
+| tohost/镜像 | 8 字符 HEX 加载、`tohost=0xfffffff0` 退出码捕获 | **已完成**：`make testinfra ALL=memory,integration` |
+| 程序 | 八指令 smoke、load/store lane、JALR loop、fault 负向镜像 | **已完成**：`make testinfra ALL=integration,wave` |
+| 参考模型 | 与 RTL 独立实现，逐提交比较 PC/寄存器/内存副作用/fault | **已完成**：`make testinfra ALL=reference,difftest-engine` |
 | **阶段 2 二进制加载** | raw binary (`.bin`) 小端载入 IROM/DRAM、非 4 字节补零对齐、超限拦截 | **已完成**：`test_memory` 单元测试与 CLI 二进制集成测试 |
 | **阶段 2 双镜像协同** | `--image-inst` 与 `--image-data` 协同装载、DRAM 变量读写与退出码校验 | **已完成**：汇编测试夹具与端到端 CLI 集成测试 |
 | **阶段 2 Harvard 隔离** | IFU 访问 DRAM 报 cause 2；LSU 访问 IROM 报 cause 5/7 | **已完成**：存储协议 BFM、参考模型自检与 CLI 负向集成测试 |
 | **阶段 3 AM 裸机中间层** | 标准 AM API (`am.h`, `klib.h`)、`start.S` 启动与 `link.ld` Harvard 布局 | **已完成**：`sw/am/` 运行时与 `make sw` 构建系统 |
 | **阶段 3 子集机械审计** | 静态扫描反汇编，确保 100% 满足 8 指令子集与 `x0`--`x15` 约束 | **已完成**：`scripts/check_isa_subset.py` 自动化门禁 |
-| **阶段 3 定向软件测试** | 涵盖 TRM 引导、退出码传递、算术与栈、DRAM 数据段、堆探测与跳转表 | **已完成**：`make test-sw` 与扩展 `make test-difftest` 逐指令验证 |
+| **阶段 3 定向软件测试** | 涵盖 TRM 引导、退出码传递、算术与栈、DRAM 数据段、堆探测与跳转表 | **已完成**：`make sw tests` 与 `make testinfra ALL=difftest-engine` 验证 |
 
 ## 4. 模块与协议测试要求
 
@@ -215,7 +222,7 @@ v0.2 目标文本 HEX 每个有效行是一条 32 位指令，即恰好 8 个十
 
 后续步骤按以下顺序恢复规格与实现一致：
 
-1. 迁移 ISA package、decoder、编码器和反汇编器，并通过 `make test-isa`
+1. 迁移 ISA package、decoder、编码器和反汇编器，并通过 `make testinfra ALL=isa`
    （已完成）；
 2. 迁移 ALU、regfile、控制器、32 位取指/data valid-ready 和结构化 fault
    （已完成模块级验证）；

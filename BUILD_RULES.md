@@ -80,7 +80,6 @@ build/
 ├── config/              # Kconfig 自动生成的头文件与同步戳
 ├── unit/                # Iverilog 单元测试目标
 ├── verilator/           # Verilator DPI-C 仿真可执行程序与目标文件
-├── nvboard-sim/         # NVBoard 图形仿真目标
 ├── sw/                  # 裸机 AM 运行时与测试程序二进制镜像
 ├── test-fixtures/       # 临时测试夹具与输出
 └── tools/               # 外部重型工具（如 Spike）的隔离构建与安装目录
@@ -94,7 +93,7 @@ build/
 借鉴 GNU Coding Standards 与 Linux 内核设计，严格区分清理目标：
 
 - **`make clean`（高频日常清理）**：
-  - 清理范围：`build/unit`、`build/verilator`、`build/nvboard-sim`、`build/sw`、`build/test-fixtures`；
+  - 清理范围：`build/unit`、`build/verilator`、`build/sw`、`build/test-fixtures`；
   - **严格保留**：`.config`（个性化配置）、`build/tools/`（编译耗时的重型外部工具库）；
   - 目标耗时：< 1 秒，保证日常修改 CPU 代码后极速重构。
 - **`make tools-clean`（工具重构清理）**：
@@ -122,6 +121,16 @@ make init
 ---
 
 ## 6. 持续维护与机械化防线
+
+### 6.1 根目录公开命令契约
+
+- `make` 与 `make help` 只显示初始化、配置、构建、运行和清理指南，不执行构建；
+- `make list` 是测试体系的统一发现入口，显示 `testunit`、`testinfra`、`sw tests` 与顶层 `test`；
+- `make test` 在 `build/test-fixtures/full-regression/` 下使用 tracked default defconfig 的隔离配置运行默认三层回归，不读取或改写本地 `.config`；
+- `make testinfra` 同样在 `build/test-fixtures/infra-regression/` 下使用隔离默认配置，保证基础设施测试不受本地 GUI 或调试选项影响；
+- `testunit`、`testinfra` 使用 `list`、`batch` 或互斥的 `ALL=<...>`；裸 `sw tests` 服从 `.config`，`batch` 等价于 `sdboff nvboardoff waveoff`，且不关闭 difftest；
+- 多 goal 子命令必须按 `make testunit list`、`make testinfra batch`、`make sw tests ALL=...` 等已定义顺序使用；非法组合必须在任何 recipe 执行前失败；
+- 具体测试的底层 Make 目标是私有实现，不构成用户接口。新增或调整测试时同步更新 `scripts/test_runner.py` 和 CLI 自检。
 
 规则不能只停留在文档上，必须通过多层防御机制自动守卫：
 

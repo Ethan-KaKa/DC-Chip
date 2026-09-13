@@ -1,6 +1,6 @@
 # mk/config.mk - Kconfig 配置与同步模块
 
-CONFIG_FILE  := .config
+CONFIG_FILE  ?= .config
 CONFIG_DIR   := $(BUILD_DIR)/config
 AUTO_CONF    := $(CONFIG_DIR)/auto.conf
 CONFIG_H     := $(CONFIG_DIR)/config.h
@@ -15,7 +15,7 @@ CONFIG_CMD = $(PYTHON) scripts/config.py \
 	--config "$(abspath $(CONFIG_FILE))" \
 	--output-dir "$(abspath $(CONFIG_DIR))"
 
-ifneq ($(filter sim-build sim nvboard-build nvboard-run test-simulation test-reference test-difftest test-integration test sw sw-run testunit testinfra,$(MAKECMDGOALS)),)
+ifneq ($(filter sim-build sw _test-infra-%,$(MAKECMDGOALS)),)
 -include $(AUTO_CONF)
 endif
 
@@ -44,9 +44,9 @@ menuconfig: $(CONFIG_FILE)
 config-show:
 	$(CONFIG_CMD) show
 
-test-config:
+_test-infra-config:
 	$(PYTHON) scripts/test_config.py \
 		--fixture-root "$(abspath $(BUILD_DIR))/test-fixtures/config" \
 		--cxx "$(CXX)"
 
-.PHONY: defconfig menuconfig config-show test-config
+.PHONY: defconfig menuconfig config-show _test-infra-config

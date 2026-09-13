@@ -1,15 +1,14 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-if [[ $# -lt 1 || $# -gt 2 || ( $# -eq 2 && ${2:-} != --batch ) ]]; then
-  printf 'usage: %s <simulator> [--batch]\n' "$0" >&2
+if [[ $# -ne 1 ]]; then
+  printf 'usage: %s <simulator>\n' "$0" >&2
   exit 1
 fi
 
 script_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 repo_root=$(cd -- "$script_dir/../.." && pwd)
 simulator=$1
-inject_batch=${2:-}
 if [[ $simulator != /* ]]; then
   simulator="$repo_root/$simulator"
 fi
@@ -19,10 +18,10 @@ if [[ ! -x $simulator ]]; then
 fi
 
 run_simulator() {
-  if [[ ${1:-} == --help || -z $inject_batch ]]; then
+  if [[ ${1:-} == --help ]]; then
     "$simulator" "$@"
   else
-    "$simulator" --batch "$@"
+    "$simulator" --sdb-off --nvboard-off "$@"
   fi
 }
 

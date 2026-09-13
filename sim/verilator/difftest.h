@@ -30,6 +30,11 @@ class Difftest {
   bool step_and_compare(std::uint64_t max_cycles, DifftestMismatch *mismatch = nullptr,
                         RunResult *out_dut_res = nullptr);
 
+  // Compare a result produced by the shared execution loop. This advances the
+  // reference model exactly once for a committed instruction or precise fault.
+  bool compare_result(const RunResult &dut_res,
+                      DifftestMismatch *mismatch = nullptr);
+
   // Run until tohost exit, fault, or max commits
   bool run_difftest(std::uint64_t max_commits, std::uint64_t max_cycles,
                     DifftestMismatch *mismatch = nullptr);

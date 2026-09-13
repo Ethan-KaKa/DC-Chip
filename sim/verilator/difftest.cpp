@@ -29,6 +29,11 @@ bool Difftest::step_and_compare(std::uint64_t max_cycles, DifftestMismatch *mism
     *out_dut_res = dut_res;
   }
 
+  return compare_result(dut_res, mismatch);
+}
+
+bool Difftest::compare_result(const RunResult &dut_res,
+                              DifftestMismatch *mismatch) {
   if (dut_res.reason == StopReason::timeout) {
     if (mismatch != nullptr) {
       mismatch->cycle = dut_res.state.cycles;

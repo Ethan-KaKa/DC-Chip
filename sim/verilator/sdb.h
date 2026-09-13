@@ -10,7 +10,8 @@ namespace dc_sim {
 
 RunResult run_sdb(Simulation &simulation, std::uint64_t max_cycles,
                   std::istream &input, std::ostream &output,
-                  std::ostream &errors);
+                  std::ostream &errors,
+                  const StepObserver &observer = {});
 
 }  // namespace dc_sim
 

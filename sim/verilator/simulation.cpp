@@ -22,8 +22,21 @@ namespace dc_sim {
 
 class Simulation::Impl {
  public:
-  Impl(int argc, char **argv)
-      : context(std::make_unique<VerilatedContext>()) {
+  Impl(int argc, char **argv, bool enable_nvboard, bool enable_wave)
+      : context(std::make_unique<VerilatedContext>())
+#ifdef CONFIG_DC_SIM_WAVE
+        , wave_dump_enabled(enable_wave)
+#endif
+#ifdef CONFIG_DC_SIM_NVBOARD
+        , nvboard_enabled(enable_nvboard)
+#endif
+  {
+#ifndef CONFIG_DC_SIM_NVBOARD
+    static_cast<void>(enable_nvboard);
+#endif
+#ifndef CONFIG_DC_SIM_WAVE
+    static_cast<void>(enable_wave);
+#endif
     if (argc > 0) {
       context->commandArgs(argc, argv);
     }
@@ -35,28 +48,30 @@ class Simulation::Impl {
   void initialize() {
 #ifdef CONFIG_DC_SIM_WAVE
     context->traceEverOn(true);
-    tracer = std::make_unique<VerilatedVcdC>();
-    top->trace(tracer.get(), 99);
     wave_file_path = resolve_wave_path();
-    tracer->open(wave_file_path.c_str());
-    if (!tracer->isOpen()) {
-      throw std::runtime_error("failed to open VCD waveform: " +
-                               wave_file_path);
+    if (wave_dump_enabled) {
+      open_wave();
     }
 #endif
     top->eval();
 #ifdef CONFIG_DC_SIM_WAVE
-    tracer->dump(context->time());
+    if (tracer != nullptr) {
+      tracer->dump(context->time());
+    }
 #endif
 #ifdef CONFIG_DC_SIM_NVBOARD
-    nvboard_bind_all_pins(top.get());
-    nvboard_init();
+    if (nvboard_enabled) {
+      nvboard_bind_all_pins(top.get());
+      nvboard_init();
+    }
 #endif
   }
 
   ~Impl() {
 #ifdef CONFIG_DC_SIM_NVBOARD
-    nvboard_quit();
+    if (nvboard_enabled) {
+      nvboard_quit();
+    }
 #endif
 #ifdef CONFIG_DC_SIM_WAVE
     if (tracer != nullptr) {
@@ -89,18 +104,32 @@ class Simulation::Impl {
     top->clk = clock_level;
     top->eval();
 #ifdef CONFIG_DC_SIM_WAVE
-    if (wave_dump_enabled) {
+    if (wave_dump_enabled && tracer != nullptr) {
       tracer->dump(context->time());
     }
 #endif
 #ifdef CONFIG_DC_SIM_NVBOARD
-    if (clock_level == 0) {
+    if (nvboard_enabled && clock_level == 0) {
       nvboard_update();
     }
 #endif
   }
 
 #ifdef CONFIG_DC_SIM_WAVE
+  void open_wave() {
+    if (tracer != nullptr) {
+      return;
+    }
+    tracer = std::make_unique<VerilatedVcdC>();
+    top->trace(tracer.get(), 99);
+    tracer->open(wave_file_path.c_str());
+    if (!tracer->isOpen()) {
+      tracer.reset();
+      throw std::runtime_error("failed to open VCD waveform: " +
+                               wave_file_path);
+    }
+  }
+
   static std::string resolve_wave_path() {
     std::error_code error;
     const std::filesystem::path executable =
@@ -132,6 +161,9 @@ class Simulation::Impl {
   std::uint64_t cycles = 0;
   std::uint64_t commits = 0;
   bool reset_done = false;
+#ifdef CONFIG_DC_SIM_NVBOARD
+  bool nvboard_enabled = true;
+#endif
 };
 
 const char *fault_cause_string(std::uint8_t cause) {
@@ -156,10 +188,11 @@ const char *fault_cause_string(std::uint8_t cause) {
   }
 }
 
-Simulation::Simulation() : Simulation(0, nullptr) {}
+Simulation::Simulation() : Simulation(0, nullptr, true, true) {}
 
-Simulation::Simulation(int argc, char **argv)
-    : impl_(std::make_unique<Impl>(argc, argv)) {
+Simulation::Simulation(int argc, char **argv, bool enable_nvboard,
+                       bool enable_wave)
+    : impl_(std::make_unique<Impl>(argc, argv, enable_nvboard, enable_wave)) {
   impl_->initialize();
 }
 
@@ -224,7 +257,8 @@ RunResult Simulation::step_instruction(std::uint64_t max_cycles) {
 
 RunResult Simulation::run_until(
     RunTarget target, std::uint64_t count, std::uint64_t max_cycles,
-    const std::set<std::uint32_t> &breakpoints) {
+    const std::set<std::uint32_t> &breakpoints,
+    const StepObserver &observer) {
   if (!impl_->reset_done) {
     throw std::logic_error(
         "Simulation::run_until() requires reset() first");
@@ -245,6 +279,23 @@ RunResult Simulation::run_until(
     }
 
     const StepEvent event = step_cycle();
+
+    StopReason observed_reason = StopReason::cycles_complete;
+    if (event.tohost_exit) {
+      observed_reason = StopReason::program_exit;
+    } else if (event.entered_fault || impl_->top->fault_valid != 0) {
+      observed_reason = StopReason::fault;
+    } else if (target == RunTarget::commits &&
+               impl_->commits - start_commits >= count) {
+      observed_reason = StopReason::commits_complete;
+    }
+
+    if (observer && (event.committed || observed_reason == StopReason::fault)) {
+      const RunResult observed{observed_reason, event, snapshot()};
+      if (!observer(observed)) {
+        return {StopReason::monitor_failure, event, observed.state};
+      }
+    }
 
     // Priority 1: tohost program exit
     if (event.tohost_exit) {
@@ -284,6 +335,10 @@ ArchitecturalState Simulation::snapshot() const {
 
 #ifdef CONFIG_DC_SIM_WAVE
 void Simulation::set_wave_enabled(bool enabled) {
+  if (enabled && impl_->tracer == nullptr) {
+    impl_->open_wave();
+    impl_->tracer->dump(impl_->context->time());
+  }
   impl_->wave_dump_enabled = enabled;
 }
 

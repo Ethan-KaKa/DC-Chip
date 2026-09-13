@@ -154,7 +154,7 @@ def parse_summary_line(line):
                     pass
     return regs
 
-def run_test(simulator, test_dir, case):
+def run_test(simulator, test_dir, case, runtime_args, interactive):
     name = case["name"]
     inst_bin = os.path.join(test_dir, name, f"{name}.inst.bin")
     data_bin = os.path.join(test_dir, name, f"{name}.data.bin")
@@ -162,9 +162,19 @@ def run_test(simulator, test_dir, case):
     if not os.path.isfile(inst_bin):
         return False, f"missing instruction image: {inst_bin}"
 
-    cmd = [simulator, "--image-inst", inst_bin, "--batch"]
+    cmd = [simulator, "--image-inst", inst_bin, "--test-dispatch", *runtime_args]
     if os.path.isfile(data_bin) and os.path.getsize(data_bin) > 0:
         cmd += ["--image-data", data_bin]
+
+    if interactive:
+        returncode = subprocess.run(cmd).returncode
+        if returncode == 6:
+            return None, "user quit"
+        if returncode != case["expected_sim_exit"]:
+            return False, (
+                f"expected simulator exit {case['expected_sim_exit']}, got {returncode}"
+            )
+        return True, "interactive"
 
     res = subprocess.run(cmd, capture_output=True, text=True)
 
@@ -202,6 +212,10 @@ def main():
     parser = argparse.ArgumentParser(description="Run DC-Chip AM software test suite")
     parser.add_argument("--simulator", default="build/verilator/Vsim_top", help="Path to Vsim_top binary")
     parser.add_argument("--test-dir", default="build/sw/tests", help="Path to built tests directory")
+    parser.add_argument("--sdb-off", action="store_true")
+    parser.add_argument("--nvboard-off", action="store_true")
+    parser.add_argument("--wave-off", action="store_true")
+    parser.add_argument("--interactive", action="store_true")
     parser.add_argument("tests", nargs="*", help="Optional specific tests to run")
     args = parser.parse_args()
 
@@ -217,9 +231,21 @@ def main():
         cases = [c for c in TEST_CASES if c["name"] in args.tests]
 
     all_passed = True
+    runtime_args = [
+        f"--{name}-off"
+        for name, enabled in (
+            ("sdb", args.sdb_off),
+            ("nvboard", args.nvboard_off),
+            ("wave", args.wave_off),
+        )
+        if enabled
+    ]
     for case in cases:
         name = case["name"]
-        ok, msg = run_test(simulator, test_dir, case)
+        ok, msg = run_test(simulator, test_dir, case, runtime_args, args.interactive)
+        if ok is None:
+            print(f"sw_test: STOP {name} ({msg})")
+            sys.exit(6)
         if ok:
             print(f"sw_test: PASS {name} (guest exit {case['expected_guest_exit']}) [{msg}]")
         else:

@@ -18,7 +18,7 @@
 5. Vivado 综合、实现、时序约束和 FPGA 上板验证；
 6. 面积、性能与功耗结果，以及课程报告材料。
 
-## 当前状态（2026-09-12）
+## 当前状态（2026-09-13）
 
 - 当前目录已初始化为 Git 仓库，默认分支为 `main`。
 - 阶段 1 已完成八指令基线全链路迁移；阶段 2 已完成 64 KiB IROM（`0x00000000`）与 64 KiB DRAM（`0x20000000`）的 Harvard 架构隔离与双 `.bin` 镜像装载；阶段 3 已完成仓库内自包含的 AM-like 裸机中间层（`sw/am/`）、`scripts/check_isa_subset.py` 自动化审计工具与 6 项定向软件测试套件；阶段 4 已全面补全 RV32E v1.0（37 条标准基础整数指令、`x0`--`x15` 严格边界）、`sw/am/` 自包含 `klib`（含 `memset/memcpy/memcmp/strlen/strcmp/strcpy/strcat/check`）、12 项 `am-kernels` 基准测试（总计 18 项软件回归测试）以及软硬件仿真/差分全闭环。
@@ -27,12 +27,13 @@
   - AM 设备层与运行时：`sw/am/src/ioe.c` 扩展 `AM_UART_CONFIG/TX/RX` 及 `uart_write`/`uart_read`；`sw/am/src/trm.c` 接入 MMIO 硬件忙等待的标准 `putch`；`sw/am/include/klib.h` 与 `sw/am/src/klib.c` 补充纯软件移位模拟的无除法硬件依赖算法 `udiv_mod`，并实现完整的 `printf`、`sprintf`、`snprintf`、`vsprintf`、`vsnprintf` 格式化打印库。
   - 软件与测试：新增 `sw/tests/uart_hello/` 定向测试程序（自检字符流、`printf`、`sprintf`、LED 协同及状态机就绪），全套软件回归测试套件增至 20 项。
   - 参考模型与差分：`sim/verilator/reference_model.cpp` 扩充 MMIO UART 读写与状态位建模，`test_reference` 与 `test_difftest` 适配并全 PASS。
-  - NVBoard 终端：`constr/nvboard.nxdc` 绑定 `o_uart_tx UART_TX` 与 `i_uart_rx UART_RX`，NVBoard 虚拟终端打通，支持 `make nvboard-run [APP=uart_hello]`。
-- 构建系统与回归闭环全面增强：新增 `make test-uart`、`make test-periph-interconnect`、`make test-cdc`，单元测试套件增至 10 个；`make test-unit`、`make test-isa`、`make test-disasm`、`make test-memory`、`make test-reference`、`make test-simulation`、`make sw`、`make test-sw`（20 项）、`make test-difftest`、`make test-integration`（32 项）、`make test-wave`、`make test-sdb` 以及最高层 `make test` 全面 PASS。
+  - NVBoard 终端：`constr/nvboard.nxdc` 绑定 `o_uart_tx UART_TX` 与 `i_uart_rx UART_RX`，由 `.config` 控制是否编入唯一的 `build/verilator/Vsim_top`。
+- 构建系统采用分层入口：`make help` 显示构建与运行方式，`make list` 是测试总入口；`make testunit`、`make testinfra`、`make sw tests` 分别覆盖硬件单测、仿真基础设施和 20 项软件回归，支持 `list`、`batch` 与 `ALL=<comma-separated names>`；最高层 `make test` 使用隔离默认配置运行三层回归并已全面 PASS。旧的 `make test-*` 与 `make lint*` 公开目标已移除，Make CLI 自检会阻止接口回退与错误命令先执行测试。
+- `make sim-build` 按当前 `.config` 构建唯一的 `build/verilator/Vsim_top`；SDB、WAVE、NVBoard 和 difftest 共用同一执行循环。NVBoard 第三方对象与归档隔离到 `build/tools/nvboard/`，不污染 submodule。
 - 阶段 5 Phase 2.5 差分测试架构对齐已完成：
   - Kconfig 配置化：`Dconfig`、`configs/default_defconfig` 与 `scripts/config.py` 扩展支持 `DC_SIM_DIFFTEST`。开启后主仿真器 `Vsim_top` 自动编入 ReferenceModel 与 Difftest 引擎，并在仿真执行主循环中对每条提交指令全程进行 lockstep 逐条比对。
-  - 构建解耦：上层软件编译（`make sw`）与仿真系统编译（`make sim-build`）完全解耦独立；`make sim APP=<name>` 消除隐式内联编译软件的依赖，改为清晰的镜像存在性检查与诊断提示。
-  - 硬件 `is_skip_ref` 地址分流机制：`soc_interconnect` 在 CPU 访存命中 MMIO/未建模外设空间时生成 `cpu_rsp_skip_ref`；`cpu_core` 在访存指令提交拍通过 `trace_skip_ref` 导出；`dc_soc_top` 与 `sim_top` 导出 `is_skip_ref` 信号；`Difftest` 引擎在捕获到 `is_skip_ref` 时跳过严格比较并将 DUT 寄存器值同步至 ReferenceModel，避免外设动态状态发散。`uart_hello` 纳入 `test_difftest` 软件测试集并全 PASS。
+  - 构建解耦：`make sw` 只构建软件，`make sim-build` 只构建仿真器；所有软件运行统一通过 `make sw tests` 分层入口，且每次运行前检查仿真器是否需按配置重建。
+  - 硬件 `is_skip_ref` 地址分流机制：`soc_interconnect` 在 CPU 访存命中 MMIO/未建模外设空间时生成 `cpu_rsp_skip_ref`；`cpu_core` 在访存指令提交拍通过 `trace_skip_ref` 导出；`dc_soc_top` 与 `sim_top` 导出 `is_skip_ref` 信号；`Difftest` 引擎在捕获到 `is_skip_ref` 时跳过严格比较并将 DUT 寄存器值同步至 ReferenceModel，避免外设动态状态发散。`uart_hello` 已纳入软件差分测试集并全 PASS。
 - v0.1 可执行基线冻结在 commit `9bfb9a97153be05de34c6d2311c09f41cb6f43ab`；不提供双 ISA 开关，旧语义只由 Git历史和迁移前验证记录保留。
 - 正式 MMIO 扩展（timer/sensor）、板卡具体型号/封装、板级复位极性仍属于阶段 5 后续子阶段规划中。
 - 在对应规格落盘前，不得把上述未决项当成既定事实写入 RTL 或测试。
@@ -237,45 +238,37 @@ SDB 以及全回归入口均已全面恢复并适配 v0.2：
 ```bash
 make check-tools
 make help
+make list
 make defconfig
 make menuconfig
 make config-show
-make test-config
-make lint-isa
-make test-isa
-make lint-comb
-make test-alu
-make test-decoder
-make lint
-make lint-mem
-make test-regfile
-make test-core
-make test-led
-make test-uart
-make test-periph-interconnect
-make test-cdc
-make test-interconnect
-make test-soc
-make test-unit
-make test-disasm
-make test-memory
-make test-reference
+make testunit list
+make testunit batch
+make testunit ALL=alu,uart
+make testinfra list
+make testinfra batch
+make testinfra ALL=config,memory,reference
 make sim-build
-make test-simulation
 make sw
-make test-sw
-make sim [IMG=<hex|bin>] [DATA_IMG=<bin>] [APP=<name>] [STEPS=<n>] [TRACE=1] [BATCH=1]
-make nvboard-build
-make nvboard-run [APP=<name>] [BATCH=1] [STEPS=<n>]
-make test-difftest
-make test-integration
-make test-wave
-make test-sdb
+make sw tests list
+make sw tests
+make sw tests batch
+make sw tests sdboff nvboardoff waveoff
+make sw tests ALL=trm_smoke,uart_hello
+make sw riscv-tests list
+make spike-build
+make testinfra ALL=difftest-spike
 make test
 make clean
+make tools-clean
+make distclean
+make mrproper
 ```
 
-`BATCH=1` 用于在 SDB 构建中显式选择 batch。后续 FPGA 流程仍未实现，
+`make testunit` 与 `make testinfra` 省略子命令时默认执行 `batch`；裸
+`make sw tests` 完全服从 `.config`。软件测试可附加 `sdboff`、`nvboardoff`、
+`waveoff`，而 `batch` 严格等价于三者组合且不会关闭 difftest。`ALL` 不能与
+`list`/`batch` 同时使用。`sw riscv-tests` 当前仅能列出预留清单，不能执行。后续 FPGA 流程仍未实现，
 未实现前不得声称已经运行：
 
 ```bash

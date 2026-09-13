@@ -17,21 +17,21 @@ SOC_RTL := rtl/soc/mmio_cdc_bridge.sv \
 	rtl/soc/dc_soc_top.sv
 
 # 静态规则检查 (Lint)
-lint-isa:
+_lint-isa:
 	$(VERILATOR) --lint-only --language 1800-2012 -Wall -Wno-UNUSEDPARAM \
 		--top-module decoder $(ISA_PKG) rtl/core/decoder.sv
 
-lint-comb:
+_lint-comb:
 	$(VERILATOR) --lint-only --language 1800-2012 -Wall -Wno-UNUSEDPARAM \
 		--top-module alu $(ISA_PKG) rtl/core/alu.sv
 	$(VERILATOR) --lint-only --language 1800-2012 -Wall -Wno-UNUSEDPARAM \
 		--top-module decoder $(ISA_PKG) rtl/core/decoder.sv
 
-lint:
+_lint-core:
 	$(VERILATOR) --lint-only --language 1800-2012 -Wall \
 		--top-module cpu_core $(CORE_RTL)
 
-lint-mem:
+_lint-mem:
 	$(VERILATOR) --lint-only --language 1800-2012 -Wall \
 		--top-module sim_mem $(MEM_RTL)
 
@@ -39,85 +39,87 @@ lint-mem:
 $(UNIT_DIR):
 	mkdir -p $@
 
-$(UNIT_DIR)/tb_alu.vvp: $(ISA_PKG) rtl/core/alu.sv sim/tb/tb_alu.sv | $(UNIT_DIR)
-	$(IVERILOG) -g2012 -s tb_alu -o $@ $^
+$(UNIT_DIR)/tb_alu.vvp: $(ISA_PKG) rtl/core/alu.sv sim/tb/tb_alu.sv $(BUILD_MAKEFILES) | $(UNIT_DIR)
+	$(IVERILOG) -g2012 -s tb_alu -o $@ $(ISA_PKG) rtl/core/alu.sv sim/tb/tb_alu.sv
 
-$(UNIT_DIR)/tb_decoder.vvp: $(ISA_PKG) rtl/core/decoder.sv sim/tb/tb_decoder.sv | $(UNIT_DIR)
-	$(IVERILOG) -g2012 -s tb_decoder -o $@ $^
+$(UNIT_DIR)/tb_decoder.vvp: $(ISA_PKG) rtl/core/decoder.sv sim/tb/tb_decoder.sv $(BUILD_MAKEFILES) | $(UNIT_DIR)
+	$(IVERILOG) -g2012 -s tb_decoder -o $@ $(ISA_PKG) rtl/core/decoder.sv sim/tb/tb_decoder.sv
 
-$(UNIT_DIR)/tb_regfile.vvp: $(ISA_PKG) rtl/core/regfile.sv sim/tb/tb_regfile.sv | $(UNIT_DIR)
-	$(IVERILOG) -g2012 -s tb_regfile -o $@ $^
+$(UNIT_DIR)/tb_regfile.vvp: $(ISA_PKG) rtl/core/regfile.sv sim/tb/tb_regfile.sv $(BUILD_MAKEFILES) | $(UNIT_DIR)
+	$(IVERILOG) -g2012 -s tb_regfile -o $@ $(ISA_PKG) rtl/core/regfile.sv sim/tb/tb_regfile.sv
 
-$(UNIT_DIR)/tb_cpu_core.vvp: $(CORE_RTL) sim/tb/tb_cpu_core.sv | $(UNIT_DIR)
-	$(IVERILOG) -g2012 -s tb_cpu_core -o $@ $^
+$(UNIT_DIR)/tb_cpu_core.vvp: $(CORE_RTL) sim/tb/tb_cpu_core.sv $(BUILD_MAKEFILES) | $(UNIT_DIR)
+	$(IVERILOG) -g2012 -s tb_cpu_core -o $@ $(CORE_RTL) sim/tb/tb_cpu_core.sv
 
-$(UNIT_DIR)/tb_led_controller.vvp: rtl/periph/led_controller.sv sim/tb/tb_led_controller.sv | $(UNIT_DIR)
-	$(IVERILOG) -g2012 -s tb_led_controller -Irtl/periph -o $@ $^
+$(UNIT_DIR)/tb_led_controller.vvp: rtl/periph/led_controller.sv sim/tb/tb_led_controller.sv $(BUILD_MAKEFILES) | $(UNIT_DIR)
+	$(IVERILOG) -g2012 -s tb_led_controller -Irtl/periph -o $@ rtl/periph/led_controller.sv sim/tb/tb_led_controller.sv
 
-$(UNIT_DIR)/tb_uart_controller.vvp: rtl/periph/uart_controller.sv sim/tb/tb_uart_controller.sv | $(UNIT_DIR)
-	$(IVERILOG) -g2012 -s tb_uart_controller -Irtl/periph -o $@ $^
+$(UNIT_DIR)/tb_uart_controller.vvp: rtl/periph/uart_controller.sv sim/tb/tb_uart_controller.sv $(BUILD_MAKEFILES) | $(UNIT_DIR)
+	$(IVERILOG) -g2012 -s tb_uart_controller -Irtl/periph -o $@ rtl/periph/uart_controller.sv sim/tb/tb_uart_controller.sv
 
-$(UNIT_DIR)/tb_periph_interconnect.vvp: rtl/soc/periph_interconnect.sv sim/tb/tb_periph_interconnect.sv | $(UNIT_DIR)
-	$(IVERILOG) -g2012 -s tb_periph_interconnect -Irtl/soc -o $@ $^
+$(UNIT_DIR)/tb_periph_interconnect.vvp: rtl/soc/periph_interconnect.sv sim/tb/tb_periph_interconnect.sv $(BUILD_MAKEFILES) | $(UNIT_DIR)
+	$(IVERILOG) -g2012 -s tb_periph_interconnect -Irtl/soc -o $@ rtl/soc/periph_interconnect.sv sim/tb/tb_periph_interconnect.sv
 
-$(UNIT_DIR)/tb_mmio_cdc_bridge.vvp: rtl/soc/mmio_cdc_bridge.sv sim/tb/tb_mmio_cdc_bridge.sv | $(UNIT_DIR)
-	$(IVERILOG) -g2012 -s tb_mmio_cdc_bridge -Irtl/soc -o $@ $^
+$(UNIT_DIR)/tb_mmio_cdc_bridge.vvp: rtl/soc/mmio_cdc_bridge.sv sim/tb/tb_mmio_cdc_bridge.sv $(BUILD_MAKEFILES) | $(UNIT_DIR)
+	$(IVERILOG) -g2012 -s tb_mmio_cdc_bridge -Irtl/soc -o $@ rtl/soc/mmio_cdc_bridge.sv sim/tb/tb_mmio_cdc_bridge.sv
 
-$(UNIT_DIR)/tb_soc_interconnect.vvp: rtl/soc/soc_interconnect.sv sim/tb/tb_soc_interconnect.sv | $(UNIT_DIR)
-	$(IVERILOG) -g2012 -s tb_soc_interconnect -Irtl/soc -o $@ $^
+$(UNIT_DIR)/tb_soc_interconnect.vvp: rtl/soc/soc_interconnect.sv sim/tb/tb_soc_interconnect.sv $(BUILD_MAKEFILES) | $(UNIT_DIR)
+	$(IVERILOG) -g2012 -s tb_soc_interconnect -Irtl/soc -o $@ rtl/soc/soc_interconnect.sv sim/tb/tb_soc_interconnect.sv
 
-$(UNIT_DIR)/tb_dc_soc_top.vvp: $(CORE_RTL) $(PERIPH_RTL) $(SOC_RTL) sim/tb/tb_dc_soc_top.sv | $(UNIT_DIR)
-	$(IVERILOG) -g2012 -s tb_dc_soc_top -Irtl/core -Irtl/soc -Irtl/periph -o $@ $^
+$(UNIT_DIR)/tb_dc_soc_top.vvp: $(CORE_RTL) $(PERIPH_RTL) $(SOC_RTL) sim/tb/tb_dc_soc_top.sv $(BUILD_MAKEFILES) | $(UNIT_DIR)
+	$(IVERILOG) -g2012 -s tb_dc_soc_top -Irtl/core -Irtl/soc -Irtl/periph -o $@ $(CORE_RTL) $(PERIPH_RTL) $(SOC_RTL) sim/tb/tb_dc_soc_top.sv
 
 # 各单独单测运行目标
-test-alu: $(UNIT_DIR)/tb_alu.vvp
+_test-unit-alu: $(UNIT_DIR)/tb_alu.vvp
 	$(VVP) $<
 
-test-decoder: $(UNIT_DIR)/tb_decoder.vvp
+_test-unit-decoder: $(UNIT_DIR)/tb_decoder.vvp
 	$(VVP) $<
 
-test-regfile: $(UNIT_DIR)/tb_regfile.vvp
+_test-unit-regfile: $(UNIT_DIR)/tb_regfile.vvp
 	$(VVP) $<
 
-test-core: $(UNIT_DIR)/tb_cpu_core.vvp
+_test-unit-core: $(UNIT_DIR)/tb_cpu_core.vvp
 	$(VVP) $<
 
-test-led: $(UNIT_DIR)/tb_led_controller.vvp
+_test-unit-led: $(UNIT_DIR)/tb_led_controller.vvp
 	$(VVP) $<
 
-test-uart: $(UNIT_DIR)/tb_uart_controller.vvp
+_test-unit-uart: $(UNIT_DIR)/tb_uart_controller.vvp
 	$(VVP) $<
 
-test-periph-interconnect: $(UNIT_DIR)/tb_periph_interconnect.vvp
+_test-unit-periph-interconnect: $(UNIT_DIR)/tb_periph_interconnect.vvp
 	$(VVP) $<
 
-test-cdc: $(UNIT_DIR)/tb_mmio_cdc_bridge.vvp
+_test-unit-cdc: $(UNIT_DIR)/tb_mmio_cdc_bridge.vvp
 	$(VVP) $<
 
-test-interconnect: $(UNIT_DIR)/tb_soc_interconnect.vvp
+_test-unit-interconnect: $(UNIT_DIR)/tb_soc_interconnect.vvp
 	$(VVP) $<
 
-test-soc: $(UNIT_DIR)/tb_dc_soc_top.vvp
+_test-unit-soc: $(UNIT_DIR)/tb_dc_soc_top.vvp
 	$(VVP) $<
 
-# 历史兼容目标
-test-unit:
-	$(PYTHON) scripts/test_runner.py --suite unit --batch
+_test-unit-lint:
+	$(MAKE) --no-print-directory _lint-isa
+	$(MAKE) --no-print-directory _lint-comb
+	$(MAKE) --no-print-directory _lint-core
+	$(MAKE) --no-print-directory _lint-mem
 
 # 统一新入口: make testunit [list | batch | ALL=...]
 
 testunit:
 	@case "$(word 2,$(MAKECMDGOALS))" in \
-		list)  $(PYTHON) scripts/test_runner.py --suite unit --list ;; \
-		batch) $(PYTHON) scripts/test_runner.py --suite unit --batch ;; \
+		list)  $(PYTHON) scripts/test_runner.py --suite unit --list --make "$(MAKE)" ;; \
+		batch) $(PYTHON) scripts/test_runner.py --suite unit --batch --make "$(MAKE)" ;; \
 		*)     if [ -n "$(ALL)" ]; then \
-				$(PYTHON) scripts/test_runner.py --suite unit --filter "$(ALL)"; \
+				$(PYTHON) scripts/test_runner.py --suite unit --filter "$(ALL)" --make "$(MAKE)"; \
 			   else \
-				$(PYTHON) scripts/test_runner.py --suite unit --batch; \
+				$(PYTHON) scripts/test_runner.py --suite unit --batch --make "$(MAKE)"; \
 			   fi ;; \
 	esac
 
-.PHONY: lint-isa lint-comb lint lint-mem \
-	test-alu test-decoder test-regfile test-core test-led test-uart \
-	test-periph-interconnect test-cdc test-interconnect test-soc \
-	test-unit testunit
+.PHONY: _lint-isa _lint-comb _lint-core _lint-mem \
+	_test-unit-alu _test-unit-decoder _test-unit-regfile _test-unit-core \
+	_test-unit-led _test-unit-uart _test-unit-periph-interconnect \
+	_test-unit-cdc _test-unit-interconnect _test-unit-soc _test-unit-lint testunit

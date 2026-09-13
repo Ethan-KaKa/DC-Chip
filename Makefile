@@ -1,11 +1,11 @@
 # DC-Chip 主工程 Makefile
 # 本 Makefile 采用模块化结构，各功能子集维护在 mk/ 目录下：
 #   - mk/config.mk : Kconfig、defconfig 与配置生成
-#   - mk/sim.mk    : Verilator 仿真器、NVBoard 与 Spike 构建
+#   - mk/sim.mk    : 单一 Verilator 仿真器与 Spike backend 构建
 #   - mk/unit.mk   : 硬件单测 (testunit) 与 Verilator 静态 Lint
 #   - mk/infra.mk  : 仿真基础设施测试 (testinfra: memory, reference, difftest等)
 #   - mk/sw.mk     : 全系统软件测试 (sw tests / sw riscv-tests)
-#   - mk/list.mk   : 自省与统一帮助呈现 (make list)
+#   - mk/list.mk   : 公开命令语法、帮助与测试自省
 
 VERILATOR     ?= verilator
 IVERILOG      ?= iverilog
@@ -16,8 +16,17 @@ RISCV_GCC     ?= riscv64-linux-gnu-gcc
 RISCV_OBJDUMP ?= riscv64-linux-gnu-objdump
 RISCV_OBJCOPY ?= riscv64-linux-gnu-objcopy
 BUILD_DIR     ?= build
+REPO_ROOT     := $(abspath $(CURDIR))
 
-.DEFAULT_GOAL := list
+.DEFAULT_GOAL := help
+
+BUILD_MAKEFILES := Makefile \
+	mk/config.mk \
+	mk/unit.mk \
+	mk/infra.mk \
+	mk/sim.mk \
+	mk/sw.mk \
+	mk/list.mk
 
 # 引入模块化规则文件
 include mk/config.mk
@@ -73,11 +82,21 @@ check-tools:
 	printf 'C++17 syntax check: PASS\n'
 
 # 全局一键回归入口: 涵盖 Layer 1 (Unit) + Layer 2 (Infra) + Layer 3 (SW Tests)
+FULL_TEST_ROOT := $(abspath $(BUILD_DIR))/test-fixtures/full-regression
+FULL_TEST_BUILD_DIR := $(FULL_TEST_ROOT)/build
+FULL_TEST_CONFIG := $(FULL_TEST_ROOT)/.config
+
 test:
-	$(MAKE) --no-print-directory check-paths
-	$(MAKE) --no-print-directory testunit batch
-	$(MAKE) --no-print-directory testinfra batch
-	$(MAKE) --no-print-directory sw tests batch
+	$(PYTHON) scripts/config.py --config "$(FULL_TEST_CONFIG)" \
+		--output-dir "$(FULL_TEST_BUILD_DIR)/config" default
+	$(MAKE) --no-print-directory BUILD_DIR="$(FULL_TEST_BUILD_DIR)" \
+		CONFIG_FILE="$(FULL_TEST_CONFIG)" check-paths
+	$(MAKE) --no-print-directory BUILD_DIR="$(FULL_TEST_BUILD_DIR)" \
+		CONFIG_FILE="$(FULL_TEST_CONFIG)" testunit batch
+	$(MAKE) --no-print-directory BUILD_DIR="$(FULL_TEST_BUILD_DIR)" \
+		CONFIG_FILE="$(FULL_TEST_CONFIG)" testinfra batch
+	$(MAKE) --no-print-directory BUILD_DIR="$(FULL_TEST_BUILD_DIR)" \
+		CONFIG_FILE="$(FULL_TEST_CONFIG)" sw tests batch
 
 # 清理目标
 clean:
@@ -88,22 +107,19 @@ clean:
 		printf 'error: refusing to clean non-default BUILD_DIR: %s\n' "$$build_dir" >&2; \
 		exit 1; \
 	fi; \
-	rm -rf -- "$$build_dir"/unit "$$build_dir"/verilator "$$build_dir"/nvboard-sim \
+	rm -rf -- "$$build_dir"/unit "$$build_dir"/verilator \
 		"$$build_dir"/sw "$$build_dir"/test-fixtures "$$build_dir"/verilator-test \
 		"$$build_dir"/reference-test "$$build_dir"/difftest-test \
 		"$$build_dir"/disasm-test "$$build_dir"/memory-test "$$build_dir"/dump.vcd
 
 tools-clean:
-	@if [ -d tools/nvboard ]; then \
-		$(MAKE) -C tools/nvboard clean >/dev/null 2>&1 || true; \
-	fi
 	@if [ -d tools/spike/build ]; then \
 		rm -rf tools/spike/build; \
 	fi
 	@if [ -d tools/spike-diff ]; then \
 		$(MAKE) -C tools/spike-diff clean >/dev/null 2>&1 || true; \
 	fi
-	@rm -rf "$(BUILD_DIR)/tools/spike"
+	@rm -rf "$(BUILD_DIR)/tools/spike" "$(BUILD_DIR)/tools/nvboard"
 	@rm -f "$(BUILD_DIR)/dc-spike-so"
 
 distclean: clean tools-clean
@@ -115,4 +131,6 @@ distclean: clean tools-clean
 	fi; \
 	rm -f .config .config.old
 
-.PHONY: check-paths init check-tools test clean tools-clean distclean
+mrproper: distclean
+
+.PHONY: check-paths init check-tools test clean tools-clean distclean mrproper

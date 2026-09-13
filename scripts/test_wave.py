@@ -80,7 +80,7 @@ def make_targets(
     config_path: Path,
     *targets: str,
 ) -> None:
-    command = [
+    common = [
         *shlex.split(args.make),
         "--no-print-directory",
         f"BUILD_DIR={build_dir}",
@@ -90,9 +90,9 @@ def make_targets(
         f"VVP={args.vvp}",
         f"CXX={args.cxx}",
         f"PYTHON={args.python}",
-        *targets,
     ]
-    expect_success(run(command), f"make {' '.join(targets)} in {build_dir}")
+    for target in targets:
+        expect_success(run([*common, target]), f"make {target} in {build_dir}")
 
 
 def verify_trace_mode(build_dir: Path, enabled: bool) -> None:
@@ -230,7 +230,7 @@ def run_tests(args: argparse.Namespace) -> None:
     off_build = off_root / "build"
     off_config = off_root / ".config"
     configure(off_config, off_build / "config", False)
-    make_targets(args, off_build, off_config, "sim-build", "test-simulation")
+    make_targets(args, off_build, off_config, "sim-build", "_test-infra-simulation")
     verify_trace_mode(off_build, False)
     verify_wave_interface(args, off_build, False)
     require(not list(off_build.rglob("*.vcd")), "WAVE-off build created a VCD")
@@ -239,7 +239,7 @@ def run_tests(args: argparse.Namespace) -> None:
     on_build = on_root / "build"
     on_config = on_root / ".config"
     configure(on_config, on_build / "config", True)
-    make_targets(args, on_build, on_config, "sim-build", "test-simulation")
+    make_targets(args, on_build, on_config, "sim-build", "_test-infra-simulation")
     verify_trace_mode(on_build, True)
     verify_wave_interface(args, on_build, True)
 
@@ -262,6 +262,20 @@ def run_tests(args: argparse.Namespace) -> None:
     simulator = on_build / "verilator" / "Vsim_top"
     launch_dir = on_root / "launch-cwd"
     launch_dir.mkdir(parents=True)
+
+    wave_path.unlink(missing_ok=True)
+    disabled = run_cli(
+        simulator,
+        launch_dir,
+        "--image",
+        str(SMOKE_IMAGE),
+        "--steps",
+        "1",
+        "--wave-off",
+    )
+    expect_success(disabled, "runtime WAVE-off execution")
+    require(not wave_path.exists(), "--wave-off created a VCD")
+
     wave_path.write_text("sentinel content that must be truncated\n", encoding="utf-8")
     one_step = run_cli(
         simulator,

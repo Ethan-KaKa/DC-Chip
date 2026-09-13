@@ -3,9 +3,9 @@
 
 #include <array>
 #include <cstdint>
+#include <functional>
 #include <memory>
 #include <set>
-#include <string>
 #ifdef CONFIG_DC_SIM_WAVE
 #include <string>
 #endif
@@ -55,6 +55,7 @@ enum class StopReason {
   fault,
   program_exit,
   timeout,
+  monitor_failure,
   quit,
 };
 
@@ -70,10 +71,13 @@ struct RunResult {
   ArchitecturalState state{};
 };
 
+using StepObserver = std::function<bool(const RunResult &)>;
+
 class Simulation {
  public:
   Simulation();
-  Simulation(int argc, char **argv);
+  Simulation(int argc, char **argv, bool enable_nvboard = true,
+             bool enable_wave = true);
   ~Simulation();
 
   Simulation(const Simulation &) = delete;
@@ -86,7 +90,8 @@ class Simulation {
   RunResult step_instruction(std::uint64_t max_cycles);
   RunResult run_until(RunTarget target, std::uint64_t count,
                       std::uint64_t max_cycles,
-                      const std::set<std::uint32_t> &breakpoints = {});
+                      const std::set<std::uint32_t> &breakpoints = {},
+                      const StepObserver &observer = {});
   ArchitecturalState snapshot() const;
 
 #ifdef CONFIG_DC_SIM_WAVE

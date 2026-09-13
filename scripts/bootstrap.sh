@@ -111,12 +111,7 @@ fi
 # ------------------------------------------------------------------------------
 log_info "Step 3: Checking external tools readiness..."
 if [ -d "tools/nvboard" ] && [ -f "tools/nvboard/scripts/nvboard.mk" ]; then
-    if [ ! -f "tools/nvboard/build/nvboard.a" ]; then
-        log_info "Building NVBoard archive library..."
-        make -C tools/nvboard nvboard-archive NVBOARD_HOME="${REPO_ROOT}/tools/nvboard" || log_warn "NVBoard build skipped or SDL2 missing."
-    else
-        log_ok "NVBoard archive already built."
-    fi
+    log_ok "NVBoard source is ready; configured builds use build/tools/nvboard."
 fi
 
 # ------------------------------------------------------------------------------
@@ -135,7 +130,8 @@ fi
 
 printf "\n%b\n" "${COLOR_GREEN}✔ DC-Chip environment fast bootstrap complete!${COLOR_RESET}"
 printf "Quick start commands:\n"
-printf "  - Run unit testbenches:        ${COLOR_CYAN}make test-unit${COLOR_RESET}\n"
-printf "  - Run software smoke tests:    ${COLOR_CYAN}make test-sw${COLOR_RESET}\n"
-printf "  - Run CPU UART simulation:     ${COLOR_CYAN}make sim APP=uart_hello${COLOR_RESET}\n"
+printf "  - Browse all test suites:      ${COLOR_CYAN}make list${COLOR_RESET}\n"
+printf "  - Run unit testbenches:        ${COLOR_CYAN}make testunit${COLOR_RESET}\n"
+printf "  - Run software smoke tests:    ${COLOR_CYAN}make sw tests${COLOR_RESET}\n"
+printf "  - Run CPU UART simulation:     ${COLOR_CYAN}make sw tests ALL=uart_hello${COLOR_RESET}\n"
 printf "  - Run full regression suite:   ${COLOR_CYAN}make test${COLOR_RESET}\n"

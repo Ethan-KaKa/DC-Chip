@@ -30,6 +30,7 @@ constexpr int kFault = 2;
 constexpr int kTimeout = 3;
 constexpr int kStateMismatch = 4;
 constexpr int kGuestFailure = 5;
+constexpr int kUserQuit = 6;
 
 struct Options {
   std::string inst_image_path;
@@ -39,7 +40,10 @@ struct Options {
   std::optional<std::uint64_t> steps;
   std::optional<std::uint64_t> max_cycles;
   bool trace = false;
-  bool batch = false;
+  bool sdb_off = false;
+  bool nvboard_off = false;
+  bool wave_off = false;
+  bool test_dispatch = false;
   bool has_expectation = false;
   std::array<std::optional<std::uint32_t>, 16> expected_registers;
   std::optional<std::uint32_t> expected_pc;
@@ -56,7 +60,9 @@ void print_usage(std::ostream &output) {
       << "  --max-cycles <positive-u64> Execution cycles (default: 100000)\n"
       << "  --trace                     Print one line per committed instruction\n"
       << "  --expect <name=value>       Check x0..x15 or pc\n"
-      << "  --batch                     Use non-interactive batch execution\n"
+      << "  --sdb-off                   Disable configured interactive SDB\n"
+      << "  --nvboard-off               Disable configured NVBoard runtime\n"
+      << "  --wave-off                  Disable initial VCD creation/recording\n"
       << "  --diff-ref-so <path>        Path to external reference shared library (.so)\n"
       << "  --help                      Show this help (must be the only option)\n";
 }
@@ -132,7 +138,10 @@ bool parse_options(int argc, char **argv, Options *options,
   bool saw_format = false;
   bool saw_steps = false;
   bool saw_max_cycles = false;
-  bool saw_batch = false;
+  bool saw_sdb_off = false;
+  bool saw_nvboard_off = false;
+  bool saw_wave_off = false;
+  bool saw_test_dispatch = false;
 
   for (int index = 1; index < argc; ++index) {
     const std::string_view argument = argv[index];
@@ -235,13 +244,35 @@ bool parse_options(int argc, char **argv, Options *options,
       options->has_expectation = true;
       continue;
     }
-    if (argument == "--batch") {
-      if (saw_batch) {
-        *error = "duplicate option --batch";
+    if (argument == "--sdb-off" || argument == "--nvboard-off" ||
+        argument == "--wave-off") {
+      bool *seen = nullptr;
+      bool *option = nullptr;
+      if (argument == "--sdb-off") {
+        seen = &saw_sdb_off;
+        option = &options->sdb_off;
+      } else if (argument == "--nvboard-off") {
+        seen = &saw_nvboard_off;
+        option = &options->nvboard_off;
+      } else {
+        seen = &saw_wave_off;
+        option = &options->wave_off;
+      }
+      if (*seen) {
+        *error = "duplicate option " + std::string(argument);
         return false;
       }
-      options->batch = true;
-      saw_batch = true;
+      *seen = true;
+      *option = true;
+      continue;
+    }
+    if (argument == "--test-dispatch") {
+      if (saw_test_dispatch) {
+        *error = "duplicate option --test-dispatch";
+        return false;
+      }
+      options->test_dispatch = true;
+      saw_test_dispatch = true;
       continue;
     }
     if (argument == "--diff-ref-so") {
@@ -316,6 +347,16 @@ bool check_expectations(const Options &options,
   return matches;
 }
 
+#ifdef CONFIG_DC_SIM_DIFFTEST
+void print_difftest_mismatch(const dc_sim::DifftestMismatch &mismatch) {
+  std::cerr << "error: difftest mismatch at cycle=" << mismatch.cycle
+            << " commit=" << mismatch.commit << " field=" << mismatch.field
+            << ": DUT " << hex_value(mismatch.dut_value, 8)
+            << " vs REF " << hex_value(mismatch.ref_value, 8) << '\n'
+            << "  " << mismatch.message << '\n';
+}
+#endif
+
 }  // namespace
 
 int main(int argc, char **argv) {
@@ -332,17 +373,17 @@ int main(int argc, char **argv) {
     return kInputError;
   }
 #ifdef CONFIG_DC_SIM_SDB
-  if (!options.batch) {
+  if (!options.sdb_off) {
     if (options.steps.has_value()) {
-      std::cerr << "error: option --steps requires --batch when SDB is enabled\n";
+      std::cerr << "error: option --steps requires --sdb-off when SDB is enabled\n";
       return kInputError;
     }
     if (options.trace) {
-      std::cerr << "error: option --trace requires --batch when SDB is enabled\n";
+      std::cerr << "error: option --trace requires --sdb-off when SDB is enabled\n";
       return kInputError;
     }
     if (options.has_expectation) {
-      std::cerr << "error: option --expect requires --batch when SDB is enabled\n";
+      std::cerr << "error: option --expect requires --sdb-off when SDB is enabled\n";
       return kInputError;
     }
   }
@@ -361,7 +402,7 @@ int main(int argc, char **argv) {
 
 
 #ifdef CONFIG_DC_SIM_NVBOARD
-  std::uint64_t max_cycles = 1000000000ULL;
+  std::uint64_t max_cycles = options.nvboard_off ? 20000000U : 1000000000ULL;
 #else
   std::uint64_t max_cycles = 20000000U;
 #endif
@@ -371,29 +412,13 @@ int main(int argc, char **argv) {
 
   std::unique_ptr<dc_sim::Simulation> simulation;
   try {
-    simulation = std::make_unique<dc_sim::Simulation>(argc, argv);
+    simulation = std::make_unique<dc_sim::Simulation>(
+        argc, argv, !options.nvboard_off, !options.wave_off);
     simulation->reset();
   } catch (const std::exception &exception) {
     std::cerr << "error: " << exception.what() << '\n';
     return kInputError;
   }
-#ifdef CONFIG_DC_SIM_SDB
-  if (!options.batch) {
-    const dc_sim::RunResult result = dc_sim::run_sdb(
-        *simulation, max_cycles, std::cin, std::cout, std::cerr);
-    if (result.reason == dc_sim::StopReason::fault) {
-      return kFault;
-    }
-    if (result.reason == dc_sim::StopReason::program_exit) {
-      return (result.event.guest_exit_code == 0) ? kSuccess : kGuestFailure;
-    }
-    if (result.reason == dc_sim::StopReason::timeout) {
-      return kTimeout;
-    }
-    return kSuccess;
-  }
-#endif
-
   bool stopped_on_program_exit = false;
   std::uint32_t final_guest_exit_code = 0;
 
@@ -421,29 +446,50 @@ int main(int argc, char **argv) {
   dc_sim::Difftest difftest(*simulation, *ref_backend);
   difftest.sync_memory();
   dc_sim::DifftestMismatch mismatch;
+  const dc_sim::StepObserver observer = [&](const dc_sim::RunResult &result) {
+    return difftest.compare_result(result, &mismatch);
+  };
+#else
+  const dc_sim::StepObserver observer;
+#endif
+
+#ifdef CONFIG_DC_SIM_SDB
+  if (!options.sdb_off) {
+    const dc_sim::RunResult result = dc_sim::run_sdb(
+        *simulation, max_cycles, std::cin, std::cout, std::cerr, observer);
+    if (result.reason == dc_sim::StopReason::monitor_failure) {
+#ifdef CONFIG_DC_SIM_DIFFTEST
+      print_difftest_mismatch(mismatch);
+#endif
+      return kStateMismatch;
+    }
+    if (result.reason == dc_sim::StopReason::fault) {
+      return kFault;
+    }
+    if (result.reason == dc_sim::StopReason::program_exit) {
+      return (result.event.guest_exit_code == 0) ? kSuccess : kGuestFailure;
+    }
+    if (result.reason == dc_sim::StopReason::timeout) {
+      return kTimeout;
+    }
+    if (result.reason == dc_sim::StopReason::quit && options.test_dispatch) {
+      return kUserQuit;
+    }
+    return kSuccess;
+  }
 #endif
 
   const std::uint64_t max_steps = options.steps.value_or(std::numeric_limits<std::uint64_t>::max());
   for (std::uint64_t step = 0; step < max_steps; ++step) {
     dc_sim::RunResult result;
+    result = simulation->run_until(dc_sim::RunTarget::commits, 1,
+                                   max_cycles, {}, observer);
+    if (result.reason == dc_sim::StopReason::monitor_failure) {
 #ifdef CONFIG_DC_SIM_DIFFTEST
-    const bool difftest_ok = difftest.step_and_compare(max_cycles, &mismatch, &result);
-    if (!difftest_ok) {
-      if (result.reason == dc_sim::StopReason::timeout) {
-        std::cerr << "error: timeout after " << result.state.cycles
-                  << " cycles and " << result.state.commits << " commits\n";
-        return kTimeout;
-      }
-      std::cerr << "error: difftest mismatch at cycle=" << mismatch.cycle
-                << " commit=" << mismatch.commit << " field=" << mismatch.field
-                << ": DUT " << hex_value(mismatch.dut_value, 8)
-                << " vs REF " << hex_value(mismatch.ref_value, 8) << '\n'
-                << "  " << mismatch.message << '\n';
+      print_difftest_mismatch(mismatch);
+#endif
       return kStateMismatch;
     }
-#else
-    result = simulation->step_instruction(max_cycles);
-#endif
     if (result.reason == dc_sim::StopReason::commits_complete) {
       if (options.trace) {
         print_trace(result.event, result.state);

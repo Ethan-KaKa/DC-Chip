@@ -20,8 +20,7 @@
 `sim/tests/`。
 
 步骤 2.5 已完成 wrapper、Simulation 引擎、SDB、参考模型与 difftest 的迁移；
-`make sim-build`、`make test-reference`、`make test-simulation`、
-`make test-difftest`、`make test-integration`、`make test-wave`、`make test-sdb`
+`make sim-build`、`make testinfra list`、`make testinfra ALL=<names>`
 与 `make test` 全面通过，建立了闭环的端到端仿真执行与回归保障。仿真器不定义
 最终板级可执行文件 ABI，不能代替后续 Vivado 综合、实现、时序、功耗或 FPGA 上板证据。
 
@@ -78,7 +77,7 @@ DPI 返回值只使用低 16 位。已加载镜像之外的地址返回保留编
 ```text
 Vsim_top --image <path> [--steps <n>] [--max-cycles <n>] [--trace]
          [--expect r0=<value>] ... [--expect r3=<value>]
-         [--expect pc=<value>] [--batch]
+         [--expect pc=<value>] [--sdb-off] [--nvboard-off] [--wave-off]
 Vsim_top --help
 ```
 
@@ -89,7 +88,9 @@ Vsim_top --help
 | `--max-cycles <n>` | 正整数执行周期上限；默认 `steps+4` |
 | `--trace` | 每条合法提交打印一行；不得重复 |
 | `--expect <name=value>` | 可重复用于不同的 `r0`–`r3` 和 `pc`；同名不得重复 |
-| `--batch` | 显式选择原有非交互执行；只能出现一次 |
+| `--sdb-off` | 关闭已编入的交互 SDB；只能出现一次 |
+| `--nvboard-off` | 跳过 NVBoard 初始化、刷新和退出；只能出现一次 |
+| `--wave-off` | 启动时不创建 VCD；SDB 中仍可用 `wave on` 延迟开启 |
 | `--help` | 必须是唯一参数 |
 
 数值只接受无符号十进制或带 `0x`/`0X` 前缀的十六进制。寄存器期望值
@@ -98,8 +99,8 @@ Vsim_top --help
 均属于输入错误。严格无符号数解析由 `numeric.h/.cpp` 的纯 C++17
 `dc_sim::parse_unsigned()` 统一提供，不接受符号、空值、尾随字符或溢出。
 
-`CONFIG_DC_SIM_SDB=n` 时默认模式与 `--batch` 均执行原有 batch，参数、summary、
-trace、诊断及退出码保持一致。`CONFIG_DC_SIM_SDB=y` 时，不带 `--batch` 会在
+`CONFIG_DC_SIM_SDB=n` 时默认执行自动模式。`CONFIG_DC_SIM_SDB=y` 时，不带
+`--sdb-off` 会在
 镜像加载和 reset 后进入 SDB；交互模式允许 `--max-cycles`，但拒绝 `--steps`、
 `--trace` 和 `--expect`，若同时出现则按上述三项顺序报告第一个冲突。SDB 的
 默认绝对周期上限为镜像有效字数加 4，保持有限超时。
@@ -165,8 +166,9 @@ const std::string &wave_path() const;
 以后每个上升沿和下降沿 `eval()` 后使用同一 `VerilatedContext` 的单调时间 dump。
 两个同步 reset 周期因此位于波形中，但仍不计入 `cycles` 或 `commits`。
 
-`set_wave_enabled(false)` 只跳过后续 dump，CPU 和仿真时间继续推进；恢复为
-`true` 后继续写同一文件，不关闭、分段或改名。该接口当前只供执行引擎及测试
+`set_wave_enabled(false)` 只跳过后续 dump，CPU 和仿真时间继续推进；若启动时
+使用 `--wave-off`，第一次恢复为 `true` 时才创建文件并从当前仿真时间开始记录；
+否则继续写同一文件，不关闭、分段或改名。该接口当前只供执行引擎及测试
 和启用 WAVE 的 SDB 使用。
 
 输出路径不依赖启动工作目录。Linux 构建从 `/proc/self/exe` 解析真实可执行
@@ -290,41 +292,38 @@ SDB 中 `q` 和 EOF 返回 0；实际非法或越界取指返回 2；timeout 返
 
 ```bash
 make sim-build
-make sim IMG=<hex> [STEPS=<n>] [TRACE=1] [BATCH=1]
-make test-config
-make test-disasm
-make test-simulation
-make test-integration
-make test-wave
-make test-sdb
+make sw tests [sdboff] [nvboardoff] [waveoff] [ALL=<names>]
+make sw tests batch [ALL=<names>]
+make testinfra list
+make testinfra ALL=config,disasm,simulation,integration
+make testinfra ALL=wave,sdb
 make test
 make clean
 ```
 
-`make sim` 要求 `IMG` 非空，`TRACE` 和 `BATCH` 都只能为空或 `1`；`BATCH=1`
-映射为 `--batch`。`make sim-build` 按
+`make sim-build` 是纯构建命令，并按
 package、decoder、ALU、regfile、core、wrapper 的顺序构建
 `build/verilator/Vsim_top`；项目 C++ 源采用 C++17，并执行
 `-Wall -Wextra -Wpedantic` 语法检查。
 
-冻结的 `make test-disasm` 使用纯 C++17 自检穷举全部 65,536 个指令字，其中 2,384 个
+`make testinfra ALL=disasm` 使用纯 C++17 自检穷举全部 65,536 个指令字，其中 2,384 个
 规范编码必须生成精确汇编，其余编码必须生成精确 `.word`。该测试不创建或
-驱动 Verilator 模型。`make test-simulation` 在独立
+驱动 Verilator 模型。`make testinfra ALL=simulation` 在独立
 `build/verilator-test/` Mdir 中直接调用引擎，
-与正式 `build/verilator/Vsim_top` 隔离。`make test-integration` 的 19 个 CLI
+与正式 `build/verilator/Vsim_top` 隔离。`make testinfra ALL=integration` 的 19 个 CLI
 用例逐项比较精确退出码，并对 summary、trace、普通非法、越界、timeout 和
 状态失配执行精确文本断言。`make test` 依次运行配置、反汇编、RTL
 lint/模块测试、Simulation 引擎自检和 CLI 集成测试。`make clean` 只允许删除
 仓库根目录的默认 `build/`；本地 `.config` 由 `make clean` 保留。
 
-`make test-wave` 另外构建彼此隔离的 WAVE-off/on 正式 CLI 和执行引擎。它检查
+`make testinfra ALL=wave` 另外构建彼此隔离的 WAVE-off/on 正式 CLI 和执行引擎。它检查
 编译宏与链接产物、固定输出路径、截断覆盖、VCD header、时间 0、reset 与正常
 执行双边沿、暂停间隙和状态等价，并在 WAVE-on 构建上复跑 19 个 CLI 用例及
 不可打开目标的错误路径。
 
-`make test-sdb` 使用 `build/test-fixtures/sdb/` 的隔离配置覆盖 SDB-off、
+`make testinfra ALL=sdb` 使用 `build/test-fixtures/sdb/` 的隔离配置覆盖 SDB-off、
 SDB-only 和 SDB+WAVE。它检查条件编译、提示符与逐字命令输出、断点恢复、数值
-及用法错误、终止状态、19 个 batch CLI 用例、交互选项冲突、`BATCH=1` 传递，
+及用法错误、终止状态、自动 CLI 用例、交互选项冲突、运行时关闭参数，
 以及 SDB 波形暂停间隙和状态等价。
 
 ## 12. v0.2 仿真与差分测试契约（完整实现）
@@ -362,7 +361,8 @@ SDB-only 和 SDB+WAVE。它检查条件编译、提示符与逐字命令输出�
 ```text
 Vsim_top [--image <path> | --image-inst <path>] [--image-data <path>]
          [--format <auto|hex|bin>] [--steps <n>] [--max-cycles <n>]
-         [--trace] [--expect <name=value>] [--batch]
+         [--trace] [--expect <name=value>]
+         [--sdb-off] [--nvboard-off] [--wave-off]
 ```
 - `--image <path>`：默认指令镜像（向后兼容阶段 1，支持 `.hex` 与 `.bin`）；
 - `--image-inst <path>`：显式指定指令镜像（与 `--image` 互斥）；
@@ -392,32 +392,33 @@ Simulation 引擎单个周期内的停止判定优先级严格为：
 
 - **独立参考模型**（`sim/verilator/reference_model.h/.cpp`）：完全独立于 RTL 的纯 C++17 解码与执行模型，支持 RV32E v0.2 的 8 条指令、16 个寄存器、DRAM 字节/字读写、7 种结构化 fault 判定与 tohost 退出；
 - **差分测试框架**（`sim/verilator/difftest.h/.cpp`）：逐指令（lockstep）比对 DUT 与参考模型的提交 PC、提交指令、16 个寄存器状态、下条指令 PC、访存副作用与 fault 状态；
-- **自检目标**：`make test-reference`（纯 C++ 单元测试）与 `make test-difftest`（包含固定种子随机指令序列与 fault 的联合差分测试）。
+- **自检目标**：`make testinfra ALL=reference`（纯 C++ 单元测试）与 `make testinfra ALL=difftest-engine`（包含固定种子随机指令序列与 fault 的联合差分测试）。
 
 ### 12.6 回归验证入口
 
 | 命令 | 覆盖范围 |
 | --- | --- |
-| `make test-led` | 16 位 GPIO LED 控制器模块级测试（包含字/半字/字节读写、对齐与 ready 握手） |
-| `make test-interconnect` | SoC 总线互连测试（DRAM/MMIO/未映射错误地址路由与连续赋值稳定性） |
-| `make test-soc` | SoC 顶层软硬件集成自检（包含核心、互连、LED 与私有 tohost） |
-| `make test-unit` | 7 个模块与子系统测试集合（ALU、译码器、寄存器堆、CPU核、LED、互连、SoC） |
-| `make test-reference` | C++ 独立参考模型指令、MMIO LED 与 fault 单元测试 |
-| `make test-simulation` | C++ Simulation 驱动引擎自检 |
-| `make test-sw` | 19 项 AM 裸机软件测试（含 `led_marquee`）端到端运行验证 |
-| `make test-difftest` | RTL 与独立参考模型的 lockstep 差分测试（含 19 项软件及随机用例） |
-| `make test-integration` | 22 项端到端 CLI 集成测试（覆盖退出码 0, 1, 2, 3, 4, 5） |
-| `make test-wave` | WAVE 宏开关、VCD 导出、暂停恢复与 CLI 回归 |
-| `make test-sdb` | SDB 交互调试器命令、单步、断点、错误诊断与 CLI 回归 |
+| `make testunit ALL=led` | 16 位 GPIO LED 控制器模块级测试（包含字/半字/字节读写、对齐与 ready 握手） |
+| `make testunit ALL=interconnect` | SoC 总线互连测试（DRAM/MMIO/未映射错误地址路由与连续赋值稳定性） |
+| `make testunit ALL=soc` | SoC 顶层软硬件集成自检（包含核心、互连、LED 与私有 tohost） |
+| `make testunit` | 10 个模块与子系统测试及 RTL lint |
+| `make testinfra ALL=reference` | C++ 独立参考模型指令、MMIO LED 与 fault 单元测试 |
+| `make testinfra ALL=simulation` | C++ Simulation 驱动引擎自检 |
+| `make sw tests batch` | 20 项 AM 裸机软件测试自动端到端运行验证（保留配置中的 difftest） |
+| `make testinfra ALL=difftest-engine` | RTL 与独立参考模型的 lockstep 差分测试 |
+| `make testinfra ALL=integration` | 端到端 CLI 正反例集成测试 |
+| `make testinfra ALL=wave` | WAVE 宏开关、VCD 导出、暂停恢复与 CLI 回归 |
+| `make testinfra ALL=sdb` | SDB 交互调试器命令、单步、断点、错误诊断与 CLI 回归 |
+| `make testinfra ALL=unified-sim` | 全特性单一 `Vsim_top`、NVBoard 产物隔离与运行时关闭组合 |
 | `make test` | 包含全部配置、ISA、disasm、lint、unit、mem、ref、sim、sw、difftest、integration 的全回归 |
 
 ### 12.7 NVBoard 虚拟外设验证环境（阶段 5 Phase 1）
 
 为在无需下载真实 FPGA 板卡的情况下直观验证外设（如 LED 跑马灯、开关、数码管），仿真系统集成了 NVBoard 虚拟板卡支持：
 
-1. **零污染隔离构建**：
-   - Kconfig 宏 `CONFIG_DC_SIM_NVBOARD` 默认置为 `n`，确保默认仿真构建（`build/verilator/Vsim_top`）及 `make test` 全回归完全保持纯无界面（Headless）状态，无需 SDL2 窗口或图形依赖。
-   - 专用构建目标 `make nvboard-build` 将构建输出严格隔离至 `build/nvboard-sim/`，独立生成支持 GUI 渲染的 `build/nvboard-sim/Vsim_top`。
+1. **单一仿真器与零污染构建**：
+   - Kconfig 宏 `CONFIG_DC_SIM_NVBOARD` 默认置为 `n`；设为 `y` 后，NVBoard 与其他功能共同编入唯一的 `build/verilator/Vsim_top`。
+   - 自动绑定代码位于 `build/verilator/`，NVBoard 第三方对象与归档位于 `build/tools/nvboard/`，不在 submodule 中生成文件。
 2. **引脚映射 (`constr/nvboard.nxdc`)**：
    ```text
    top=sim_top
@@ -431,12 +432,8 @@ Simulation 引擎单个周期内的停止判定优先级严格为：
    - 仿真退出时调用 `nvboard_quit()` 释放 SDL2 窗口资源。
 4. **运行与交互命令**：
    ```bash
-   # 编译 NVBoard 仿真器
-   make nvboard-build
-
-   # 运行 LED 跑马灯程序（弹出 SDL2 虚拟面板窗口）
-   make nvboard-run APP=led_marquee
-
-   # 无界面批量回归或 CI 测试（使用 SDL 虚拟驱动）
-   SDL_VIDEODRIVER=dummy make nvboard-run APP=led_marquee BATCH=1
+   make menuconfig                         # 启用 DC_SIM_NVBOARD
+   make sw tests ALL=led_marquee          # 使用虚拟面板运行
+   make sw tests nvboardoff ALL=led_marquee
+   SDL_VIDEODRIVER=dummy make sw tests batch ALL=led_marquee
    ```

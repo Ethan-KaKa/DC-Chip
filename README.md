@@ -212,13 +212,21 @@ make check-tools
 
 ### 3. 一键完整回归
 
-运行包含单元测试、差分测试、19 项软件基准测试与仿真闭环的完整回归：
+先用帮助与测试索引确认公开入口：
+
+```bash
+make help
+make list
+```
+
+运行包含单元测试、差分测试、20 项软件基准测试与仿真闭环的完整回归：
 
 ```bash
 make test
 ```
 
-全部测试通过时将显示各阶段 PASS，无任何报错退出。
+该命令在 `build/test-fixtures/full-regression/` 中使用默认 defconfig 隔离运行，
+不会读取或修改本地 `.config`。全部测试通过时将显示各阶段 PASS。
 
 ---
 
@@ -235,53 +243,47 @@ make config-show     # 查看当前生效的配置项
 ### 软件编译与测试
 
 ```bash
-make sw              # 编译 sw/tests/ 下全部 19 项测试程序并生成 .bin 镜像
-make test-sw         # 自动逐个运行全部 19 项软件回归测试
+make sw                              # 只编译全部 20 项软件镜像
+make sw tests list                   # 查看软件测试清单
+make sw tests                        # 完全按 .config 运行全部软件测试
+make sw tests ALL=cpu_fib,uart_hello # 只运行指定软件测试
+make sw tests sdboff waveoff ALL=cpu_fib # 临时关闭指定运行时功能
+make sw tests batch                  # 等价于 sdboff nvboardoff waveoff
 ```
 
-### RTL 单元测试
+### 分层测试
 
 ```bash
-make test-unit       # 运行全部 RTL 模块级单元测试
-make test-alu        # 单独测试 ALU
-make test-decoder    # 单独测试译码器
-make test-regfile    # 单独测试寄存器堆
-make test-core       # 单独测试 CPU 核心
-make test-led        # 单独测试 LED 控制器
-make test-interconnect # 单独测试 SoC 互连总线
-make test-soc        # 单独测试 SoC 顶层
+make list                            # 测试总入口
+make testunit list                   # 查看 RTL 单测与 lint 清单
+make testunit                        # 运行默认硬件测试集
+make testunit ALL=alu,uart,core      # 运行指定硬件测试
+make testinfra list                  # 查看仿真基础设施测试清单
+make testinfra                       # 运行默认基础设施测试集
+make testinfra ALL=memory,reference  # 运行指定基础设施测试
+make test                            # 运行默认三层完整回归
 ```
 
 ### 仿真运行与调试
 
 ```bash
-# 构建 Verilator 仿真器
+# 按 .config 构建唯一的 Verilator 仿真器
 make sim-build
 
-# 仿真运行指定应用（以跑马灯为例，批处理模式）
-make sim APP=led_marquee BATCH=1
-
-# 仿真并开启交互式简易调试器 (SDB)
-make sim APP=cpu_fib SDB=1
-
-# 运行差分测试
-make test-difftest
-
-# 生成波形文件 (build/verilator/sim_trace.vcd)
-make test-wave
-```
-
-### NVBoard 虚拟外设仿真
-
-```bash
-make nvboard-build                  # 构建带 NVBoard 图形界面的仿真器
-make nvboard-run APP=led_marquee    # 启动跑马灯并在虚拟图形面板上观察 LED 状态
+# SDB、NVBoard、VCD 与 Difftest 是 .config 中的构建期开关
+make menuconfig
+make sw tests ALL=led_marquee       # 构建检查后按配置运行
+make sw tests batch ALL=uart_hello  # 自动模式仍保留 difftest
+make testinfra ALL=difftest-engine,wave,sdb,unified-sim
 ```
 
 ### 清理生成物
 
 ```bash
-make clean           # 清理 build/ 目录下的全部临时编译与构建产物
+make clean           # 清理日常构建产物，保留 .config 与 build/tools
+make tools-clean     # 清理外部重型工具产物
+make distclean       # 删除 build/、.config 与 .config.old
+make mrproper        # distclean 的同义入口
 ```
 
 ---
@@ -300,7 +302,7 @@ DC-Chip/
 │   └── verilator/              # Verilator 顶层、仿真存储、Difftest、SDB、参考模型
 ├── sw/                         # 裸机软件生态
 │   ├── am/                     # 自包含 Abstract Machine 运行时与 klib
-│   └── tests/                  # 19 项软件回归测试程序源代码
+│   └── tests/                  # 20 项软件回归测试程序源代码
 ├── constr/                     # 引脚与物理约束 (包括 NVBoard 虚拟引脚映射)
 ├── configs/                    # 预置 Kconfig 配置文件
 ├── scripts/                    # 构建管理、配置生成与 ISA 审计脚本

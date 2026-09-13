@@ -69,6 +69,8 @@ std::string stop_text(const RunResult &result) {
       return fault_cause_string(result.event.fault_cause);
     case StopReason::timeout:
       return "timeout";
+    case StopReason::monitor_failure:
+      return "execution monitor failure";
     case StopReason::breakpoint:
       return "breakpoint";
     case StopReason::quit:
@@ -109,12 +111,14 @@ bool parse_positive(std::string_view text, std::string_view type,
 class Debugger {
  public:
   Debugger(Simulation &simulation, std::uint64_t max_cycles,
-           std::istream &input, std::ostream &output, std::ostream &errors)
+           std::istream &input, std::ostream &output, std::ostream &errors,
+           const StepObserver &observer)
       : simulation_(simulation),
         max_cycles_(max_cycles),
         input_(input),
         output_(output),
-        errors_(errors) {}
+        errors_(errors),
+        observer_(observer) {}
 
   RunResult run() {
     std::string line;
@@ -223,7 +227,7 @@ class Debugger {
     RunResult result;
     while (true) {
       result = simulation_.run_until(RunTarget::cycles, 1, max_cycles_,
-                                     active_breakpoints());
+                                     active_breakpoints(), observer_);
       if (result.reason == StopReason::breakpoint) {
         const auto found = breakpoint_ids_.find(result.state.fetch_pc);
         if (found == breakpoint_ids_.end()) {
@@ -243,7 +247,8 @@ class Debugger {
 
       if (result.reason == StopReason::program_exit ||
           result.reason == StopReason::fault ||
-          result.reason == StopReason::timeout) {
+          result.reason == StopReason::timeout ||
+          result.reason == StopReason::monitor_failure) {
         output_ << "stopped: " << stop_text(result) << '\n';
         print_state(result.state, output_);
         print_terminal_error(result, errors_);
@@ -382,6 +387,7 @@ class Debugger {
   std::istream &input_;
   std::ostream &output_;
   std::ostream &errors_;
+  const StepObserver &observer_;
   std::map<std::uint64_t, std::uint32_t> breakpoints_;
   std::unordered_map<std::uint32_t, std::uint64_t> breakpoint_ids_;
   std::optional<std::uint32_t> suppressed_pc_;
@@ -392,8 +398,8 @@ class Debugger {
 
 RunResult run_sdb(Simulation &simulation, std::uint64_t max_cycles,
                   std::istream &input, std::ostream &output,
-                  std::ostream &errors) {
-  return Debugger(simulation, max_cycles, input, output, errors).run();
+                  std::ostream &errors, const StepObserver &observer) {
+  return Debugger(simulation, max_cycles, input, output, errors, observer).run();
 }
 
 }  // namespace dc_sim
