@@ -28,6 +28,7 @@ void led_write(uint16_t val);
 uint16_t led_read(void);
 void uart_write(char ch);
 int uart_read(char *ch);
+uint32_t buttons_read(void);
 
 static inline void halt(int code) __attribute__((__noreturn__));
 static inline void halt(int code) {

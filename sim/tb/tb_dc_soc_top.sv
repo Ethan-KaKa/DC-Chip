@@ -32,6 +32,7 @@ module tb_dc_soc_top;
   logic [15:0] o_led;
   logic        o_uart_tx;
   logic        i_uart_rx;
+  logic [20:0] i_button;
 
   // Trace & Debug
   logic        trace_valid;
@@ -72,6 +73,7 @@ module tb_dc_soc_top;
     .o_led            (o_led),
     .o_uart_tx        (o_uart_tx),
     .i_uart_rx        (i_uart_rx),
+    .i_button         (i_button),
     .trace_valid      (trace_valid),
     .trace_pc         (trace_pc),
     .trace_inst       (trace_inst),
@@ -152,6 +154,8 @@ module tb_dc_soc_top;
     dram_rsp_rdata = 0;
     dram_rsp_error = 0;
     debug_reg_addr = 0;
+    i_uart_rx      = 1'b1;
+    i_button       = 8'h00;
 
     repeat (3) @(posedge clk);
     #1;

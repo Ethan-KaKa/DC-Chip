@@ -10,6 +10,7 @@
 - `tb_cpu_core.sv`: 单周期 CPU 核心取指、译码、执行与写回流水自检
 - `tb_led_controller.sv`: 16位 MMIO LED 控制器读写、字节使能与管脚输出自检
 - `tb_uart_controller.sv`: MMIO UART 控制器 16字节 FIFO、波特率分频与收发移位自检
+- `tb_buttons_controller.sv`: 8位 MMIO Buttons 输入同步、只读访问与响应错误自检
 - `tb_periph_interconnect.sv`: 1-to-N 外设总线路由器地址分流与未映射地址总线错误自检
 - `tb_mmio_cdc_bridge.sv`: CPU 与外设跨时钟域 MMIO 握手桥异步四相翻转自检
 - `tb_soc_interconnect.sv`: SoC 内存与外设地址空间译码分流与 access fault 契约自检

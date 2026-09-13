@@ -6,6 +6,7 @@
 #define MMIO_UART_TX_ADDR     0x10000000u
 #define MMIO_UART_RX_ADDR     0x10000004u
 #define MMIO_UART_STATUS_ADDR 0x10000008u
+#define MMIO_BUTTONS_ADDR     0x10000200u
 
 #define UART_STATUS_RX_READY  (1u << 0)
 #define UART_STATUS_TX_READY  (1u << 1)
@@ -49,6 +50,11 @@ static void __am_gpio_led_write(AM_GPIO_LED_T *led) {
   *led_mmio = led->data;
 }
 
+static void __am_input_buttons(AM_INPUT_BUTTONS_T *buttons) {
+  volatile uint32_t *buttons_mmio = (volatile uint32_t *)MMIO_BUTTONS_ADDR;
+  buttons->state = *buttons_mmio & 0x001fffffu;
+}
+
 bool ioe_init(void) {
   for (size_t i = 0; i < LENGTH(read_lut); i++) {
     read_lut[i]  = (void *)fail;
@@ -59,6 +65,7 @@ bool ioe_init(void) {
   read_lut[AM_UART_RX]     = (void *)__am_uart_rx;
   read_lut[AM_GPIO_LED]    = (void *)__am_gpio_led_read;
   write_lut[AM_GPIO_LED]   = (void *)__am_gpio_led_write;
+  read_lut[AM_INPUT_BUTTONS] = (void *)__am_input_buttons;
   return true;
 }
 
@@ -85,6 +92,13 @@ uint16_t led_read(void) {
   led.data = 0;
   ioe_read(AM_GPIO_LED, &led);
   return (uint16_t)(led.data & 0xffff);
+}
+
+uint32_t buttons_read(void) {
+  AM_INPUT_BUTTONS_T buttons;
+  buttons.state = 0;
+  ioe_read(AM_INPUT_BUTTONS, &buttons);
+  return buttons.state;
 }
 
 void uart_write(char ch) {

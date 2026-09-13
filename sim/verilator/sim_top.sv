@@ -30,7 +30,8 @@ module sim_top (
   // Peripheral output pins (LEDs and UART)
   output logic [15:0] o_led,
   output logic        o_uart_tx,
-  input  logic        i_uart_rx
+  input  logic        i_uart_rx,
+  input  logic [20:0] i_button
 );
 
   logic        imem_req_valid;
@@ -79,6 +80,7 @@ module sim_top (
     .o_led            (o_led),
     .o_uart_tx        (o_uart_tx),
     .i_uart_rx        (i_uart_rx),
+    .i_button         (i_button),
     .trace_valid      (trace_valid),
     .trace_pc         (trace_pc),
     .trace_inst       (trace_inst),

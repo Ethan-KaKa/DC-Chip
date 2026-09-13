@@ -2,7 +2,7 @@
 
 - 版本：v0.2
 - 版本：v0.2
-- 状态：阶段 5 Phase 2 完成 MMIO UART 控制器（`0x10000000`）与 CDC 异步/同步总线桥规范冻结；外设时钟在 FPGA 目标上固定为 50 MHz (`clk_periph = 50MHz`)，CPU 及片上存储（IROM/DRAM）位于独立时钟域 (`clk_cpu`)；timer/sensor 待后续子阶段
+- 状态：阶段 5 Phase 2 完成 MMIO UART 控制器（`0x10000000`）、GPIO LED（`0x10000100`）、Buttons（`0x10000200`）与 CDC 异步/同步总线桥规范冻结；外设时钟在 FPGA 目标上固定为 50 MHz (`clk_periph = 50MHz`)，CPU 及片上存储（IROM/DRAM）位于独立时钟域 (`clk_cpu`)；timer/sensor 待后续子阶段
 - 更新日期：2026-09-12
 - ISA 规范：`docs/isa/isa.md` v0.2
 
@@ -72,7 +72,8 @@ bit 1，若为一则在 `jalr` 上报告 instruction address misaligned，不发
 | **MMIO 总区域** | `0x10000000`--`0x1000ffff` | 64 KiB | **设备寄存器**（仅允许 LSU 访存，经 CDC 桥至外设路由器） | IFU 取指触发 instruction access fault；未分配外设子空间触发 access fault | SoC Interconnect 译码 |
 | **MMIO UART 控制器** | `0x10000000`--`0x1000000f` | 16 字节 | **寄存器映射**（TX只写、RX只读、STATUS只读；16字节FIFO） | 写只读/读只写或未对齐多字节读写按规范返回错误 | `rtl/periph/uart_controller.sv` |
 | **GPIO LED 控制器** | `0x10000100`--`0x10000103` | 4 字节 | **可读/可写**（低 16 位映射到 16 颗 LED，高 16 位保留为 0） | IFU 取指或未对齐多字节读写按规范返回错误 | `rtl/periph/led_controller.sv` |
-| timer/sensor | `0x10000200` 等 | 待定 | 阶段 5 后续子阶段规划中 | 访问未就绪外设地址触发 access fault | `TODO` |
+| **Buttons 输入控制器** | `0x10000200`--`0x10000203` | 4 字节 | **只读**（低 21 位映射到 16 个 SW 与 5 个 Button Pad） | 写访问或未映射地址触发 access fault | `rtl/periph/buttons_controller.sv` |
+| timer/sensor | 其他 `0x1000xxxx` 子空间 | 待定 | 阶段 5 后续子阶段规划中 | 访问未就绪外设地址触发 access fault | `TODO` |
 
 ### 5.1 Harvard 访问隔离与 Fault 契约
 
@@ -80,7 +81,7 @@ bit 1，若为一则在 `jalr` 上报告 instruction address misaligned，不发
 - **LSU 路由与访问**：数据请求由 `soc_interconnect` 译码路由：
   - DRAM 区域：`[0x20000000, 0x20010000)` 内，转发至 DRAM 存储；
   - 私有 `tohost`：`0xfffffff0`，转发至仿真/主机监控；
-  - MMIO 区域：`[0x10000000, 0x10010000)` 内，转发至 `mmio_cdc_bridge` 与 `periph_interconnect`；已分配外设（`0x10000000` UART、`0x10000100` LED）返回正常握手响应；未实现的外设地址直接返回 `rsp_error = 1`；
+  - MMIO 区域：`[0x10000000, 0x10010000)` 内，转发至 `mmio_cdc_bridge` 与 `periph_interconnect`；已分配外设（`0x10000000` UART、`0x10000100` LED、`0x10000200` Buttons）返回正常握手响应；未实现的外设地址直接返回 `rsp_error = 1`；
   - 未映射区域或尝试对 IROM 执行 load/store：总线互连立即返回 `rsp_error = 1`；
 - 核心收到 `rsp_error` 时产生粘滞的 `load access fault`（`fault_cause = 3'd5`）或 `store access fault`（`fault_cause = 3'd7`）；
 - 跨区域非法访问不会产生任何局部数据写入或寄存器写回，故障状态保持至复位。
@@ -115,6 +116,16 @@ bit 1，若为一则在 `jalr` 上报告 instruction address misaligned，不发
 
 - 支持 8 位（`sb`/`lbu`）、16 位（`sh`/`lhu`）和 32 位（`sw`/`lw`）对齐读写。
 - 读操作直接返回当前寄存器锁存的值；写操作在请求握手成功拍同步更新寄存器并反映到输出管脚 `o_led[15:0]`。
+
+### 5.5 Buttons 输入控制器寄存器定义（`0x10000200`）
+
+| 偏移/地址 | 字段 | 位宽 | 读写权限 | 描述 |
+|---|---|---:|---|---|
+| `0x10000200` | `INPUT[20:0]` | 21 | RO | `bit[15:0]` 为 `SW0..SW15`，`bit[20:16]` 依次为 `BTNR, BTNL, BTND, BTNU, BTNC`；其余位为 0。 |
+
+- 输入先经过两级同步器；默认 `DEBOUNCE_CYCLES = 0`，只提供同步后的当前电平。
+- `DEBOUNCE_CYCLES > 0` 时，每个按键独立使用稳定计数器，连续稳定达到阈值后更新可读状态。
+- 该控制器不提供按下事件锁存、FIFO 或中断；写访问返回总线错误，demo 软件自行检测按下沿。
 
 
 ## 6. 仿真私有机制边界

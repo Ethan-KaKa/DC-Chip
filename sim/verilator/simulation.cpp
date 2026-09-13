@@ -43,6 +43,8 @@ class Simulation::Impl {
     top = std::make_unique<Vsim_top>(context.get());
     top->clk = 0;
     top->rst = 1;
+    top->i_uart_rx = 1;
+    top->i_button = 0;
   }
 
   void initialize() {

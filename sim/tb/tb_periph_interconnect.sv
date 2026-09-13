@@ -41,6 +41,16 @@ module tb_periph_interconnect;
   logic [31:0] led_rsp_rdata;
   logic        led_rsp_error;
 
+  logic        buttons_req_valid, buttons_req_ready;
+  logic [31:0] buttons_req_addr;
+  logic        buttons_req_write;
+  logic [1:0]  buttons_req_size;
+  logic [31:0] buttons_req_wdata;
+  logic [3:0]  buttons_req_wstrb;
+  logic        buttons_rsp_valid, buttons_rsp_ready;
+  logic [31:0] buttons_rsp_rdata;
+  logic        buttons_rsp_error;
+
   periph_interconnect #(
     .UART_BASE (32'h1000_0000),
     .LED_BASE  (32'h1000_0100)
@@ -79,7 +89,18 @@ module tb_periph_interconnect;
     .led_rsp_valid   (led_rsp_valid),
     .led_rsp_ready   (led_rsp_ready),
     .led_rsp_rdata   (led_rsp_rdata),
-    .led_rsp_error   (led_rsp_error)
+    .led_rsp_error   (led_rsp_error),
+    .buttons_req_valid (buttons_req_valid),
+    .buttons_req_ready (buttons_req_ready),
+    .buttons_req_addr  (buttons_req_addr),
+    .buttons_req_write (buttons_req_write),
+    .buttons_req_size  (buttons_req_size),
+    .buttons_req_wdata (buttons_req_wdata),
+    .buttons_req_wstrb (buttons_req_wstrb),
+    .buttons_rsp_valid (buttons_rsp_valid),
+    .buttons_rsp_ready (buttons_rsp_ready),
+    .buttons_rsp_rdata (buttons_rsp_rdata),
+    .buttons_rsp_error (buttons_rsp_error)
   );
 
   initial begin : clk_gen
@@ -104,6 +125,10 @@ module tb_periph_interconnect;
       led_rsp_valid  <= 1'b0;
       led_rsp_rdata  <= 32'd0;
       led_rsp_error  <= 1'b0;
+      buttons_req_ready <= 1'b1;
+      buttons_rsp_valid <= 1'b0;
+      buttons_rsp_rdata <= 32'd0;
+      buttons_rsp_error <= 1'b0;
     end else begin
       if (uart_req_valid && uart_req_ready) begin
         uart_rsp_valid <= 1'b1;
@@ -119,6 +144,14 @@ module tb_periph_interconnect;
         led_rsp_error <= 1'b0;
       end else if (led_rsp_valid && led_rsp_ready) begin
         led_rsp_valid <= 1'b0;
+      end
+
+      if (buttons_req_valid && buttons_req_ready) begin
+        buttons_rsp_valid <= 1'b1;
+        buttons_rsp_rdata <= 32'h0000_005a;
+        buttons_rsp_error <= 1'b0;
+      end else if (buttons_rsp_valid && buttons_rsp_ready) begin
+        buttons_rsp_valid <= 1'b0;
       end
     end
   end
@@ -171,9 +204,26 @@ module tb_periph_interconnect;
     s_rsp_ready = 1'b0;
     step_cycle();
 
-    // 3. Access Unmapped (0x1000_0200) -> expect error
+    // 3. Access Buttons (0x1000_0200)
     s_req_valid = 1'b1;
     s_req_addr  = 32'h1000_0200;
+    s_rsp_ready = 1'b1;
+    while (!s_req_ready) step_cycle();
+    step_cycle();
+    s_req_valid = 1'b0;
+
+    while (!s_rsp_valid) step_cycle();
+    if (s_rsp_rdata !== 32'h0000_005a || s_rsp_error !== 1'b0) begin
+      $display("tb_periph_interconnect FAIL: Buttons routing mismatch");
+      $finish(1);
+    end
+    step_cycle();
+    s_rsp_ready = 1'b0;
+    step_cycle();
+
+    // 4. Access Unmapped (0x1000_0300) -> expect error
+    s_req_valid = 1'b1;
+    s_req_addr  = 32'h1000_0300;
     s_rsp_ready = 1'b1;
     while (!s_req_ready) step_cycle();
     step_cycle();

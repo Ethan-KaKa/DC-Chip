@@ -39,6 +39,7 @@ module dc_soc_top #(
   output logic [15:0] o_led,
   output logic        o_uart_tx,
   input  logic        i_uart_rx,
+  input  logic [20:0] i_button,
 
   // Trace & Debug
   output logic        trace_valid,
@@ -226,9 +227,20 @@ module dc_soc_top #(
   logic [31:0] led_rsp_rdata;
   logic        led_rsp_error;
 
+  logic        buttons_req_valid, buttons_req_ready;
+  logic [31:0] buttons_req_addr;
+  logic        buttons_req_write;
+  logic [1:0]  buttons_req_size;
+  logic [31:0] buttons_req_wdata;
+  logic [3:0]  buttons_req_wstrb;
+  logic        buttons_rsp_valid, buttons_rsp_ready;
+  logic [31:0] buttons_rsp_rdata;
+  logic        buttons_rsp_error;
+
   periph_interconnect #(
     .UART_BASE (32'h1000_0000),
-    .LED_BASE  (32'h1000_0100)
+    .LED_BASE  (32'h1000_0100),
+    .BUTTONS_BASE (32'h1000_0200)
   ) u_periph_interconnect (
     .clk             (clk_periph),
     .rst             (rst_periph),
@@ -264,7 +276,18 @@ module dc_soc_top #(
     .led_rsp_valid   (led_rsp_valid),
     .led_rsp_ready   (led_rsp_ready),
     .led_rsp_rdata   (led_rsp_rdata),
-    .led_rsp_error   (led_rsp_error)
+    .led_rsp_error   (led_rsp_error),
+    .buttons_req_valid (buttons_req_valid),
+    .buttons_req_ready (buttons_req_ready),
+    .buttons_req_addr  (buttons_req_addr),
+    .buttons_req_write (buttons_req_write),
+    .buttons_req_size  (buttons_req_size),
+    .buttons_req_wdata (buttons_req_wdata),
+    .buttons_req_wstrb (buttons_req_wstrb),
+    .buttons_rsp_valid (buttons_rsp_valid),
+    .buttons_rsp_ready (buttons_rsp_ready),
+    .buttons_rsp_rdata (buttons_rsp_rdata),
+    .buttons_rsp_error (buttons_rsp_error)
   );
 
   uart_controller #(
@@ -306,6 +329,27 @@ module dc_soc_top #(
     .rsp_rdata (led_rsp_rdata),
     .rsp_error (led_rsp_error),
     .o_led     (o_led)
+  );
+
+  buttons_controller #(
+    .ADDR_BASE       (32'h1000_0200),
+    .WIDTH           (21),
+    .DEBOUNCE_CYCLES (0)
+  ) u_buttons_controller (
+    .clk       (clk_periph),
+    .rst       (rst_periph),
+    .req_valid (buttons_req_valid),
+    .req_ready (buttons_req_ready),
+    .req_addr  (buttons_req_addr),
+    .req_write (buttons_req_write),
+    .req_size  (buttons_req_size),
+    .req_wdata (buttons_req_wdata),
+    .req_wstrb (buttons_req_wstrb),
+    .rsp_valid (buttons_rsp_valid),
+    .rsp_ready (buttons_rsp_ready),
+    .rsp_rdata (buttons_rsp_rdata),
+    .rsp_error (buttons_rsp_error),
+    .i_button  (i_button)
   );
 
 endmodule

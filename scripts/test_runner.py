@@ -152,6 +152,11 @@ UNIT_TESTS = [
         "default_desc": "MMIO UART 控制器 16字节 FIFO、波特率分频与收发移位自检",
     },
     {
+        "name": "buttons",
+        "make_target": "_test-unit-buttons",
+        "default_desc": "8位 MMIO Buttons 输入同步、可选去抖与只读访问自检",
+    },
+    {
         "name": "periph-interconnect",
         "make_target": "_test-unit-periph-interconnect",
         "default_desc": "1-to-N 外设总线路由器地址分流与未映射地址总线错误自检",
