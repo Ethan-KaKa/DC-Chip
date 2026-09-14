@@ -1,0 +1,39 @@
+diff --git a/src/font.cpp b/src/font.cpp
+index 8b1223b..e6d51b0 100644
+--- a/src/font.cpp
++++ b/src/font.cpp
+@@ -9,7 +9,7 @@
+ void init_font(SDL_Renderer *renderer) {
+   int ret = TTF_Init();
+   assert(ret != -1);
+-  std::string nvboard_home = getenv("NVBOARD_HOME");
++  std::string nvboard_home = DC_NVBOARD_HOME;
+ 
+   font = TTF_OpenFont((nvboard_home + "/resources/font/" + "FreeMono.ttf").c_str(), 48);
+   assert(font != NULL);
+diff --git a/src/uart.cpp b/src/uart.cpp
+index 61d93e8..771b512 100644
+--- a/src/uart.cpp
++++ b/src/uart.cpp
+@@ -10,7 +10,7 @@
+ 
+ UART::UART(SDL_Renderer *rend, int cnt, int init_val, int ct, int x, int y, int w, int h):
+     Component(rend, cnt, init_val, ct),
+-    tx_state(0), rx_state(0), divisor(16), need_update_gui(false) {
++    tx_state(0), rx_state(0), divisor(432), need_update_gui(false) {
+   term = new Term(rend, x, y, w, h);
+ 
+   SDL_Rect *rect_ptr = new SDL_Rect;
+diff --git a/src/render.cpp b/src/render.cpp
+index 2f96552..6a16b20 100644
+--- a/src/render.cpp
++++ b/src/render.cpp
+@@ -75,7 +75,7 @@
+ 
+ 
+ void init_render(SDL_Renderer *renderer) {
+-  nvboard_home = getenv("NVBOARD_HOME");
++  nvboard_home = DC_NVBOARD_HOME;
+ 
+   SDL_Rect rect_bg = {0, 0, WINDOW_WIDTH / 2, WINDOW_HEIGHT / 2};
+   SDL_SetRenderDrawColor(renderer,

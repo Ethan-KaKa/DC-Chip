@@ -39,18 +39,26 @@ endif
 
 # NVBoard uses the same Vsim_top and execution loop as every other mode. Its
 # generated binding and third-party objects stay under build/, never under the
-# read-only submodule source tree.
-NVBOARD_HOME ?= $(abspath tools/nvboard)
+# read-only submodule source tree.  Do not honor the generic NVBOARD_HOME:
+# unrelated environments (for example ysyx-workbench) must not replace this
+# repository's pinned submodule.  DC_NVBOARD_HOME is the explicit escape hatch.
+DC_NVBOARD_HOME ?= tools/nvboard
+NVBOARD_SOURCE_HOME := $(abspath $(DC_NVBOARD_HOME))
 NVBOARD_NXDC := constr/nvboard.nxdc
 NVBOARD_TOOL_DIR := $(abspath $(BUILD_DIR))/tools/nvboard
 NVBOARD_BIND_CPP := $(SIM_DIR)/auto_bind.cpp
-NVBOARD_SRCS := $(sort $(wildcard $(NVBOARD_HOME)/src/*.cpp))
-NVBOARD_OBJS := $(patsubst $(NVBOARD_HOME)/src/%.cpp,$(NVBOARD_TOOL_DIR)/%.o,$(NVBOARD_SRCS))
+NVBOARD_SOURCE_STAMP := $(NVBOARD_TOOL_DIR)/.source-path
+NVBOARD_COMPAT_PATCH := tools/nvboard-dc-compat.patch
+NVBOARD_COMPAT_VERSION := dc-nvboard-uart-432-v3
+NVBOARD_COMPAT_STAMP := $(NVBOARD_TOOL_DIR)/.compat-$(NVBOARD_COMPAT_VERSION)
+NVBOARD_PATCH_SRC_DIR := $(NVBOARD_TOOL_DIR)/src
+NVBOARD_SRCS := $(sort $(wildcard $(NVBOARD_SOURCE_HOME)/src/*.cpp))
+NVBOARD_OBJS := $(patsubst $(NVBOARD_SOURCE_HOME)/src/%.cpp,$(NVBOARD_TOOL_DIR)/%.o,$(NVBOARD_SRCS))
 NVBOARD_ARCHIVE := $(NVBOARD_TOOL_DIR)/nvboard.a
 
 ifeq ($(CONFIG_DC_SIM_NVBOARD),y)
 SIM_CPP_EXTRA := $(NVBOARD_BIND_CPP)
-SIM_CXXFLAGS += -I$(NVBOARD_HOME)/usr/include \
+SIM_CXXFLAGS += -I$(NVBOARD_SOURCE_HOME)/usr/include \
 	$(shell sdl2-config --cflags 2>/dev/null)
 SIM_LDFLAGS += $(NVBOARD_ARCHIVE) $(shell sdl2-config --libs 2>/dev/null) \
 	-lSDL2_image -lSDL2_ttf
@@ -64,6 +72,7 @@ $(SIM_BIN): $(SIM_RTL) $(SIM_CPP) sim/verilator/memory.h \
 	$(if $(filter y,$(CONFIG_DC_SIM_SDB)),sim/verilator/sdb.h sim/verilator/disasm.h) $(BUILD_MAKEFILES) \
 	$(CONFIG_H) $(AUTO_CONF) $(SIM_EXTRA_DEPS)
 	mkdir -p $(SIM_DIR)
+	@rm -f -- "$(SIM_BIN)"
 	CCACHE_DISABLE=1 CXX="$(CXX)" $(VERILATOR) --cc --exe --build \
 		--language 1800-2012 -Wall --top-module sim_top \
 		$(SIM_TRACE_FLAGS) \
@@ -79,26 +88,63 @@ init-nvboard:
 		git submodule update --init --recursive tools/nvboard; \
 	fi
 
-$(NVBOARD_TOOL_DIR)/%.o: $(NVBOARD_HOME)/src/%.cpp
-	@if [ ! -d "$(NVBOARD_HOME)" ] || [ ! -f "$(NVBOARD_HOME)/scripts/nvboard.mk" ]; then \
-		printf 'error: NVBOARD_HOME not found or uninitialized at %s. Run "make init-nvboard" or set NVBOARD_HOME.\n' '$(NVBOARD_HOME)' >&2; \
-		exit 1; \
-	fi
+.PHONY: _force-nvboard-source-check
+
+# Object file names are source-basename based, so remember the configured source
+# root. This prevents a previously selected external tree from being reused
+# after returning to the pinned submodule. The compatibility stamp also records
+# the patch version, so objects built with the upstream 16-cycle UART sampler
+# cannot be reused after the DC-Chip UART decoder is applied.
+$(NVBOARD_SOURCE_STAMP): _force-nvboard-source-check
 	@mkdir -p $(dir $@)
-	CCACHE_DISABLE=1 $(CXX) -MMD -O3 -I$(NVBOARD_HOME)/include \
-		$(shell sdl2-config --cflags 2>/dev/null) -c -o $@ $<
+	@source_path='$(NVBOARD_SOURCE_HOME)'; \
+	if [ ! -d "$$source_path" ] || [ ! -f "$$source_path/scripts/nvboard.mk" ] || \
+		[ ! -f "$$source_path/src/uart.cpp" ] || [ ! -f "$$source_path/src/font.cpp" ] || \
+		[ ! -f "$$source_path/src/render.cpp" ]; then \
+		printf 'error: DC_NVBOARD_HOME is not a compatible NVBoard source tree: %s. Run "make init-nvboard" or set DC_NVBOARD_HOME.\n' "$$source_path" >&2; \
+		exit 1; \
+	fi; \
+	if [ ! -f "$@" ] || ! printf '%s\n' "$$source_path" | cmp -s - "$@"; then \
+		printf '%s\n' "$$source_path" > "$@"; \
+	fi
+
+
+# Copy and patch only the sources whose behavior is part of DC-Chip's
+# UART/resource contract. The patch is intentionally strict: a source-version
+# mismatch fails here rather than silently building a GUI with bad UART output.
+$(NVBOARD_COMPAT_STAMP): $(NVBOARD_SOURCE_STAMP) \
+	$(NVBOARD_COMPAT_PATCH) $(NVBOARD_SOURCE_HOME)/src/uart.cpp \
+	$(NVBOARD_SOURCE_HOME)/src/font.cpp $(NVBOARD_SOURCE_HOME)/src/render.cpp
+	@rm -rf -- "$(NVBOARD_PATCH_SRC_DIR)"
+	@mkdir -p "$(NVBOARD_PATCH_SRC_DIR)"
+	@cp "$(NVBOARD_SOURCE_HOME)/src/uart.cpp" "$(NVBOARD_PATCH_SRC_DIR)/uart.cpp"
+	@cp "$(NVBOARD_SOURCE_HOME)/src/font.cpp" "$(NVBOARD_PATCH_SRC_DIR)/font.cpp"
+	@cp "$(NVBOARD_SOURCE_HOME)/src/render.cpp" "$(NVBOARD_PATCH_SRC_DIR)/render.cpp"
+	@patch --batch --fuzz=0 -d "$(NVBOARD_TOOL_DIR)" -p1 < "$(abspath $(NVBOARD_COMPAT_PATCH))"
+	@printf '%s %s\n' '$(NVBOARD_COMPAT_VERSION)' '$(NVBOARD_SOURCE_HOME)' > "$@"
+
+# Every object depends on the selected source set and compatibility stamp. This
+# deliberately over-rebuilds a small third-party archive when its source root
+# changes, avoiding stale basename-derived objects across source-tree switches.
+$(NVBOARD_OBJS): $(NVBOARD_TOOL_DIR)/%.o: $(NVBOARD_COMPAT_STAMP) $(NVBOARD_SRCS)
+	@mkdir -p $(dir $@)
+	@source="$(NVBOARD_SOURCE_HOME)/src/$*.cpp"; \
+	if [ -f "$(NVBOARD_PATCH_SRC_DIR)/$*.cpp" ]; then source="$(NVBOARD_PATCH_SRC_DIR)/$*.cpp"; fi; \
+	CCACHE_DISABLE=1 $(CXX) -MMD -O3 -I"$(NVBOARD_SOURCE_HOME)/include" \
+		-DDC_NVBOARD_HOME=\"$(NVBOARD_SOURCE_HOME)\" \
+		$$(sdl2-config --cflags 2>/dev/null) -c -o "$@" "$$source"
 
 $(NVBOARD_ARCHIVE): $(NVBOARD_OBJS)
 	@mkdir -p $(dir $@)
 	ar rcs $@ $^
 
-$(NVBOARD_BIND_CPP): $(NVBOARD_NXDC)
+$(NVBOARD_BIND_CPP): $(NVBOARD_NXDC) $(NVBOARD_SOURCE_STAMP)
 	@mkdir -p $(dir $@)
-	@if [ ! -d "$(NVBOARD_HOME)" ] || [ ! -f "$(NVBOARD_HOME)/scripts/auto_pin_bind.py" ]; then \
-		printf 'error: NVBOARD_HOME not found or uninitialized at %s. Run "make init-nvboard" or set NVBOARD_HOME.\n' '$(NVBOARD_HOME)' >&2; \
+	@if [ ! -d "$(NVBOARD_SOURCE_HOME)" ] || [ ! -f "$(NVBOARD_SOURCE_HOME)/scripts/auto_pin_bind.py" ]; then \
+		printf 'error: DC_NVBOARD_HOME not found or uninitialized at %s. Run "make init-nvboard" or set DC_NVBOARD_HOME.\n' '$(NVBOARD_SOURCE_HOME)' >&2; \
 		exit 1; \
 	fi
-	$(PYTHON) $(NVBOARD_HOME)/scripts/auto_pin_bind.py $< $@
+	$(PYTHON) $(NVBOARD_SOURCE_HOME)/scripts/auto_pin_bind.py $< $@
 
 -include $(NVBOARD_OBJS:.o=.d)
 

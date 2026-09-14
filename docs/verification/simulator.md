@@ -90,8 +90,11 @@ Vsim_top [--image PATH | --image-inst PATH] [options]
   运行时 `help` 输出定义，不在本文复制清单。
 - 启用 VCD 时输出路径从实际 `BUILD_DIR` 推导；`waveoff` 启动时不创建文件，SDB
   可在运行中开启同一个 recorder。
-- NVBoard 使用 `constr/nvboard.nxdc` 绑定仿真顶层信号；其第三方对象与归档位于
-  `build/tools/nvboard/`，不得污染 submodule。
+- NVBoard 默认使用仓库 `tools/nvboard` submodule 和 `constr/nvboard.nxdc` 绑定仿真
+  顶层信号；通用 `NVBOARD_HOME` 会被忽略。只有 `DC_NVBOARD_HOME` 可显式覆盖源码
+  位置；其第三方对象与归档始终位于 `build/tools/nvboard/`，不得污染源码树。受控
+  patch 令 GUI UART 解码器按 SoC 的每 bit 432 个仿真周期采样，且不从通用环境变量
+  读取字体或图片资源。
 - UART DPI-C 字符镜像和 NVBoard GUI 不改变 UART FIFO、串行引脚或 MMIO 状态机。
 
 ## 7. 验证入口

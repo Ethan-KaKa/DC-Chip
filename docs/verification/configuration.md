@@ -24,7 +24,14 @@ tracked `configs/default_defconfig` 显式关闭这些选项。本地选择保�
 `make sim-build` 直接使用生成的 `config.h`，始终只生成
 `build/verilator/Vsim_top`。NVBoard 开启时，自动绑定文件位于
 `build/verilator/`，第三方对象与 `nvboard.a` 位于 `build/tools/nvboard/`，
-外部源码树保持只读。
+外部源码树保持只读。默认源码固定为仓库 submodule `tools/nvboard`，不读取通用
+`NVBOARD_HOME`。只有显式传入 `DC_NVBOARD_HOME=<path>`（命令行或同名环境变量）时
+才覆盖该来源，避免 ysyx-workbench 等外部环境意外改变 NVBoard 版本。
+
+构建会在 `build/tools/nvboard/src/` 复制并严格应用仓库受控的兼容 patch；它使 GUI
+UART 采样分频固定为 SoC 的 `BAUD_DIV=432`，并把字体和图片资源根编译为
+`DC_NVBOARD_HOME`。兼容 patch 版本和源码根都写入构建戳；不兼容的 NVBoard 源码会在
+构建时明确失败，不会静默回退到上游的 16 周期 UART 采样。
 
 ## 2. 人工入口
 
