@@ -7,6 +7,7 @@
 #define MMIO_UART_RX_ADDR     0x10000004u
 #define MMIO_UART_STATUS_ADDR 0x10000008u
 #define MMIO_BUTTONS_ADDR     0x10000200u
+#define MMIO_SEG7_ADDR        0x10000300u
 
 #define UART_STATUS_RX_READY  (1u << 0)
 #define UART_STATUS_TX_READY  (1u << 1)
@@ -55,6 +56,16 @@ static void __am_input_buttons(AM_INPUT_BUTTONS_T *buttons) {
   buttons->state = *buttons_mmio & 0x001fffffu;
 }
 
+static void __am_gpio_seg7_read(AM_GPIO_SEG7_T *seg7) {
+  volatile uint32_t *seg7_mmio = (volatile uint32_t *)MMIO_SEG7_ADDR;
+  seg7->data = *seg7_mmio;
+}
+
+static void __am_gpio_seg7_write(AM_GPIO_SEG7_T *seg7) {
+  volatile uint32_t *seg7_mmio = (volatile uint32_t *)MMIO_SEG7_ADDR;
+  *seg7_mmio = seg7->data;
+}
+
 bool ioe_init(void) {
   for (size_t i = 0; i < LENGTH(read_lut); i++) {
     read_lut[i]  = (void *)fail;
@@ -66,6 +77,8 @@ bool ioe_init(void) {
   read_lut[AM_GPIO_LED]    = (void *)__am_gpio_led_read;
   write_lut[AM_GPIO_LED]   = (void *)__am_gpio_led_write;
   read_lut[AM_INPUT_BUTTONS] = (void *)__am_input_buttons;
+  read_lut[AM_GPIO_SEG7]    = (void *)__am_gpio_seg7_read;
+  write_lut[AM_GPIO_SEG7]   = (void *)__am_gpio_seg7_write;
   return true;
 }
 
@@ -92,6 +105,12 @@ uint16_t led_read(void) {
   led.data = 0;
   ioe_read(AM_GPIO_LED, &led);
   return (uint16_t)(led.data & 0xffff);
+}
+
+void seg7_show_hex(uint32_t value) {
+  AM_GPIO_SEG7_T seg7;
+  seg7.data = value;
+  ioe_write(AM_GPIO_SEG7, &seg7);
 }
 
 uint32_t buttons_read(void) {

@@ -31,7 +31,15 @@ module sim_top (
   output logic [15:0] o_led,
   output logic        o_uart_tx,
   input  logic        i_uart_rx,
-  input  logic [20:0] i_button
+  input  logic [20:0] i_button,
+  output logic [7:0]  o_seg0,
+  output logic [7:0]  o_seg1,
+  output logic [7:0]  o_seg2,
+  output logic [7:0]  o_seg3,
+  output logic [7:0]  o_seg4,
+  output logic [7:0]  o_seg5,
+  output logic [7:0]  o_seg6,
+  output logic [7:0]  o_seg7
 );
 
   logic        imem_req_valid;
@@ -81,6 +89,14 @@ module sim_top (
     .o_uart_tx        (o_uart_tx),
     .i_uart_rx        (i_uart_rx),
     .i_button         (i_button),
+    .o_seg0           (o_seg0),
+    .o_seg1           (o_seg1),
+    .o_seg2           (o_seg2),
+    .o_seg3           (o_seg3),
+    .o_seg4           (o_seg4),
+    .o_seg5           (o_seg5),
+    .o_seg6           (o_seg6),
+    .o_seg7           (o_seg7),
     .trace_valid      (trace_valid),
     .trace_pc         (trace_pc),
     .trace_inst       (trace_inst),

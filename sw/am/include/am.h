@@ -26,6 +26,7 @@ void ioe_write(int reg, void *buf);
 
 void led_write(uint16_t val);
 uint16_t led_read(void);
+void seg7_show_hex(uint32_t value);
 void uart_write(char ch);
 int uart_read(char *ch);
 uint32_t buttons_read(void);

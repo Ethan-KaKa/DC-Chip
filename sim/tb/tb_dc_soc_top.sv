@@ -33,6 +33,8 @@ module tb_dc_soc_top;
   logic        o_uart_tx;
   logic        i_uart_rx;
   logic [20:0] i_button;
+  logic [7:0]  o_seg0, o_seg1, o_seg2, o_seg3;
+  logic [7:0]  o_seg4, o_seg5, o_seg6, o_seg7;
 
   // Trace & Debug
   logic        trace_valid;
@@ -74,6 +76,14 @@ module tb_dc_soc_top;
     .o_uart_tx        (o_uart_tx),
     .i_uart_rx        (i_uart_rx),
     .i_button         (i_button),
+    .o_seg0           (o_seg0),
+    .o_seg1           (o_seg1),
+    .o_seg2           (o_seg2),
+    .o_seg3           (o_seg3),
+    .o_seg4           (o_seg4),
+    .o_seg5           (o_seg5),
+    .o_seg6           (o_seg6),
+    .o_seg7           (o_seg7),
     .trace_valid      (trace_valid),
     .trace_pc         (trace_pc),
     .trace_inst       (trace_inst),
@@ -236,6 +246,29 @@ module tb_dc_soc_top;
     @(posedge clk);
     @(posedge clk);
     #1;
+
+    // 10. sw x2, 768(x1) -> writes 0x123 to SEG7 value register.
+    fetch_inst(32'h0000_0024, 32'h3020a023);
+    @(posedge clk);
+    @(posedge clk);
+    #1;
+    if (o_seg0 !== 8'hf2 || o_seg1 !== 8'hda || o_seg2 !== 8'h60 ||
+        o_seg3 !== 8'hfc) begin
+      $display("tb_dc_soc_top: FAIL - 7-segment output mismatch");
+      $finish(1);
+    end
+
+    // 11. lw x7, 768(x1) -> reads back the SEG7 value register.
+    fetch_inst(32'h0000_0028, 32'h3000a383);
+    @(posedge clk);
+    @(posedge clk);
+    #1;
+    debug_reg_addr = 4'd7;
+    #1;
+    if (debug_reg_data !== 32'h0000_0123) begin
+      $display("tb_dc_soc_top: FAIL - 7-segment readback mismatch: %h", debug_reg_data);
+      $finish(1);
+    end
 
     $display("tb_dc_soc_top: PASS");
     $finish(0);

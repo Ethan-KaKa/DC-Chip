@@ -11,7 +11,8 @@ CORE_RTL := $(COMB_RTL) \
 	rtl/core/cpu_core.sv
 PERIPH_RTL := rtl/periph/led_controller.sv \
 	rtl/periph/uart_controller.sv \
-	rtl/periph/buttons_controller.sv
+	rtl/periph/buttons_controller.sv \
+	rtl/periph/seg7_controller.sv
 SOC_RTL := rtl/soc/mmio_cdc_bridge.sv \
 	rtl/soc/periph_interconnect.sv \
 	rtl/soc/soc_interconnect.sv \
@@ -61,6 +62,9 @@ $(UNIT_DIR)/tb_uart_controller.vvp: rtl/periph/uart_controller.sv sim/tb/tb_uart
 $(UNIT_DIR)/tb_buttons_controller.vvp: rtl/periph/buttons_controller.sv sim/tb/tb_buttons_controller.sv $(BUILD_MAKEFILES) | $(UNIT_DIR)
 	$(IVERILOG) -g2012 -s tb_buttons_controller -Irtl/periph -o $@ rtl/periph/buttons_controller.sv sim/tb/tb_buttons_controller.sv
 
+$(UNIT_DIR)/tb_seg7_controller.vvp: rtl/periph/seg7_controller.sv sim/tb/tb_seg7_controller.sv $(BUILD_MAKEFILES) | $(UNIT_DIR)
+	$(IVERILOG) -g2012 -s tb_seg7_controller -Irtl/periph -o $@ rtl/periph/seg7_controller.sv sim/tb/tb_seg7_controller.sv
+
 $(UNIT_DIR)/tb_periph_interconnect.vvp: rtl/soc/periph_interconnect.sv sim/tb/tb_periph_interconnect.sv $(BUILD_MAKEFILES) | $(UNIT_DIR)
 	$(IVERILOG) -g2012 -s tb_periph_interconnect -Irtl/soc -o $@ rtl/soc/periph_interconnect.sv sim/tb/tb_periph_interconnect.sv
 
@@ -93,6 +97,9 @@ _test-unit-uart: $(UNIT_DIR)/tb_uart_controller.vvp
 	$(VVP) $<
 
 _test-unit-buttons: $(UNIT_DIR)/tb_buttons_controller.vvp
+	$(VVP) $<
+
+_test-unit-seg7: $(UNIT_DIR)/tb_seg7_controller.vvp
 	$(VVP) $<
 
 _test-unit-periph-interconnect: $(UNIT_DIR)/tb_periph_interconnect.vvp
@@ -129,4 +136,5 @@ testunit:
 .PHONY: _lint-isa _lint-comb _lint-core _lint-mem \
 	_test-unit-alu _test-unit-decoder _test-unit-regfile _test-unit-core \
 	_test-unit-led _test-unit-uart _test-unit-buttons _test-unit-periph-interconnect \
+	_test-unit-seg7 \
 	_test-unit-cdc _test-unit-interconnect _test-unit-soc _test-unit-lint testunit

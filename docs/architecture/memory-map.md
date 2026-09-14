@@ -2,7 +2,7 @@
 
 - 版本：v0.2
 - 版本：v0.2
-- 状态：阶段 5 Phase 2 完成 MMIO UART 控制器（`0x10000000`）、GPIO LED（`0x10000100`）、Buttons（`0x10000200`）与 CDC 异步/同步总线桥规范冻结；外设时钟在 FPGA 目标上固定为 50 MHz (`clk_periph = 50MHz`)，CPU 及片上存储（IROM/DRAM）位于独立时钟域 (`clk_cpu`)；timer/sensor 待后续子阶段
+- 状态：阶段 5 Phase 3 完成 MMIO UART 控制器（`0x10000000`）、GPIO LED（`0x10000100`）、Buttons（`0x10000200`）、八位七段数码管（`0x10000300`）与 CDC 异步/同步总线桥规范冻结；外设时钟在 FPGA 目标上固定为 50 MHz (`clk_periph = 50MHz`)，CPU 及片上存储（IROM/DRAM）位于独立时钟域 (`clk_cpu`)；timer/sensor 待后续子阶段
 - 更新日期：2026-09-12
 - ISA 规范：`docs/isa/isa.md` v0.2
 
@@ -73,6 +73,7 @@ bit 1，若为一则在 `jalr` 上报告 instruction address misaligned，不发
 | **MMIO UART 控制器** | `0x10000000`--`0x1000000f` | 16 字节 | **寄存器映射**（TX只写、RX只读、STATUS只读；16字节FIFO） | 写只读/读只写或未对齐多字节读写按规范返回错误 | `rtl/periph/uart_controller.sv` |
 | **GPIO LED 控制器** | `0x10000100`--`0x10000103` | 4 字节 | **可读/可写**（低 16 位映射到 16 颗 LED，高 16 位保留为 0） | IFU 取指或未对齐多字节读写按规范返回错误 | `rtl/periph/led_controller.sv` |
 | **Buttons 输入控制器** | `0x10000200`--`0x10000203` | 4 字节 | **只读**（低 21 位映射到 16 个 SW 与 5 个 Button Pad） | 写访问或未映射地址触发 access fault | `rtl/periph/buttons_controller.sv` |
+| **七段数码管控制器** | `0x10000300`--`0x10000303` | 4 字节 | **可读/可写**（32 位值自动译码为八位十六进制显示） | 同一子空间其他地址触发 access fault | `rtl/periph/seg7_controller.sv` |
 | timer/sensor | 其他 `0x1000xxxx` 子空间 | 待定 | 阶段 5 后续子阶段规划中 | 访问未就绪外设地址触发 access fault | `TODO` |
 
 ### 5.1 Harvard 访问隔离与 Fault 契约
@@ -81,7 +82,7 @@ bit 1，若为一则在 `jalr` 上报告 instruction address misaligned，不发
 - **LSU 路由与访问**：数据请求由 `soc_interconnect` 译码路由：
   - DRAM 区域：`[0x20000000, 0x20010000)` 内，转发至 DRAM 存储；
   - 私有 `tohost`：`0xfffffff0`，转发至仿真/主机监控；
-  - MMIO 区域：`[0x10000000, 0x10010000)` 内，转发至 `mmio_cdc_bridge` 与 `periph_interconnect`；已分配外设（`0x10000000` UART、`0x10000100` LED、`0x10000200` Buttons）返回正常握手响应；未实现的外设地址直接返回 `rsp_error = 1`；
+  - MMIO 区域：`[0x10000000, 0x10010000)` 内，转发至 `mmio_cdc_bridge` 与 `periph_interconnect`；已分配外设（`0x10000000` UART、`0x10000100` LED、`0x10000200` Buttons、`0x10000300` SEG7）返回正常握手响应；未实现的外设地址直接返回 `rsp_error = 1`；
   - 未映射区域或尝试对 IROM 执行 load/store：总线互连立即返回 `rsp_error = 1`；
 - 核心收到 `rsp_error` 时产生粘滞的 `load access fault`（`fault_cause = 3'd5`）或 `store access fault`（`fault_cause = 3'd7`）；
 - 跨区域非法访问不会产生任何局部数据写入或寄存器写回，故障状态保持至复位。
@@ -126,6 +127,17 @@ bit 1，若为一则在 `jalr` 上报告 instruction address misaligned，不发
 - 输入先经过两级同步器；默认 `DEBOUNCE_CYCLES = 0`，只提供同步后的当前电平。
 - `DEBOUNCE_CYCLES > 0` 时，每个按键独立使用稳定计数器，连续稳定达到阈值后更新可读状态。
 - 该控制器不提供按下事件锁存、FIFO 或中断；写访问返回总线错误，demo 软件自行检测按下沿。
+
+### 5.6 八位七段数码管控制器寄存器定义（`0x10000300`）
+
+| 偏移/地址 | 字段 | 位宽 | 读写权限 | 描述 |
+|---|---:|---:|---|---|
+| `0x10000300` | `HEX[31:0]` | 32 | R/W | 八个十六进制 nibble；`HEX[3:0]` 显示在 `SEG0`，`HEX[31:28]` 显示在 `SEG7`。复位值为 0，显示 `00000000`。 |
+
+- 支持 `sw/lw` 以及任意 byte lane 的 `sb/lbu`；写入由 `wstrb` 选择的 byte，其余 byte 保持不变。
+- 控制器输出 `o_segN[7:0] = {a,b,c,d,e,f,g,dp}`，逻辑 1 表示点亮；小数点 `dp` 在本版本恒为 0。
+- 仅实现标准 `0`--`9` 与 `A`--`F` 的组合译码，无扫描、时分复用、原始段码或小数点控制寄存器。
+- NVBoard 将 `o_seg0` 绑定至 `SEG0A..DEC0P`，依此类推至 `o_seg7`；这不是尚未确认的 FPGA 板级引脚约束。
 
 
 ## 6. 仿真私有机制边界

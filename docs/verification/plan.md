@@ -168,7 +168,9 @@ core BFM 覆盖请求背压、请求接受当周期响应、延迟响应、四�
 | **阶段 2 二进制加载** | raw binary (`.bin`) 小端载入 IROM/DRAM、非 4 字节补零对齐、超限拦截 | **已完成**：`test_memory` 单元测试与 CLI 二进制集成测试 |
 | **阶段 2 双镜像协同** | `--image-inst` 与 `--image-data` 协同装载、DRAM 变量读写与退出码校验 | **已完成**：汇编测试夹具与端到端 CLI 集成测试 |
 | **阶段 2 Harvard 隔离** | IFU 访问 DRAM 报 cause 2；LSU 访问 IROM 报 cause 5/7 | **已完成**：存储协议 BFM、参考模型自检与 CLI 负向集成测试 |
-| **阶段 3 AM 裸机中间层** | 标准 AM API (`am.h`, `klib.h`)、`start.S` 启动与 `link.ld` Harvard 布局 | **已完成**：`sw/am/` 运行时与 `make sw` 构建系统 |
+| **阶段 3 AM 裸机中间层** | 标准 AM API (`am.h`, `amdev.h`, `klib.h`)、`start.S` 启动与 `link.ld` Harvard 布局 | **已完成**：`sw/am/` 运行时与 `make sw` 构建系统 |
+| **阶段 5 七段数码管** | 八位十六进制 MMIO 读写、byte lane、全 `0`--`F` 字形译码、互联路由与 SoC 接入 | `make testunit ALL=seg7,periph-interconnect,soc` |
+| **阶段 5 SEG7 软件测试** | AM `seg7_show_hex()`、MMIO/API 读回、byte store 与 LED 共存 | `make sw tests ALL=seg7_hex` |
 | **阶段 3 子集机械审计** | 静态扫描反汇编，确保 100% 满足 8 指令子集与 `x0`--`x15` 约束 | **已完成**：`scripts/check_isa_subset.py` 自动化门禁 |
 | **阶段 3 定向软件测试** | 涵盖 TRM 引导、退出码传递、算术与栈、DRAM 数据段、堆探测与跳转表 | **已完成**：`make sw tests` 与 `make testinfra ALL=difftest-engine` 验证 |
 

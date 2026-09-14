@@ -157,6 +157,11 @@ UNIT_TESTS = [
         "default_desc": "8位 MMIO Buttons 输入同步、可选去抖与只读访问自检",
     },
     {
+        "name": "seg7",
+        "make_target": "_test-unit-seg7",
+        "default_desc": "8位十六进制七段数码管 MMIO 读写、字节使能与全字形译码自检",
+    },
+    {
         "name": "periph-interconnect",
         "make_target": "_test-unit-periph-interconnect",
         "default_desc": "1-to-N 外设总线路由器地址分流与未映射地址总线错误自检",

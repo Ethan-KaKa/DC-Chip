@@ -40,6 +40,14 @@ module dc_soc_top #(
   output logic        o_uart_tx,
   input  logic        i_uart_rx,
   input  logic [20:0] i_button,
+  output logic [7:0]  o_seg0,
+  output logic [7:0]  o_seg1,
+  output logic [7:0]  o_seg2,
+  output logic [7:0]  o_seg3,
+  output logic [7:0]  o_seg4,
+  output logic [7:0]  o_seg5,
+  output logic [7:0]  o_seg6,
+  output logic [7:0]  o_seg7,
 
   // Trace & Debug
   output logic        trace_valid,
@@ -237,10 +245,21 @@ module dc_soc_top #(
   logic [31:0] buttons_rsp_rdata;
   logic        buttons_rsp_error;
 
+  logic        seg7_req_valid, seg7_req_ready;
+  logic [31:0] seg7_req_addr;
+  logic        seg7_req_write;
+  logic [1:0]  seg7_req_size;
+  logic [31:0] seg7_req_wdata;
+  logic [3:0]  seg7_req_wstrb;
+  logic        seg7_rsp_valid, seg7_rsp_ready;
+  logic [31:0] seg7_rsp_rdata;
+  logic        seg7_rsp_error;
+
   periph_interconnect #(
     .UART_BASE (32'h1000_0000),
     .LED_BASE  (32'h1000_0100),
-    .BUTTONS_BASE (32'h1000_0200)
+    .BUTTONS_BASE (32'h1000_0200),
+    .SEG7_BASE (32'h1000_0300)
   ) u_periph_interconnect (
     .clk             (clk_periph),
     .rst             (rst_periph),
@@ -287,7 +306,18 @@ module dc_soc_top #(
     .buttons_rsp_valid (buttons_rsp_valid),
     .buttons_rsp_ready (buttons_rsp_ready),
     .buttons_rsp_rdata (buttons_rsp_rdata),
-    .buttons_rsp_error (buttons_rsp_error)
+    .buttons_rsp_error (buttons_rsp_error),
+    .seg7_req_valid  (seg7_req_valid),
+    .seg7_req_ready  (seg7_req_ready),
+    .seg7_req_addr   (seg7_req_addr),
+    .seg7_req_write  (seg7_req_write),
+    .seg7_req_size   (seg7_req_size),
+    .seg7_req_wdata  (seg7_req_wdata),
+    .seg7_req_wstrb  (seg7_req_wstrb),
+    .seg7_rsp_valid  (seg7_rsp_valid),
+    .seg7_rsp_ready  (seg7_rsp_ready),
+    .seg7_rsp_rdata  (seg7_rsp_rdata),
+    .seg7_rsp_error  (seg7_rsp_error)
   );
 
   uart_controller #(
@@ -350,6 +380,32 @@ module dc_soc_top #(
     .rsp_rdata (buttons_rsp_rdata),
     .rsp_error (buttons_rsp_error),
     .i_button  (i_button)
+  );
+
+  seg7_controller #(
+    .ADDR_BASE (32'h1000_0300)
+  ) u_seg7_controller (
+    .clk       (clk_periph),
+    .rst       (rst_periph),
+    .req_valid (seg7_req_valid),
+    .req_ready (seg7_req_ready),
+    .req_addr  (seg7_req_addr),
+    .req_write (seg7_req_write),
+    .req_size  (seg7_req_size),
+    .req_wdata (seg7_req_wdata),
+    .req_wstrb (seg7_req_wstrb),
+    .rsp_valid (seg7_rsp_valid),
+    .rsp_ready (seg7_rsp_ready),
+    .rsp_rdata (seg7_rsp_rdata),
+    .rsp_error (seg7_rsp_error),
+    .o_seg0    (o_seg0),
+    .o_seg1    (o_seg1),
+    .o_seg2    (o_seg2),
+    .o_seg3    (o_seg3),
+    .o_seg4    (o_seg4),
+    .o_seg5    (o_seg5),
+    .o_seg6    (o_seg6),
+    .o_seg7    (o_seg7)
   );
 
 endmodule

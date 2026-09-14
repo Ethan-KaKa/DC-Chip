@@ -18,5 +18,6 @@ AM_DEVREG( 7, INPUT_CONFIG, RD, bool present);
 AM_DEVREG( 8, INPUT_KEYBRD, RD, bool keydown; int keycode);
 AM_DEVREG( 9, INPUT_BUTTONS, RD, uint32_t state);
 AM_DEVREG(25, GPIO_LED,     WR, uint32_t data);
+AM_DEVREG(26, GPIO_SEG7,    WR, uint32_t data);
 
 #endif // __AMDEV_H__

@@ -51,9 +51,21 @@ module tb_periph_interconnect;
   logic [31:0] buttons_rsp_rdata;
   logic        buttons_rsp_error;
 
+  logic        seg7_req_valid, seg7_req_ready;
+  logic [31:0] seg7_req_addr;
+  logic        seg7_req_write;
+  logic [1:0]  seg7_req_size;
+  logic [31:0] seg7_req_wdata;
+  logic [3:0]  seg7_req_wstrb;
+  logic        seg7_rsp_valid, seg7_rsp_ready;
+  logic [31:0] seg7_rsp_rdata;
+  logic        seg7_rsp_error;
+
   periph_interconnect #(
     .UART_BASE (32'h1000_0000),
-    .LED_BASE  (32'h1000_0100)
+    .LED_BASE  (32'h1000_0100),
+    .BUTTONS_BASE (32'h1000_0200),
+    .SEG7_BASE (32'h1000_0300)
   ) u_dut (
     .clk             (clk),
     .rst             (rst),
@@ -100,7 +112,18 @@ module tb_periph_interconnect;
     .buttons_rsp_valid (buttons_rsp_valid),
     .buttons_rsp_ready (buttons_rsp_ready),
     .buttons_rsp_rdata (buttons_rsp_rdata),
-    .buttons_rsp_error (buttons_rsp_error)
+    .buttons_rsp_error (buttons_rsp_error),
+    .seg7_req_valid  (seg7_req_valid),
+    .seg7_req_ready  (seg7_req_ready),
+    .seg7_req_addr   (seg7_req_addr),
+    .seg7_req_write  (seg7_req_write),
+    .seg7_req_size   (seg7_req_size),
+    .seg7_req_wdata  (seg7_req_wdata),
+    .seg7_req_wstrb  (seg7_req_wstrb),
+    .seg7_rsp_valid  (seg7_rsp_valid),
+    .seg7_rsp_ready  (seg7_rsp_ready),
+    .seg7_rsp_rdata  (seg7_rsp_rdata),
+    .seg7_rsp_error  (seg7_rsp_error)
   );
 
   initial begin : clk_gen
@@ -129,6 +152,10 @@ module tb_periph_interconnect;
       buttons_rsp_valid <= 1'b0;
       buttons_rsp_rdata <= 32'd0;
       buttons_rsp_error <= 1'b0;
+      seg7_req_ready <= 1'b1;
+      seg7_rsp_valid <= 1'b0;
+      seg7_rsp_rdata <= 32'd0;
+      seg7_rsp_error <= 1'b0;
     end else begin
       if (uart_req_valid && uart_req_ready) begin
         uart_rsp_valid <= 1'b1;
@@ -152,6 +179,14 @@ module tb_periph_interconnect;
         buttons_rsp_error <= 1'b0;
       end else if (buttons_rsp_valid && buttons_rsp_ready) begin
         buttons_rsp_valid <= 1'b0;
+      end
+
+      if (seg7_req_valid && seg7_req_ready) begin
+        seg7_rsp_valid <= 1'b1;
+        seg7_rsp_rdata <= 32'h7654_3210;
+        seg7_rsp_error <= 1'b0;
+      end else if (seg7_rsp_valid && seg7_rsp_ready) begin
+        seg7_rsp_valid <= 1'b0;
       end
     end
   end
@@ -221,9 +256,26 @@ module tb_periph_interconnect;
     s_rsp_ready = 1'b0;
     step_cycle();
 
-    // 4. Access Unmapped (0x1000_0300) -> expect error
+    // 4. Access 7-segment display (0x1000_0300)
     s_req_valid = 1'b1;
     s_req_addr  = 32'h1000_0300;
+    s_rsp_ready = 1'b1;
+    while (!s_req_ready) step_cycle();
+    step_cycle();
+    s_req_valid = 1'b0;
+
+    while (!s_rsp_valid) step_cycle();
+    if (s_rsp_rdata !== 32'h7654_3210 || s_rsp_error !== 1'b0) begin
+      $display("tb_periph_interconnect FAIL: 7-segment routing mismatch");
+      $finish(1);
+    end
+    step_cycle();
+    s_rsp_ready = 1'b0;
+    step_cycle();
+
+    // 5. Access Unmapped (0x1000_0304) -> expect error
+    s_req_valid = 1'b1;
+    s_req_addr  = 32'h1000_0304;
     s_rsp_ready = 1'b1;
     while (!s_req_ready) step_cycle();
     step_cycle();

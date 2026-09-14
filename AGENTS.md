@@ -18,7 +18,7 @@
 5. Vivado 综合、实现、时序约束和 FPGA 上板验证；
 6. 面积、性能与功耗结果，以及课程报告材料。
 
-## 当前状态（2026-09-13）
+## 当前状态（2026-09-14）
 
 - 当前目录已初始化为 Git 仓库，默认分支为 `main`。
 - 阶段 1 已完成八指令基线全链路迁移；阶段 2 已完成 64 KiB IROM（`0x00000000`）与 64 KiB DRAM（`0x20000000`）的 Harvard 架构隔离与双 `.bin` 镜像装载；阶段 3 已完成仓库内自包含的 AM-like 裸机中间层（`sw/am/`）、`scripts/check_isa_subset.py` 自动化审计工具与 6 项定向软件测试套件；阶段 4 已全面补全 RV32E v1.0（37 条标准基础整数指令、`x0`--`x15` 严格边界）、`sw/am/` 自包含 `klib`（含 `memset/memcpy/memcmp/strlen/strcmp/strcpy/strcat/check`）、12 项 `am-kernels` 基准测试（总计 18 项软件回归测试）以及软硬件仿真/差分全闭环。
@@ -28,7 +28,8 @@
   - 软件与测试：新增 `sw/tests/uart_hello/` 定向测试程序（自检字符流、`printf`、`sprintf`、LED 协同及状态机就绪），全套软件回归测试套件增至 20 项。
   - 参考模型与差分：`sim/verilator/reference_model.cpp` 扩充 MMIO UART 读写与状态位建模，`test_reference` 与 `test_difftest` 适配并全 PASS。
   - NVBoard 终端：`constr/nvboard.nxdc` 绑定 `o_uart_tx UART_TX` 与 `i_uart_rx UART_RX`，由 `.config` 控制是否编入唯一的 `build/verilator/Vsim_top`。
-- 构建系统采用分层入口：`make help` 显示构建与运行方式，`make list` 是测试总入口；`make testunit`、`make testinfra`、`make sw tests` 分别覆盖硬件单测、仿真基础设施和 20 项软件回归，支持 `list`、`batch` 与 `ALL=<comma-separated names>`；最高层 `make test` 使用隔离默认配置运行三层回归并已全面 PASS。旧的 `make test-*` 与 `make lint*` 公开目标已移除，Make CLI 自检会阻止接口回退与错误命令先执行测试。
+- 阶段 5 Phase 3 已完成：新增八位十六进制七段数码管控制器（`rtl/periph/seg7_controller.sv`，`0x10000300` 单一 32 位 R/W 寄存器、`SEG0` 对应最低 nibble、自动 `0`--`F` 译码、DP 固定熄灭），经 `periph_interconnect`、`dc_soc_top` 与 `sim_top` 接入，并由 `constr/nvboard.nxdc` 映射全部 `SEG0A..DEC7P` 引脚；AM 新增 `AM_GPIO_SEG7` 与 `seg7_show_hex()`，`sw/tests/seg7_hex/` 覆盖 API/MMIO 读回、byte lane 和 LED 协同。软件回归测试增至 21 项。
+- 构建系统采用分层入口：`make help` 显示构建与运行方式，`make list` 是测试总入口；`make testunit`、`make testinfra`、`make sw tests` 分别覆盖硬件单测、仿真基础设施和 21 项软件回归，支持 `list`、`batch` 与 `ALL=<comma-separated names>`；最高层 `make test` 使用隔离默认配置运行三层回归并已全面 PASS。旧的 `make test-*` 与 `make lint*` 公开目标已移除，Make CLI 自检会阻止接口回退与错误命令先执行测试。
 - `make sim-build` 按当前 `.config` 构建唯一的 `build/verilator/Vsim_top`；SDB、WAVE、NVBoard 和 difftest 共用同一执行循环。NVBoard 第三方对象与归档隔离到 `build/tools/nvboard/`，不污染 submodule。
 - 阶段 5 Phase 2.5 差分测试架构对齐已完成：
   - Kconfig 配置化：`Dconfig`、`configs/default_defconfig` 与 `scripts/config.py` 扩展支持 `DC_SIM_DIFFTEST`。开启后主仿真器 `Vsim_top` 自动编入 ReferenceModel 与 Difftest 引擎，并在仿真执行主循环中对每条提交指令全程进行 lockstep 逐条比对。

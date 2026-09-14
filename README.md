@@ -38,14 +38,14 @@
 - **ISA 支持**：全面实现 **RV32E v1.0** 标准基础整数指令集（37 条通用整数指令，包括完整的算术运算、逻辑操作、移位、分支比较、跳转、加载与存储）。
 - **寄存器与边界**：严格支持 `x0`--`x15` 共 16 个 32 位通用寄存器（`x0` 恒为 0）；译码器对任何引用 `x16`--`x31` 的指令均精确产生非法指令陷阱（Illegal Instruction Fault）。
 - **存储子系统**：严格分离的 Harvard 架构，配备 64 KiB IROM（`0x00000000`）与 64 KiB DRAM（`0x20000000`），具备双通道独立握手与访存越界保护。
-- **总线与外设**：自研组合解耦无环交叉开关（`soc_interconnect`）、跨时钟域总线桥（`mmio_cdc_bridge`，支持 FPGA 上外设 50MHz 固定时钟与 CPU 独立时钟）、外设路由器（`periph_interconnect`）与顶层微型 SoC（`dc_soc_top`）；完成 16 字节 FIFO MMIO UART（`0x10000000`）与 16 位 GPIO LED（`0x10000100`）集成。
+- **总线与外设**：自研组合解耦无环交叉开关（`soc_interconnect`）、跨时钟域总线桥（`mmio_cdc_bridge`，支持 FPGA 上外设 50MHz 固定时钟与 CPU 独立时钟）、外设路由器（`periph_interconnect`）与顶层微型 SoC（`dc_soc_top`）；完成 16 字节 FIFO MMIO UART（`0x10000000`）、16 位 GPIO LED（`0x10000100`）、Buttons（`0x10000200`）及八位十六进制七段数码管（`0x10000300`）集成。
 - **软件与运行时**：构建自包含 Abstract Machine（AM）裸机运行时（`sw/am`），提供纯软件移位模拟的无除法硬件依赖 `udiv_mod`、全套格式化输出 `printf/sprintf`、`klib` C 标准库实现、`ioe` 设备抽象层以及自动化 ISA 合规审计脚本。
 - **验证闭环**：
-  - 10 个模块级自检单元测试（ALU, Decoder, Regfile, Core, LED Controller, UART Controller, Periph Interconnect, MMIO CDC Bridge, SoC Interconnect, SoC Top）。
-  - 20 项自动化软件回归测试（6 项运行时机制测试 + 12 项 AM-kernels 经典基准测试 + 2 项外设跑马灯与串口自检）。
+  - 12 个模块级自检单元测试（ALU, Decoder, Regfile, Core, LED, UART, Buttons, SEG7, Periph Interconnect, MMIO CDC Bridge, SoC Interconnect, SoC Top）。
+  - 21 项自动化软件回归测试（6 项运行时机制测试 + 12 项 AM-kernels 经典基准测试 + 3 项外设自检）。
   - Verilator C++ 独立 Golden Reference Model 逐指令差分测试（Difftest）。
   - 交互式简易调试器（SDB，支持单步、断点、内存与寄存器扫描）及 VCD 波形追踪。
-  - NVBoard 虚拟外设图形化仿真平台支持（支持 16 颗虚拟 LED 与虚拟 UART 终端交互）。
+  - NVBoard 虚拟外设图形化仿真平台支持（16 颗虚拟 LED、UART 终端、Buttons 与八位七段数码管）。
 
 > [!NOTE]
 > 真实的 Zynq-7020 板卡综合、实现、管脚约束与上板验证属于后续规划子阶段。在板卡物料与电气规范最终冻结前，不将未经测量的综合时序与功耗推断为事实。FPGA 目标固定外设时钟为 50 MHz，CPU 与片上存储处于独立时钟域。
@@ -130,12 +130,12 @@ DC-Chip 采用统一的 32 位小端字节寻址模型，物理地址映射如�
    - 包含常用的高频函数：`memset`, `memcpy`, `memcmp`, `strlen`, `strcmp`, `strncmp`, `strcpy`, `strncpy`, `strcat`。
    - 包含自包含的纯软件移位模拟除法 `udiv_mod`（消除对 RISC-V M 扩展的依赖），并完整实现 `printf`, `sprintf`, `snprintf`, `vsprintf`, `vsnprintf`。
 3. **设备抽象接口 (`ioe`)**：
-   - [`sw/am/include/amdev.h`](sw/am/include/amdev.h)：提供标准外设结构体定义（`AM_GPIO_LED`, `AM_UART_CONFIG`, `AM_UART_TX`, `AM_UART_RX`）。
-   - [`sw/am/src/ioe.c`](sw/am/src/ioe.c)：提供外设抽象操作，封装便捷 API `led_write`, `led_read`, `uart_write`, `uart_read`。
+   - [`sw/am/include/amdev.h`](sw/am/include/amdev.h)：提供标准外设结构体定义（`AM_GPIO_LED`, `AM_GPIO_SEG7`, `AM_UART_CONFIG`, `AM_UART_TX`, `AM_UART_RX`）。
+   - [`sw/am/src/ioe.c`](sw/am/src/ioe.c)：提供外设抽象操作，封装便捷 API `led_write`, `led_read`, `seg7_show_hex`, `uart_write`, `uart_read`。
 4. **ISA 自动化合规检查**：
    - 每次编译软件生成目标二进制后，自动运行 [`scripts/check_isa_subset.py`](scripts/check_isa_subset.py) 反汇编核对，确保程序未包含未实现的扩展指令或越界寄存器。
 
-### 20 项软件回归测试套件
+### 21 项软件回归测试套件
 
 | 类别 | 测试程序名 | 测试内容与目标 |
 | :--- | :--- | :--- |
@@ -159,6 +159,7 @@ DC-Chip 采用统一的 32 位小端字节寻址模型，物理地址映射如�
 | | `cpu_sub_longlong` | 64 位长整数减法与借位运算 |
 | **外设与交互测试** | `led_marquee` | 16 位跑马灯流转、自检与 GPIO LED 读写闭环 |
 | | `uart_hello` | MMIO UART 字符发送、`printf`、`sprintf`、状态位自检与 LED 协同 |
+| | `seg7_hex` | SEG7 AM API、32 位 MMIO 读回、byte lane 与 LED 协同 |
 
 ---
 
@@ -219,7 +220,7 @@ make help
 make list
 ```
 
-运行包含单元测试、差分测试、20 项软件基准测试与仿真闭环的完整回归：
+运行包含单元测试、差分测试、21 项软件基准测试与仿真闭环的完整回归：
 
 ```bash
 make test
@@ -243,7 +244,7 @@ make config-show     # 查看当前生效的配置项
 ### 软件编译与测试
 
 ```bash
-make sw                              # 只编译全部 20 项软件镜像
+make sw                              # 只编译全部 21 项软件镜像
 make sw tests list                   # 查看软件测试清单
 make sw tests                        # 完全按 .config 运行全部软件测试
 make sw tests ALL=cpu_fib,uart_hello # 只运行指定软件测试
@@ -305,7 +306,7 @@ DC-Chip/
 │   └── verilator/              # Verilator 顶层、仿真存储、Difftest、SDB、参考模型
 ├── sw/                         # 裸机软件生态
 │   ├── am/                     # 自包含 Abstract Machine 运行时与 klib
-│   ├── tests/                  # 20 项软件回归测试程序源代码
+│   ├── tests/                  # 21 项软件回归测试程序源代码
 │   └── demo/                   # 面向展示的交互式软件演示
 ├── constr/                     # 引脚与物理约束 (包括 NVBoard 虚拟引脚映射)
 ├── configs/                    # 预置 Kconfig 配置文件
