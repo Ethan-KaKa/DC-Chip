@@ -27,7 +27,9 @@
 - 板卡厂商型号、完整 part、package、speed grade、输入时钟、复位极性、真实引脚
   和 PS 职责仍为 `TODO`，详见 [`fpga/board.md`](fpga/board.md)。
 - Vivado 可复现工程、综合/实现、bitstream、ILA 和真实 Zynq-7020 验收未实现。
-- RISC-V 合规测试目录当前只提供发现入口，尚不能执行。
+- RV32E ISA 回归：固定 `riscv-tests-am` RV32UI 源码快照，通过 AM/`tohost` 运行
+  当前 ISA 表所列全部非 `fence` 指令用例及本地 `fence` 自检；这不是 signature 比对或 RISCOF
+  认证，来源与兼容边界见 [`../sw/riscv-tests/UPSTREAM.md`](../sw/riscv-tests/UPSTREAM.md)。
 
 ## 最近验证快照
 
@@ -39,8 +41,9 @@
 - 2026-09-14：`make testunit list`、`make testinfra list`、`make sw tests list`
   均成功输出当前动态清单。
 - 2026-09-14：`make test` PASS：13/13 RTL 单元与 lint、13/13 默认基础设施、
-  21/21 软件系统测试。使用 `build/test-fixtures/full-regression/` 下的隔离 default
-  defconfig；未运行可选 Spike 回归。
+  21/21 软件系统测试和 38/38 pinned RV32E ISA 回归。使用
+  `build/test-fixtures/full-regression/` 下的隔离 default defconfig；未运行可选 Spike
+  回归。
 
 历史八指令 v0.2 是演进过程，不是当前能力。v0.1 可执行基线冻结于
 [`9bfb9a9`](https://github.com/Ethan-KaKa/DC-Chip/commit/9bfb9a97153be05de34c6d2311c09f41cb6f43ab)，

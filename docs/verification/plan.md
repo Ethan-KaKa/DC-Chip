@@ -19,7 +19,7 @@
 | 仓库规则 | 路径、私有配置、Markdown 断链、临时内容隔离 | `make check-paths` |
 | RTL 单元 | ALU、decoder、regfile、core、外设、CDC、互连、SoC、lint | `make testunit list` / `make testunit` |
 | 仿真基础设施 | 配置、ISA、存储、反汇编、参考模型、仿真引擎、difftest、CLI、SDB、VCD | `make testinfra list` / `make testinfra` |
-| 软件系统 | AM 启动、链接、运行时、算法与 MMIO 外设程序 | `make sw tests list` / `make sw tests` |
+| 软件系统 | AM 启动、链接、运行时、算法与 MMIO 外设程序，以及 pinned RV32E ISA 回归适配 | `make sw tests list` / `make sw tests` / `make sw riscv-tests` |
 | 完整默认回归 | 隔离 default defconfig 下的前三层默认集合 | `make test` |
 | 可选外部裁判 | 官方 Spike backend | `make testinfra ALL=difftest-spike` |
 | FPGA | 综合、实现、时序、资源、功耗、bitstream、ILA、上板 | `TODO`，当前无公开 Make 入口 |
@@ -55,6 +55,9 @@ difftest。完整 CLI 以 `make help` 和 `make list` 为准。
   `is_skip_ref` 协议同步，详见 [`simulator.md`](simulator.md)；
 - 固定 seed 随机向量和定向 fault 用例；发现失败时记录 seed；
 - 每个软件镜像使用 `-march=rv32e -mabi=ilp32e`，通过 ISA 审计后再运行；
+- `make sw riscv-tests` 运行固定 `riscv-tests-am` 快照中与当前 ISA 表所列全部非
+  `fence` 基础指令对应的 RV32UI 用例，加本地极小 `fence` 自检；它通过 AM `tohost`
+  判定，不做 signature 比对，也不是 RISCOF 认证。
 - guest 成功/失败、fault、timeout 和宿主输入错误必须映射到可判定退出状态。
 
 ## 4. 执行策略

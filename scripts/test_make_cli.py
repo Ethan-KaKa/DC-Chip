@@ -70,6 +70,7 @@ def main():
     require("make testunit list" in suite_list.stdout, "test index omits unit discovery")
     require("make testinfra list" in suite_list.stdout, "test index omits infra discovery")
     require("make sw tests list" in suite_list.stdout, "test index omits software discovery")
+    require("make sw riscv-tests list" in suite_list.stdout, "test index omits riscv-tests discovery")
     require("make sw demo list" in suite_list.stdout, "test index omits demo discovery")
 
     unified_build = run(args.make, "-B", "-n", "sim-build")
@@ -202,8 +203,11 @@ def main():
     unknown_demo = run(args.make, "sw", "demo", "build", "ALL=does-not-exist")
     require(unknown_demo.returncode != 0, "unknown demo filter succeeded")
 
-    unavailable = run(args.make, "sw", "riscv-tests", "batch")
-    require(unavailable.returncode != 0, "unavailable riscv-tests suite reported success")
+    riscv_batch = run(args.make, "CLI_CHECK_ONLY=1", "sw", "riscv-tests", "batch")
+    require(riscv_batch.returncode == 0, "riscv-tests batch syntax/dry-run failed", riscv_batch.stdout)
+
+    unknown_riscv = run(args.make, "-n", "sw", "riscv-tests", "ALL=does-not-exist")
+    require(unknown_riscv.returncode != 0, "unknown riscv-tests ALL filter succeeded")
 
     legacy_targets = (
         "lint", "lint-isa", "lint-comb", "lint-mem",

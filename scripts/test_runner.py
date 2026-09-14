@@ -111,8 +111,10 @@ def cmd_list_suites():
     print("                      构建镜像: make sw demo build")
     print("                      交互运行: make sw demo run")
     print("")
-    print("  5. sw riscv-tests - RISC-V 体系结构合规测试套件 (预留，当前不可执行)")
+    print("  5. sw riscv-tests - RV32E 指令回归适配套件（非 RISCOF 认证）")
     print("                      查看列表: make sw riscv-tests list")
+    print("                      自动批处理: make sw riscv-tests batch")
+    print("                      指定运行: make sw riscv-tests ALL=addi,lw")
     print("----------------------------------------------------------------------")
     print("  提示: testunit/testinfra 默认 batch；裸 sw tests 完全服从 .config。")
     print("=" * 70 + "\n")
@@ -390,6 +392,56 @@ def run_sw_tests(filter_str=None, simulator=None, test_dir=None, make_command="m
     if res.returncode != 0:
         sys.exit(res.returncode)
 
+RISCV_TESTS = (
+    "add addi and andi auipc beq bge bgeu blt bltu bne jal jalr lb lbu lh "
+    "lhu lui lw or ori sb sh sll slli slt slti sltiu sltu sra srai srl srli "
+    "sub sw xor xori fence"
+).split()
+
+
+def list_riscv_tests():
+    print("\n" + "=" * 70)
+    print(" [Layer 3: pinned riscv-tests-am RV32UI -> RV32E 回归 (sw riscv-tests)]")
+    print("=" * 70)
+    print("  upstream: NJU-ProjectN/riscv-tests-am 676cbc7a4e520fca1c3d4dd1b586b2550769e02e")
+    print("  selected:", ", ".join(RISCV_TESTS))
+    print("  excluded: fence_i and all unsupported extensions; local fence completes coverage.")
+    print("  make sw riscv-tests batch")
+    print("  make sw riscv-tests ALL=addi,lw")
+    print("=" * 70 + "\n")
+
+
+def run_riscv_tests(filter_str=None, simulator=None, make_command="make",
+                    build_dir=None, config_file=None, runtime_off=()):
+    selected = select_tests([{"name": name} for name in RISCV_TESTS], filter_str,
+                            "sw riscv-tests")
+    names = [test["name"] for test in selected]
+    build_root = os.path.abspath(build_dir or os.path.join(REPO_ROOT, "build"))
+    sim_bin = os.path.abspath(simulator or os.path.join(build_root, "verilator/Vsim_top"))
+    make_common = [make_command, "--no-print-directory", "ALL="]
+    if config_file:
+        make_common.append(f"CONFIG_FILE={config_file}")
+    make_common.append(f"BUILD_DIR={build_root}")
+
+    print(">>> 构建 RV32E 统一仿真器与选定 riscv-tests-am 镜像 ...", flush=True)
+    subprocess.run([*make_common, "sim-build"], cwd=REPO_ROOT, check=True)
+    subprocess.run(
+        [make_command, "--no-print-directory", "-C", "sw/riscv-tests",
+         f"BUILD_DIR={os.path.join(build_root, 'sw')}", f"ALL={','.join(names)}", "all"],
+        cwd=REPO_ROOT, check=True,
+    )
+    cmd = [sys.executable, os.path.join(REPO_ROOT, "scripts/run_riscv_tests.py"),
+           "--simulator", sim_bin,
+           "--test-dir", os.path.join(build_root, "sw/riscv-tests"),
+           "--max-cycles", "1000000"]
+    for feature in runtime_off:
+        cmd.append(f"--{feature}-off")
+    cmd.extend(names)
+    print("\n>>> 调度 riscv-tests-am RV32E 回归 ...", flush=True)
+    res = subprocess.run(cmd, cwd=REPO_ROOT)
+    if res.returncode != 0:
+        sys.exit(res.returncode)
+
 # -----------------------------------------------------------------------------
 # CLI 入口
 # -----------------------------------------------------------------------------
@@ -457,15 +509,15 @@ def main():
 
     elif args.suite == "riscv-tests":
         if args.list:
-            list_sw_suite(
-                "sw/riscv-tests",
-                "RISC-V 体系结构合规测试套件 (sw riscv-tests)",
-                command_prefix="make sw riscv-tests",
-                runnable=False,
-            )
+            list_riscv_tests()
         else:
-            print("error: sw riscv-tests 尚未导入，当前只支持 make sw riscv-tests list", file=sys.stderr)
-            sys.exit(2)
+            run_riscv_tests(
+                args.filter, simulator=args.simulator, make_command=args.make,
+                build_dir=args.build_dir, config_file=args.config_file,
+                runtime_off=tuple(name for name, enabled in (
+                    ("sdb", args.sdb_off), ("nvboard", args.nvboard_off),
+                    ("wave", args.wave_off)) if enabled),
+            )
 
     elif args.suite == "sw-demos":
         if args.list:

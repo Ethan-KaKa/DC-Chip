@@ -47,12 +47,18 @@ sw:
 			riscv-tests) \
 				case "$(word 3,$(MAKECMDGOALS))" in \
 				list)  $(PYTHON) scripts/test_runner.py --suite riscv-tests --list --make "$(MAKE)" ;; \
-				batch) $(PYTHON) scripts/test_runner.py --suite riscv-tests --batch --make "$(MAKE)" ;; \
+				batch) $(PYTHON) scripts/test_runner.py --suite riscv-tests --batch --make "$(MAKE)" \
+						--simulator "$(abspath $(SIM_BIN))" --build-dir "$(abspath $(BUILD_DIR))" \
+						--config-file "$(abspath $(CONFIG_FILE))" --sdb-off --nvboard-off --wave-off ;; \
 				*)     if [ -n "$(ALL)" ]; then \
-						$(PYTHON) scripts/test_runner.py --suite riscv-tests --filter "$(ALL)" --make "$(MAKE)"; \
+						$(PYTHON) scripts/test_runner.py --suite riscv-tests --filter "$(ALL)" --make "$(MAKE)" \
+							--simulator "$(abspath $(SIM_BIN))" --build-dir "$(abspath $(BUILD_DIR))" \
+							--config-file "$(abspath $(CONFIG_FILE))" --sdb-off --nvboard-off --wave-off; \
 					   else \
-						$(PYTHON) scripts/test_runner.py --suite riscv-tests --batch --make "$(MAKE)"; \
-						   fi ;; \
+						$(PYTHON) scripts/test_runner.py --suite riscv-tests --batch --make "$(MAKE)" \
+							--simulator "$(abspath $(SIM_BIN))" --build-dir "$(abspath $(BUILD_DIR))" \
+							--config-file "$(abspath $(CONFIG_FILE))" --sdb-off --nvboard-off --wave-off; \
+					   fi ;; \
 						esac ;; \
 			demo) \
 				case "$(ALL)" in ""|uart_led_demo) ;; *) printf 'error: unknown demo in ALL: %s\n' "$(ALL)" >&2; exit 1 ;; esac; \

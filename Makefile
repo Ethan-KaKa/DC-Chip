@@ -97,6 +97,8 @@ test:
 		CONFIG_FILE="$(FULL_TEST_CONFIG)" testinfra batch
 	$(MAKE) --no-print-directory BUILD_DIR="$(FULL_TEST_BUILD_DIR)" \
 		CONFIG_FILE="$(FULL_TEST_CONFIG)" sw tests batch
+	$(MAKE) --no-print-directory BUILD_DIR="$(FULL_TEST_BUILD_DIR)" \
+		CONFIG_FILE="$(FULL_TEST_CONFIG)" sw riscv-tests batch
 
 # 清理目标
 clean:
