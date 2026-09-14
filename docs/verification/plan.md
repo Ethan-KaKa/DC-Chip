@@ -1,6 +1,7 @@
 # DC-Chip 验证计划
 
-本文定义当前验证策略、分层入口和证据边界。测试清单不在文档中复制，始终通过
+本文定义当前验证策略、分层入口和证据边界；仿真组件及数据流见
+[`simulation-design.md`](simulation-design.md)。测试清单不在文档中复制，始终通过
 `make list`、`make testunit list`、`make testinfra list` 和
 `make sw tests list` 查询。
 

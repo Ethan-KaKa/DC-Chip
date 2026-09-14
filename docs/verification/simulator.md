@@ -1,7 +1,8 @@
 # Verilator 仿真器接口
 
-本文定义唯一仿真可执行文件、镜像、命令行、停止条件和 difftest 边界。构建配置
-见 [`configuration.md`](configuration.md)，体系结构协议见
+本文定义唯一仿真可执行文件、镜像、命令行、停止条件和 difftest 边界。整体组件
+设计见 [`simulation-design.md`](simulation-design.md)，构建配置见
+[`configuration.md`](configuration.md)，体系结构协议见
 [`../architecture/microarchitecture.md`](../architecture/microarchitecture.md)。
 
 ## 1. 构建与边界
