@@ -84,7 +84,8 @@ static bool handle_command(const char *command, bool *running, bool *left,
                            uint32_t *delay, uint16_t *pattern) {
   if (strcmp(command, "exit") == 0) {
     led_write(0);
-    printf("Leaving UART LED demo.\n");
+    seg7_show_hex(0);
+    printf("Leaving UART LED/SEG7 demo.\n");
     return true;
   }
   if (strcmp(command, "s") == 0) {
@@ -118,6 +119,7 @@ int main(void) {
   bool running = true;
   bool left = true;
   uint16_t pattern = 1;
+  uint32_t seg7_count = 0;
   uint32_t delay = 60000;
   uint32_t delay_left = 0;
   char command[16];
@@ -125,8 +127,9 @@ int main(void) {
   uint32_t previous_buttons = 0;
 
   ioe_init();
+  seg7_show_hex(seg7_count);
   previous_buttons = buttons_read();
-  printf("\nDC-Chip UART LED demo\n");
+  printf("\nDC-Chip UART LED/SEG7 demo\n");
   printf("Type ? for help. Type exit and press Enter to quit.\n");
   show_status(running, left, delay);
 
@@ -167,6 +170,8 @@ int main(void) {
 
     if (running && delay_left == 0) {
       led_write(pattern);
+      seg7_count++;
+      seg7_show_hex(seg7_count);
       pattern = left ? (uint16_t)((pattern << 1) | (pattern >> 15))
                      : (uint16_t)((pattern >> 1) | (pattern << 15));
       delay_left = delay;

@@ -73,7 +73,7 @@ module tb_seg7_controller;
     repeat (3) @(posedge clk);
     #1;
     if ({o_seg7, o_seg6, o_seg5, o_seg4, o_seg3, o_seg2, o_seg1, o_seg0}
-        !== {8{8'b1111_1100}}) begin
+        !== {8{8'b0000_0011}}) begin
       $display("tb_seg7_controller FAIL: reset glyphs are not all zero");
       $finish(1);
     end
@@ -81,7 +81,7 @@ module tb_seg7_controller;
 
     transact(1'b1, 32'h1000_0300, 32'hfedc_ba98, 4'b1111, rdata, error);
     if (error || {o_seg7, o_seg6, o_seg5, o_seg4, o_seg3, o_seg2, o_seg1, o_seg0}
-                 !== {8'h8e, 8'h9e, 8'h7a, 8'h9c, 8'h3e, 8'hee, 8'hf6, 8'hfe}) begin
+                 !== {8'h71, 8'h61, 8'h85, 8'h63, 8'hc1, 8'h11, 8'h09, 8'h01}) begin
       $display("tb_seg7_controller FAIL: hexadecimal glyph decode mismatch");
       $finish(1);
     end
@@ -94,7 +94,7 @@ module tb_seg7_controller;
 
     transact(1'b1, 32'h1000_0300, 32'h00ab_0000, 4'b0100, rdata, error);
     transact(1'b0, 32'h1000_0300, 32'd0, 4'd0, rdata, error);
-    if (error || rdata !== 32'hfeab_ba98 || o_seg4 !== 8'hee || o_seg5 !== 8'h3e) begin
+    if (error || rdata !== 32'hfeab_ba98 || o_seg4 !== 8'h11 || o_seg5 !== 8'hc1) begin
       $display("tb_seg7_controller FAIL: byte lane update mismatch: %h", rdata);
       $finish(1);
     end

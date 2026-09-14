@@ -1,7 +1,7 @@
 `default_nettype none
 
 // Eight-digit hexadecimal seven-segment display controller.
-// Each output is {a, b, c, d, e, f, g, dp}; a high level lights a segment.
+// Each output is {a, b, c, d, e, f, g, dp}; a low level lights a segment.
 module seg7_controller #(
   parameter logic [31:0] ADDR_BASE = 32'h1000_0300
 ) (
@@ -41,22 +41,22 @@ module seg7_controller #(
   function automatic logic [7:0] hex_to_segments(input logic [3:0] nibble);
     begin
       case (nibble)
-        4'h0:   hex_to_segments = 8'b1111_1100;
-        4'h1:   hex_to_segments = 8'b0110_0000;
-        4'h2:   hex_to_segments = 8'b1101_1010;
-        4'h3:   hex_to_segments = 8'b1111_0010;
-        4'h4:   hex_to_segments = 8'b0110_0110;
-        4'h5:   hex_to_segments = 8'b1011_0110;
-        4'h6:   hex_to_segments = 8'b1011_1110;
-        4'h7:   hex_to_segments = 8'b1110_0000;
-        4'h8:   hex_to_segments = 8'b1111_1110;
-        4'h9:   hex_to_segments = 8'b1111_0110;
-        4'ha:   hex_to_segments = 8'b1110_1110;
-        4'hb:   hex_to_segments = 8'b0011_1110;
-        4'hc:   hex_to_segments = 8'b1001_1100;
-        4'hd:   hex_to_segments = 8'b0111_1010;
-        4'he:   hex_to_segments = 8'b1001_1110;
-        default: hex_to_segments = 8'b1000_1110;
+        4'h0:   hex_to_segments = 8'b0000_0011;
+        4'h1:   hex_to_segments = 8'b1001_1111;
+        4'h2:   hex_to_segments = 8'b0010_0101;
+        4'h3:   hex_to_segments = 8'b0000_1101;
+        4'h4:   hex_to_segments = 8'b1001_1001;
+        4'h5:   hex_to_segments = 8'b0100_1001;
+        4'h6:   hex_to_segments = 8'b0100_0001;
+        4'h7:   hex_to_segments = 8'b0001_1111;
+        4'h8:   hex_to_segments = 8'b0000_0001;
+        4'h9:   hex_to_segments = 8'b0000_1001;
+        4'ha:   hex_to_segments = 8'b0001_0001;
+        4'hb:   hex_to_segments = 8'b1100_0001;
+        4'hc:   hex_to_segments = 8'b0110_0011;
+        4'hd:   hex_to_segments = 8'b1000_0101;
+        4'he:   hex_to_segments = 8'b0110_0001;
+        default: hex_to_segments = 8'b0111_0001;
       endcase
     end
   endfunction

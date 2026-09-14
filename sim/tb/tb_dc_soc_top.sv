@@ -252,8 +252,8 @@ module tb_dc_soc_top;
     @(posedge clk);
     @(posedge clk);
     #1;
-    if (o_seg0 !== 8'hf2 || o_seg1 !== 8'hda || o_seg2 !== 8'h60 ||
-        o_seg3 !== 8'hfc) begin
+    if (o_seg0 !== 8'h0d || o_seg1 !== 8'h25 || o_seg2 !== 8'h9f ||
+        o_seg3 !== 8'h03) begin
       $display("tb_dc_soc_top: FAIL - 7-segment output mismatch");
       $finish(1);
     end
