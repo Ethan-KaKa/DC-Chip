@@ -11,7 +11,7 @@
 # AI 在需要跨仓阅读外部开源实现或参考模型时，将使用以下只读路径（留空表示未配置）：
 YSYX_WORKBENCH: /home/kaka/ysyx-workbench
 # SPIKE_HOME: /opt/riscv/spike
-# NVBOARD_HOME: /path/to/nvboard
+# DC_NVBOARD_HOME: /path/to/nvboard
 
 ---
 

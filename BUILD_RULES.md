@@ -44,9 +44,12 @@
 
 ### 2.3 外部工具路径三级回退 (Three-tier Override)
 涉及第三方工具（如 NVBoard、Spike、交叉工具链），必须支持分层覆盖：
-1. **最高优先级**：命令行显式传参（例如 `make SPIKE_HOME=/opt/spike`）；
-2. **次高优先级**：环境变量（例如 `export NVBOARD_HOME=...`）；
+1. **最高优先级**：命令行显式传参（例如 `make DC_NVBOARD_HOME=/opt/nvboard`）；
+2. **次高优先级**：项目命名空间环境变量（例如 `export DC_NVBOARD_HOME=...`）；
 3. **兜底回退**：本地私有配置 `AGENTS.local.md` 或仓库自带相对路径（`$(REPO_ROOT)/tools/...`）。
+
+变量名必须以项目名前缀隔离，避免继承外部工作台的通用变量。NVBoard 默认固定使用
+`tools/nvboard`；通用 `NVBOARD_HOME` 不得作为本仓库的覆盖入口。
 
 ---
 
