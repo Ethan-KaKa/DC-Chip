@@ -1,151 +1,79 @@
-# DC-Chip v0.2 地址与存储模型
+# DC-Chip 地址与存储映射
 
-- 版本：v0.2
-- 版本：v0.2
-- 状态：阶段 5 Phase 3 完成 MMIO UART 控制器（`0x10000000`）、GPIO LED（`0x10000100`）、Buttons（`0x10000200`）、八位七段数码管（`0x10000300`）与 CDC 异步/同步总线桥规范冻结；外设时钟在 FPGA 目标上固定为 50 MHz (`clk_periph = 50MHz`)，CPU 及片上存储（IROM/DRAM）位于独立时钟域 (`clk_cpu`)；timer/sensor 待后续子阶段
-- 更新日期：2026-09-12
-- ISA 规范：`docs/isa/isa.md` v0.2
+本文是地址范围、访问权限、byte lane 和 MMIO 副作用的唯一规范源。CPU 请求、
+响应、提交和 fault 时序见 [`microarchitecture.md`](microarchitecture.md)。
 
-## 1. 地址模型
+## 1. 地址与对齐
 
-v0.2 使用统一的 32 位 byte-addressed 地址值，取值范围为
-`0x00000000`--`0xffffffff`。PC、取指地址和 load/store 有效地址均是字节地址；
-有效地址加法保留低 32 位。
+地址、PC 和有效地址均为 32 位 byte address，加法保留低 32 位；指令与数据均为
+小端。对四字节对齐地址 `A`，`A+0` 到 `A+3` 依次对应总线数据的 `[7:0]`、
+`[15:8]`、`[23:16]`、`[31:24]`。
 
-这一定义只规定地址表示，不表示整个 4 GiB 空间都有物理存储。哪些地址可取指、
-可读、可写或具有设备副作用，由后续正式区域表决定。
-
-## 2. 字节序与 byte lane
-
-指令和数据均采用小端布局。对四字节对齐地址 `A`：
-
-| 地址 | 32 位值中的位 | 32 位总线 lane |
+| 操作 | 合法对齐 | 读写行为 |
 | --- | --- | --- |
-| `A+0` | `[7:0]` | 0 |
-| `A+1` | `[15:8]` | 1 |
-| `A+2` | `[23:16]` | 2 |
-| `A+3` | `[31:24]` | 3 |
+| instruction fetch | 4 byte | 读取一条 32 位指令 |
+| `lb` / `lbu` / `sb` | 任意 | 单个目标 lane，load 符号/零扩展 |
+| `lh` / `lhu` / `sh` | 2 byte | 低或高两个 lane，load 符号/零扩展 |
+| `lw` / `sw` | 4 byte | 全部四个 lane |
 
-指令取指一次返回从 PC 开始的四个字节，并按该表拼成 32 位指令。数据总线的
-`lane = address[1:0]`；byte store 只使能对应 lane，其他 lane 不得改变。
+核心在发出数据请求前检查对齐。错误响应不携带有效读数据；失败 load 不写回，
+失败 store 不产生部分或完整副作用。
 
-## 3. 访问宽度与对齐
+## 2. 正式区域
 
-| 操作 | 宽度 | 合法地址 | 数据行为 |
+| 区域 | 地址范围 | 容量 | 权限与路由 |
 | --- | --- | ---: | --- |
-| instruction fetch | 4 byte | `addr[1:0] == 2'b00` | 返回一条 32 位指令 |
-| `lw` | 4 byte | `addr[1:0] == 2'b00` | 小端读取 32 位 |
-| `lbu` | 1 byte | 任意 | 读取目标 lane 并零扩展到 32 位 |
-| `sw` | 4 byte | `addr[1:0] == 2'b00` | 写全部四个 lane |
-| `sb` | 1 byte | 任意 | 写 `rs2[7:0]` 到目标 lane |
+| IROM | `0x00000000`--`0x0000ffff` | 64 KiB | 仅 IFU 只读/执行；LSU 访问错误 |
+| MMIO | `0x10000000`--`0x1000ffff` | 64 KiB | 仅 LSU，经 CDC 与外设路由；未映射子空间错误 |
+| DRAM | `0x20000000`--`0x2000ffff` | 64 KiB | 仅 LSU 读写；IFU 取指错误 |
 
-不支持跨 lane 拼接的未对齐 word 访问。`lw/sw` 在发出数据请求前检查对齐并分别
-产生 load/store address misaligned；`lbu/sb` 不产生地址未对齐 fault。
+IROM 与 DRAM 使用 Harvard 隔离。仿真器分别装载 instruction 和 data 镜像；FPGA
+存储原语、初始化方式及实现结果尚未冻结。除下列地址外的 MMIO 子空间，以及
+其他未映射地址，均返回 access error。
 
-取指要求四字节对齐。正常顺序 PC 每次增加 4；`jalr` 清除目标 bit 0 后仍检查
-bit 1，若为一则在 `jalr` 上报告 instruction address misaligned，不发起目标
-取指。
+## 3. MMIO 寄存器
 
-## 4. access fault 抽象行为
+### 3.1 UART：`0x10000000`--`0x1000000f`
 
-以下任一原因可由后续存储系统返回 access fault：
+| 地址 | 访问 | 定义与副作用 |
+| --- | --- | --- |
+| `0x10000000` TX_DATA | 写；读返回 0 | 写入低 8 位压入 TX FIFO；FIFO 满时软件应等待 STATUS |
+| `0x10000004` RX_DATA | 读 | 返回低 8 位接收数据并清除 `rx_ready`；写返回错误 |
+| `0x10000008` STATUS | 读 | bit 0=`rx_ready`，bit 1=`tx_ready`，其余为 0；写返回错误 |
 
-- 地址未映射；
-- 区域不允许当前访问类型或宽度；
-- 只读区域收到 store；
-- 设备、总线或物理存储报告访问错误。
+TX FIFO 默认深度 16 byte，串行帧为 8N1。`dc_soc_top` 固定传入
+`BAUD_DIV=432`；若外设时钟为 50 MHz，对应约 115.7 kbaud。Verilator 下的
+DPI-C 终端镜像是仿真辅助路径，不改变 MMIO 请求/响应契约。
 
-取指、load 和 store 错误分别形成 instruction/load/store access fault。错误
-响应不携带有效读数据；失败 load 不写回，失败 store 不产生部分或完整内存
-副作用。具体请求/响应与提交规则见 `docs/architecture/microarchitecture.md`。
+### 3.2 GPIO LED：`0x10000100`--`0x10000103`
 
-本规范不定义虚拟内存、页故障、缓存一致性、原子性扩展或 MMIO 排序指令。
+低 16 位为 R/W LED 状态，复位为 0；高 16 位读 0、写忽略。`wstrb[1:0]` 分别
+更新两个有效 byte lane，输出为 `o_led[15:0]`。
 
-## 5. 正式区域表
+### 3.3 Buttons：`0x10000200`--`0x10000203`
 
-阶段 5 正式冻结 IROM、DRAM 以及 MMIO 外设区域的基地址、容量与访问权限：
+低 21 位为只读同步输入：`[15:0]` 对应 switches，`[20:16]` 对应五个 button
+pad；其余位为 0，写访问返回错误。输入经过两级同步；当前 SoC 实例
+`WIDTH=21`、`DEBOUNCE_CYCLES=0`，不提供事件锁存、FIFO 或中断。
 
-| 区域/属性 | 地址范围 | 基线容量 | 权限与访问模型 | 错误行为 | 物理实现 |
-| --- | --- | ---: | --- | --- | --- |
-| **IROM** | `0x00000000`--`0x0000ffff` | 64 KiB | **只读/可执行**（仅允许 IFU 取指，四字节对齐） | LSU 读写触发 load/store access fault；未对齐取指触发 instruction misaligned | 片上 BRAM / 仿真 IROM 数组 |
-| **DRAM** | `0x20000000`--`0x2000ffff` | 64 KiB | **可读/可写**（仅允许 LSU 访存，仿真支持扩展至 256 KiB） | IFU 取指触发 instruction access fault；未对齐 word 触发 misaligned | 片上 BRAM / 仿真 DRAM 数组 |
-| **MMIO 总区域** | `0x10000000`--`0x1000ffff` | 64 KiB | **设备寄存器**（仅允许 LSU 访存，经 CDC 桥至外设路由器） | IFU 取指触发 instruction access fault；未分配外设子空间触发 access fault | SoC Interconnect 译码 |
-| **MMIO UART 控制器** | `0x10000000`--`0x1000000f` | 16 字节 | **寄存器映射**（TX只写、RX只读、STATUS只读；16字节FIFO） | 写只读/读只写或未对齐多字节读写按规范返回错误 | `rtl/periph/uart_controller.sv` |
-| **GPIO LED 控制器** | `0x10000100`--`0x10000103` | 4 字节 | **可读/可写**（低 16 位映射到 16 颗 LED，高 16 位保留为 0） | IFU 取指或未对齐多字节读写按规范返回错误 | `rtl/periph/led_controller.sv` |
-| **Buttons 输入控制器** | `0x10000200`--`0x10000203` | 4 字节 | **只读**（低 21 位映射到 16 个 SW 与 5 个 Button Pad） | 写访问或未映射地址触发 access fault | `rtl/periph/buttons_controller.sv` |
-| **七段数码管控制器** | `0x10000300`--`0x10000303` | 4 字节 | **可读/可写**（32 位值自动译码为八位十六进制显示） | 同一子空间其他地址触发 access fault | `rtl/periph/seg7_controller.sv` |
-| timer/sensor | 其他 `0x1000xxxx` 子空间 | 待定 | 阶段 5 后续子阶段规划中 | 访问未就绪外设地址触发 access fault | `TODO` |
+### 3.4 八位七段数码管：`0x10000300`--`0x10000303`
 
-### 5.1 Harvard 访问隔离与 Fault 契约
+一个 32 位 R/W 显示寄存器，复位为 0。每个 nibble 自动译码为 `0`--`F`；最低
+nibble 显示在 `SEG0`，最高显示在 `SEG7`。任意 `wstrb` lane 可独立更新；输出
+顺序为 `{a,b,c,d,e,f,g,dp}`，高电平点亮，DP 恒灭。
 
-- **IFU 专属 IROM**：取指请求地址必须处于 `[0x00000000, 0x00010000)` 内且四字节对齐。若 IFU 尝试对 DRAM 区域（`0x20000000` 起）、MMIO 区域（`0x10000000` 起）或任何未映射空间取指，存储子系统返回错误，核心产生粘滞的 `instruction access fault`（`fault_cause = 3'd2`）；
-- **LSU 路由与访问**：数据请求由 `soc_interconnect` 译码路由：
-  - DRAM 区域：`[0x20000000, 0x20010000)` 内，转发至 DRAM 存储；
-  - 私有 `tohost`：`0xfffffff0`，转发至仿真/主机监控；
-  - MMIO 区域：`[0x10000000, 0x10010000)` 内，转发至 `mmio_cdc_bridge` 与 `periph_interconnect`；已分配外设（`0x10000000` UART、`0x10000100` LED、`0x10000200` Buttons、`0x10000300` SEG7）返回正常握手响应；未实现的外设地址直接返回 `rsp_error = 1`；
-  - 未映射区域或尝试对 IROM 执行 load/store：总线互连立即返回 `rsp_error = 1`；
-- 核心收到 `rsp_error` 时产生粘滞的 `load access fault`（`fault_cause = 3'd5`）或 `store access fault`（`fault_cause = 3'd7`）；
-- 跨区域非法访问不会产生任何局部数据写入或寄存器写回，故障状态保持至复位。
+外设路由器先按 256 byte 窗口选择设备，设备自身再检查有效寄存器地址；同一窗口
+内未定义地址由设备返回错误。NVBoard 信号绑定只是虚拟板级接口，不构成真实 FPGA
+管脚约束。
 
-### 5.2 MMIO UART 控制器寄存器定义（`0x10000000`）
+## 4. 私有仿真地址
 
-| 偏移/地址 | 字段 | 位宽 | 读写权限 | 描述 |
-| --- | --- | ---: | --- | --- |
-| `0x10000000` | `TX_DATA[7:0]` | 8 | WO | 发送数据寄存器。写入触发压入 TX FIFO（容量 16 字节），并自动发起串行发送。对该地址的读操作返回 0。写其他位忽略。 |
-| `0x10000004` | `RX_DATA[7:0]` | 8 | RO | 接收数据寄存器。读取返回接收到的最新字节并自动清除 `rx_ready` 状态。对该地址写入返回 access error。 |
-| `0x10000008` | `STATUS[1:0]` | 2 | RO | 串口状态寄存器：<br>- `bit 0`: `rx_ready`（1 表示 RX 有有效数据待读）<br>- `bit 1`: `tx_ready`（1 表示 TX FIFO 未满，可写入；0 表示 FIFO 满）<br>- `bit 31:2`: 保留为 0。对该地址写入返回 access error。 |
+`0xfffffff0` 是仿真专用 `tohost`：只有 32 位 store 合法，写入值作为 guest
+exit code；其他宽度或读访问错误。它由存储模型处理，不属于正式 FPGA MMIO，
+也不标记为 difftest `skip_ref`。镜像和进程退出规则见
+[`../verification/simulator.md`](../verification/simulator.md)。
 
-- **时钟与波特率**：外设固定工作在 50 MHz (`clk_periph`)，默认波特率分频比 `BAUD_DIV = 432`（即 50,000,000 / 115,200 ≈ 434，NVBoard 端标准为 432 分频），帧格式为 8N1（1 起始位、8 数据位、无校验、1 停止位）。
-- **仿真加速**：在 Verilator 仿真环境下通过 DPI-C `sim_uart_putc` 实时镜像输出到宿主机终端，无丢字风险。
+## 5. 保留扩展
 
-### 5.3 跨时钟域桥接与时钟策略（`mmio_cdc_bridge`）
-
-- **FPGA 时钟策略**：
-  - 外设时钟固定为 **50 MHz** (`clk_periph`)，用于保证 UART 波特率、定时器外设等物理时序稳定。
-  - CPU 核心与片上紧耦合存储（IROM/DRAM）运行于独立时钟域 (`clk_cpu`)，便于在 FPGA 上探索核心最高工作频率。
-- **跨时钟域桥接机制**：
-  - 由 `rtl/soc/mmio_cdc_bridge.sv` 负责 CPU 总线与外设总线之间的请求/响应同步。
-  - 参数 `ASYNC_CDC = 0`（仿真与单元测试默认）：纯组合/同源直通，零延迟惩罚。
-  - 参数 `ASYNC_CDC = 1`（FPGA 物理部署）：基于四相翻转电平（toggle-handshake）与双级寄存器同步器（2FF synchronizer）跨越时钟域，确保无亚稳态传输，请求期间 CPU 核心通过总线反压（`req_ready = 0`）自然等待。
-
-### 5.4 GPIO LED 控制器寄存器定义（`0x10000100`）
-
-| 偏移/地址 | 字段 | 位宽 | 读写权限 | 描述 |
-| --- | --- | ---: | --- | --- |
-| `0x10000100` | `LED[15:0]` | 16 | R/W | 16 颗用户发光二极管状态。写 1 点亮，写 0 熄灭。复位为 `0x0000`。 |
-| `0x10000102` | 保留 | 16 | RO | 读恒为 0，写忽略。 |
-
-- 支持 8 位（`sb`/`lbu`）、16 位（`sh`/`lhu`）和 32 位（`sw`/`lw`）对齐读写。
-- 读操作直接返回当前寄存器锁存的值；写操作在请求握手成功拍同步更新寄存器并反映到输出管脚 `o_led[15:0]`。
-
-### 5.5 Buttons 输入控制器寄存器定义（`0x10000200`）
-
-| 偏移/地址 | 字段 | 位宽 | 读写权限 | 描述 |
-|---|---|---:|---|---|
-| `0x10000200` | `INPUT[20:0]` | 21 | RO | `bit[15:0]` 为 `SW0..SW15`，`bit[20:16]` 依次为 `BTNR, BTNL, BTND, BTNU, BTNC`；其余位为 0。 |
-
-- 输入先经过两级同步器；默认 `DEBOUNCE_CYCLES = 0`，只提供同步后的当前电平。
-- `DEBOUNCE_CYCLES > 0` 时，每个按键独立使用稳定计数器，连续稳定达到阈值后更新可读状态。
-- 该控制器不提供按下事件锁存、FIFO 或中断；写访问返回总线错误，demo 软件自行检测按下沿。
-
-### 5.6 八位七段数码管控制器寄存器定义（`0x10000300`）
-
-| 偏移/地址 | 字段 | 位宽 | 读写权限 | 描述 |
-|---|---:|---:|---|---|
-| `0x10000300` | `HEX[31:0]` | 32 | R/W | 八个十六进制 nibble；`HEX[3:0]` 显示在 `SEG0`，`HEX[31:28]` 显示在 `SEG7`。复位值为 0，显示 `00000000`。 |
-
-- 支持 `sw/lw` 以及任意 byte lane 的 `sb/lbu`；写入由 `wstrb` 选择的 byte，其余 byte 保持不变。
-- 控制器输出 `o_segN[7:0] = {a,b,c,d,e,f,g,dp}`，逻辑 1 表示点亮；小数点 `dp` 在本版本恒为 0。
-- 仅实现标准 `0`--`9` 与 `A`--`F` 的组合译码，无扫描、时分复用、原始段码或小数点控制寄存器。
-- NVBoard 将 `o_seg0` 绑定至 `SEG0A..DEC0P`，依此类推至 `o_seg7`；这不是尚未确认的 FPGA 板级引脚约束。
-
-
-## 6. 仿真私有机制边界
-
-behavioral simulation 可以使用私有镜像布局、终止地址或 host 交互机制，但它们
-不是正式 SoC 地址映射，不在本文件分配地址。此类目标契约记录在
-`docs/verification/simulator.md`，并必须与未来真实 MMIO 分配隔离。
-
-阶段 2 采用上述正式内存映射：IROM `0x00000000`（64 KiB）、DRAM `0x20000000`（64 KiB）
-与 `0xfffffff0` 私有 `tohost`。仿真器支持从命令行同时加载指令镜像与数据镜像，
-支持 raw binary (`.bin`) 与 32 位 8 字符 HEX 格式。
+timer、sensor、睡眠/唤醒和中断相关地址均为 `TODO`。在对应寄存器、副作用、
+时钟域、软件接口和测试共同落盘前，访问预留地址必须继续报错。

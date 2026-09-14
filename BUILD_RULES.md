@@ -140,7 +140,7 @@ make init
    - 检查子模块是否处于 dirty 状态；
    - 阻止二进制归档与中间生成物误入。
 2. **Makefile 自检目标**：
-   - 运行 `make check-paths`：快速静态扫描仓库合规性；
+   - 运行 `make check-paths`：检查路径、私有配置、Markdown 相对链接与临时文档隔离；
    - 纳入 `make test` 全回归闭环，破坏规则的代码无法通过测试。
 
 ---

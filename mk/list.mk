@@ -111,7 +111,7 @@ help:
 		'初始化与环境:' \
 		'  make init          初始化依赖、submodule、配置、工具与 Git hooks' \
 		'  make check-tools   检查主机工具与 RISC-V 交叉工具链' \
-		'  make check-paths   检查路径和本地配置是否符合仓库规则' \
+		'  make check-paths   检查路径、文档链接和本地配置规则' \
 		'' \
 		'配置:' \
 		'  make defconfig     将 .config 重置为仓库默认配置' \

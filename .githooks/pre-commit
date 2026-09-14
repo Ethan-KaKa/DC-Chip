@@ -14,6 +14,10 @@ if [[ ! -r "$policy_file" ]]; then
     reject "cannot read ${policy_file}; restore the policy before committing."
 fi
 
+if ! python3 scripts/check_repo_rules.py --staged; then
+    reject "staged repository rule check failed."
+fi
+
 while IFS= read -r -d '' path; do
     case "$path" in
         .env|*/.env|.env.*|*/.env.*)

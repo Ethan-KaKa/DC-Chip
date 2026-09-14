@@ -1,14 +1,13 @@
 # DC-Chip FPGA 板卡规格
 
-- 版本：v0.1
-- 状态：信息待确认
-- 更新日期：2026-09-10
+- 状态：板级信息待确认；仿真信号绑定不等于真实管脚约束
+- 更新日期：2026-09-14
 
 ## 1. 已知边界
 
 - 目标器件系列：Zynq-7020；
 - 默认集成位置：自研 CPU/SoC 位于 PL；
-- 当前阶段：仅建立可移植核心和 behavioral simulation，不创建 Vivado 工程、XDC 或 FPGA wrapper；
+- 当前已有可移植 CPU/SoC 与 behavioral simulation；Vivado 工程、真实 XDC、FPGA wrapper 和 bitstream 尚未实现；
 - PS 是否参与下载、调试、存储或通信：`TODO`。
 
 “Zynq-7020”不足以确定完整器件 part、封装、速度等级、板级时钟或任何引脚，因此不得据此猜测约束。
@@ -42,7 +41,10 @@ CPU 核心接口使用同步高有效 `rst`，这是核心内部微架构约定�
 
 ## 4. 时钟与约束门槛
 
-输入时钟、目标核心频率、MMCM/PLL、时钟域和 XDC 均为 `TODO`。在完整 part、时钟源和引脚表确认前：
+输入时钟、目标核心频率、MMCM/PLL、reset-domain crossing 和真实 XDC 均为
+`TODO`。架构要求外设时钟域以 50 MHz 运行，CPU/片上存储位于独立时钟域；这不
+代表板上已存在或已约束 50 MHz 输入，具体时钟生成方式仍须在板卡信息确认后定义。
+在完整 part、时钟源和引脚表确认前：
 
 - 不创建猜测性的 `create_clock`、pin assignment 或 I/O standard；
 - 不实例化 MMCM/PLL、ILA、BRAM 或其他 Xilinx IP；

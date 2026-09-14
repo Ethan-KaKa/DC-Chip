@@ -1,10 +1,10 @@
 # DC-Chip 软件 ABI 与运行时规范
 
-- 版本：v1.0 (阶段 4)
-- 状态：已正式冻结
-- 日期：2026-09-11
+- 版本：v1.0
+- 状态：现行 ABI 契约
+- 日期：2026-09-14
 - ISA 规范：`docs/isa/isa.md` v1.0
-- 地址规范：`docs/architecture/memory-map.md` v0.2
+- 地址规范：[`memory-map.md`](memory-map.md)
 
 ---
 
@@ -110,7 +110,7 @@
 
 ## 6. RV32E 指令集硬性审计要求
 
-阶段 4 起，任何软件镜像的汇编或编译输出必须通过 `scripts/check_isa_subset.py` 审计：
+任何软件镜像的汇编或编译输出必须通过 `scripts/check_isa_subset.py` 审计：
 
 1. **允许的指令**：
    - 官方 RV32E 37 条标准基础整数指令：`lui, auipc, jal, jalr, beq, bne, blt, bge, bltu, bgeu, lb, lh, lw, lbu, lhu, sb, sh, sw, addi, slti, sltiu, xori, ori, andi, slli, srli, srai, add, sub, sll, slt, sltu, xor, srl, sra, or, and, fence`；

@@ -25,6 +25,9 @@ SIM_TEST_CPP    := sim/tests/test_simulation.cpp
 _test-infra-make-cli:
 	$(PYTHON) scripts/test_make_cli.py --make "$(MAKE)"
 
+_test-infra-repo-rules:
+	$(PYTHON) scripts/test_repo_rules.py
+
 $(DISASM_TEST_DIR):
 	mkdir -p $@
 
@@ -145,7 +148,7 @@ testinfra:
 			fi ;; \
 	esac
 
-.PHONY: _test-infra-make-cli _test-infra-disasm _test-infra-isa _test-infra-memory \
+.PHONY: _test-infra-make-cli _test-infra-repo-rules _test-infra-disasm _test-infra-isa _test-infra-memory \
 	_test-infra-reference _test-infra-simulation _test-infra-difftest-engine \
 	_test-infra-integration _test-infra-wave _test-infra-sdb \
 	_test-infra-unified-sim testinfra

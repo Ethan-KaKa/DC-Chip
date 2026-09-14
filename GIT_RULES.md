@@ -113,4 +113,7 @@ The unit suite passes `make test-unit`.
 - [Pro Git：Submodules](https://git-scm.com/book/en/v2/Git-Tools-Submodules)：父仓库记录子模块路径和确定的提交。
 - [GitHub：Repository limits](https://docs.github.com/en/repositories/creating-and-managing-repositories/repository-limits)：生成物宜放在 Git 之外，大型二进制宜使用 Git LFS。
 
-客户端 hook 不能证明 AI 已经阅读规则，也不能覆盖 `status`、`add` 等全部 Git 命令；因此 `AGENTS.md` 的前置要求负责约束 AI，hook 只拦截可机械识别的提交风险。
+客户端 hook 不能证明 AI 已经阅读规则，也不能覆盖 `status`、`add` 等全部 Git
+命令；因此 `AGENTS.md` 的前置要求负责约束 AI。hook 复用
+`scripts/check_repo_rules.py --staged` 检查索引中的路径、私有配置、Markdown
+相对链接和临时文档隔离，并继续拦截其他可机械识别的提交风险。

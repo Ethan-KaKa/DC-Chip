@@ -139,7 +139,7 @@ UNIT_TESTS = [
     {
         "name": "core",
         "make_target": "_test-unit-core",
-        "default_desc": "单周期 CPU 核心取指、译码、执行与写回流水自检",
+        "default_desc": "顺序 CPU 核心取指、译码、执行、访存、提交与 fault 自检",
     },
     {
         "name": "led",
@@ -154,7 +154,7 @@ UNIT_TESTS = [
     {
         "name": "buttons",
         "make_target": "_test-unit-buttons",
-        "default_desc": "8位 MMIO Buttons 输入同步、可选去抖与只读访问自检",
+        "default_desc": "21位 MMIO Buttons 输入同步、可选去抖与只读访问自检",
     },
     {
         "name": "seg7",
@@ -237,6 +237,7 @@ def run_unit_tests(filter_str=None, make_command="make"):
 # -----------------------------------------------------------------------------
 INFRA_TESTS = [
     {"name": "make-cli", "make_target": "_test-infra-make-cli", "desc": "Make 公开命令、分层语法、错误前置校验与旧接口移除自检"},
+    {"name": "repo-rules", "make_target": "_test-infra-repo-rules", "desc": "Markdown 链接、临时文档隔离与 tracked/index 规则自检"},
     {"name": "config", "make_target": "_test-infra-config", "desc": "Kconfig 选项解析、依赖图同步与头文件生成机制测试"},
     {"name": "isa", "make_target": "_test-infra-isa", "desc": "RV32E 编码宏、硬件译码器与反汇编器跨工具一致性测试"},
     {"name": "disasm", "make_target": "_test-infra-disasm", "desc": "C++ 反汇编引擎格式化字符串与操作数提取自检"},
