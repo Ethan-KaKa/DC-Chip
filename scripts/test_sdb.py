@@ -156,10 +156,16 @@ def state(
     commits: int,
     time: int,
 ) -> str:
-    register_text = " ".join(f"x{index}={value}" for index, value in enumerate(registers))
+    register_rows = "\n".join(
+        " ".join(
+            f"x{index}={value}"
+            for index, value in enumerate(registers[row : row + 4], start=row)
+        )
+        for row in range(0, len(registers), 4)
+    )
     return (
-        f'state pc={pc} inst={inst} asm="{assembly}" {register_text} '
-        f"cycles={cycles} commits={commits} time={time}\n"
+        f'state pc={pc} inst={inst} asm="{assembly}" '
+        f"cycles={cycles} commits={commits} time={time}\n{register_rows}\n"
     )
 
 

@@ -43,12 +43,17 @@ void print_help(std::ostream &output) {
 void print_state(const ArchitecturalState &state, std::ostream &output) {
   output << "state pc=" << hex_value(state.fetch_pc, 8)
          << " inst=" << hex_value(state.fetch_inst, 8) << " asm=\""
-         << disassemble(state.fetch_inst) << '"';
+         << disassemble(state.fetch_inst) << "\" cycles=" << state.cycles
+         << " commits=" << state.commits << " time=" << state.time << '\n';
   for (std::size_t index = 0; index < state.registers.size(); ++index) {
-    output << " x" << index << '=' << hex_value(state.registers[index], 8);
+    if ((index % 4U) != 0U) {
+      output << ' ';
+    }
+    output << "x" << index << '=' << hex_value(state.registers[index], 8);
+    if ((index % 4U) == 3U) {
+      output << '\n';
+    }
   }
-  output << " cycles=" << state.cycles << " commits=" << state.commits
-         << " time=" << state.time << '\n';
 }
 
 void print_commit(const StepEvent &event, std::ostream &output) {
