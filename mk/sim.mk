@@ -28,6 +28,9 @@ SIM_CLI_CPP += sim/verilator/disasm.cpp \
 endif
 
 ifeq ($(CONFIG_DC_SIM_DIFFTEST),y)
+ifneq ($(CONFIG_DC_SIM_SDB),y)
+SIM_CLI_CPP += sim/verilator/disasm.cpp
+endif
 SIM_CLI_CPP += sim/verilator/reference_model.cpp \
 	sim/verilator/dynamic_ref_backend.cpp \
 	sim/verilator/difftest.cpp
@@ -69,7 +72,7 @@ SIM_CPP := $(SIM_ENGINE_CPP) $(SIM_CLI_CPP) $(SIM_CPP_EXTRA)
 
 $(SIM_BIN): $(SIM_RTL) $(SIM_CPP) sim/verilator/memory.h \
 	sim/verilator/numeric.h sim/verilator/simulation.h \
-	$(if $(filter y,$(CONFIG_DC_SIM_SDB)),sim/verilator/sdb.h sim/verilator/disasm.h) $(BUILD_MAKEFILES) \
+	$(if $(filter y,$(CONFIG_DC_SIM_SDB) $(CONFIG_DC_SIM_DIFFTEST)),sim/verilator/disasm.h) $(BUILD_MAKEFILES) \
 	$(CONFIG_H) $(AUTO_CONF) $(SIM_EXTRA_DEPS)
 	mkdir -p $(SIM_DIR)
 	@rm -f -- "$(SIM_BIN)"

@@ -5,6 +5,7 @@
 #include "sdb.h"
 #endif
 #ifdef CONFIG_DC_SIM_DIFFTEST
+#include "disasm.h"
 #include "difftest.h"
 #include "dynamic_ref_backend.h"
 #include "reference_model.h"
@@ -349,11 +350,29 @@ bool check_expectations(const Options &options,
 
 #ifdef CONFIG_DC_SIM_DIFFTEST
 void print_difftest_mismatch(const dc_sim::DifftestMismatch &mismatch) {
-  std::cerr << "error: difftest mismatch at cycle=" << mismatch.cycle
-            << " commit=" << mismatch.commit << " field=" << mismatch.field
-            << ": DUT " << hex_value(mismatch.dut_value, 8)
-            << " vs REF " << hex_value(mismatch.ref_value, 8) << '\n'
-            << "  " << mismatch.message << '\n';
+  std::cerr << "error: difftest mismatch\n"
+            << "  field : " << mismatch.field << '\n'
+            << "  DUT   : " << hex_value(mismatch.dut_value, 8) << '\n'
+            << "  REF   : " << hex_value(mismatch.ref_value, 8) << '\n'
+            << "  pc    : " << hex_value(mismatch.pc, 8) << '\n'
+            << "  inst  : " << hex_value(mismatch.inst, 8) << " asm=\""
+            << dc_sim::disassemble(mismatch.inst) << "\"\n";
+
+  if (!mismatch.has_register_snapshot) {
+    return;
+  }
+
+  std::cerr << "  DUT registers:\n    ";
+  for (std::size_t index = 0; index < mismatch.dut_registers.size(); ++index) {
+    if ((index % 4U) != 0U) {
+      std::cerr << ' ';
+    }
+    std::cerr << "x" << index << '=' << hex_value(mismatch.dut_registers[index], 8);
+    if ((index % 4U) == 3U && index + 1U < mismatch.dut_registers.size()) {
+      std::cerr << "\n    ";
+    }
+  }
+  std::cerr << '\n';
 }
 #endif
 

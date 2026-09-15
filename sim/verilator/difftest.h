@@ -4,6 +4,7 @@
 #include "ref_backend.h"
 #include "simulation.h"
 
+#include <array>
 #include <cstdint>
 #include <string>
 
@@ -16,6 +17,10 @@ struct DifftestMismatch {
   std::uint32_t dut_value = 0;
   std::uint32_t ref_value = 0;
   std::string message;
+  std::uint32_t pc = 0;
+  std::uint32_t inst = 0;
+  bool has_register_snapshot = false;
+  std::array<std::uint32_t, 16> dut_registers{};
 };
 
 class Difftest {

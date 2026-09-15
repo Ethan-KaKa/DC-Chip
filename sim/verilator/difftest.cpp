@@ -34,6 +34,23 @@ bool Difftest::step_and_compare(std::uint64_t max_cycles, DifftestMismatch *mism
 
 bool Difftest::compare_result(const RunResult &dut_res,
                               DifftestMismatch *mismatch) {
+  const auto capture_registers = [&]() {
+    if (mismatch != nullptr) {
+      mismatch->has_register_snapshot = true;
+      mismatch->dut_registers = dut_res.state.registers;
+      if (dut_res.event.committed) {
+        mismatch->pc = dut_res.event.commit_pc;
+        mismatch->inst = dut_res.event.commit_inst;
+      } else if (dut_res.event.entered_fault) {
+        mismatch->pc = dut_res.event.fault_pc;
+        mismatch->inst = dut_res.event.fault_inst_valid ? dut_res.event.fault_inst : 0;
+      } else {
+        mismatch->pc = dut_res.state.fetch_pc;
+        mismatch->inst = dut_res.state.fetch_inst;
+      }
+    }
+  };
+
   if (dut_res.reason == StopReason::timeout) {
     if (mismatch != nullptr) {
       mismatch->cycle = dut_res.state.cycles;
@@ -41,6 +58,7 @@ bool Difftest::compare_result(const RunResult &dut_res,
       mismatch->field = "timeout";
       mismatch->message = "DUT timed out before completing instruction step";
     }
+    capture_registers();
     return false;
   }
 
@@ -55,6 +73,7 @@ bool Difftest::compare_result(const RunResult &dut_res,
         mismatch->message = "commit_pc mismatch on skip_ref: DUT " + hex8(dut_res.event.commit_pc) +
                             " vs REF " + hex8(ref_.pc());
       }
+      capture_registers();
       return false;
     }
 
@@ -83,6 +102,7 @@ bool Difftest::compare_result(const RunResult &dut_res,
           mismatch->message = "Register x" + std::to_string(i) + " mismatch after skip_ref: DUT " +
                               hex8(dut_state.registers[i]) + " vs REF " + hex8(ref_.reg(i));
         }
+        capture_registers();
         return false;
       }
     }
@@ -98,6 +118,7 @@ bool Difftest::compare_result(const RunResult &dut_res,
         mismatch->message = "Next PC mismatch after skip_ref: DUT " + hex8(dut_state.fetch_pc) +
                             " vs REF " + hex8(next_pc);
       }
+      capture_registers();
       return false;
     }
 
@@ -117,6 +138,7 @@ bool Difftest::compare_result(const RunResult &dut_res,
         mismatch->ref_value = 0;
         mismatch->message = "DUT faulted but reference model did not fault";
       }
+      capture_registers();
       return false;
     }
     if (dut_res.event.fault_cause != ref_res.fault_cause) {
@@ -131,6 +153,7 @@ bool Difftest::compare_result(const RunResult &dut_res,
                             " vs REF " +
                             std::string(fault_cause_string(ref_res.fault_cause));
       }
+      capture_registers();
       return false;
     }
     if (dut_res.event.fault_pc != ref_res.fault_pc) {
@@ -143,6 +166,7 @@ bool Difftest::compare_result(const RunResult &dut_res,
         mismatch->message = "DUT fault_pc mismatch: " + hex8(dut_res.event.fault_pc) +
                             " vs REF " + hex8(ref_res.fault_pc);
       }
+      capture_registers();
       return false;
     }
     return true;
@@ -158,6 +182,7 @@ bool Difftest::compare_result(const RunResult &dut_res,
       mismatch->ref_value = 1;
       mismatch->message = "Reference model faulted but DUT did not fault";
     }
+    capture_registers();
     return false;
   }
 
@@ -171,6 +196,7 @@ bool Difftest::compare_result(const RunResult &dut_res,
       mismatch->message = "commit_pc mismatch: DUT " + hex8(dut_res.event.commit_pc) +
                           " vs REF " + hex8(ref_res.commit_pc);
     }
+    capture_registers();
     return false;
   }
 
@@ -184,6 +210,7 @@ bool Difftest::compare_result(const RunResult &dut_res,
       mismatch->message = "commit_inst mismatch: DUT " + hex8(dut_res.event.commit_inst) +
                           " vs REF " + hex8(ref_res.commit_inst);
     }
+    capture_registers();
     return false;
   }
 
@@ -200,6 +227,7 @@ bool Difftest::compare_result(const RunResult &dut_res,
         mismatch->message = "Register x" + std::to_string(i) + " mismatch: DUT " +
                             hex8(dut_state.registers[i]) + " vs REF " + hex8(ref_.reg(i));
       }
+      capture_registers();
       return false;
     }
   }
@@ -219,6 +247,7 @@ bool Difftest::compare_result(const RunResult &dut_res,
                             hex8(dut_res.event.guest_exit_code) + " vs REF " +
                             hex8(ref_res.guest_exit_code);
       }
+      capture_registers();
       return false;
     }
     return true;
@@ -235,6 +264,7 @@ bool Difftest::compare_result(const RunResult &dut_res,
       mismatch->message = "Next PC mismatch: DUT " + hex8(dut_state.fetch_pc) +
                           " vs REF " + hex8(ref_res.next_pc);
     }
+    capture_registers();
     return false;
   }
 

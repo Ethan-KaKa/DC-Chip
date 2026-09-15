@@ -107,7 +107,7 @@ NVBoard 或 Difftest 选择不会改变完整回归门禁。
 
 `make testinfra ALL=sdb` 自行在 `build/test-fixtures/sdb/` 下生成 SDB-off、SDB-only 和
 SDB+WAVE 三套隔离配置与构建，不读取或修改仓库根 `.config`。SDB 关闭时，
-正式仿真器的源文件和链接对象均不包含 `sdb.cpp` 或 SDB 所需的反汇编实现。
+正式仿真器不包含 `sdb.cpp`；若 Difftest 启用，仍会编入反汇编实现以格式化失配诊断。
 
 ## 5. 波形构建行为
 
