@@ -5,9 +5,11 @@ UNIT_DIR := $(BUILD_DIR)/unit
 ISA_PKG := rtl/core/dc_isa_pkg.sv
 COMB_RTL := $(ISA_PKG) \
 	rtl/core/decoder.sv \
-	rtl/core/alu.sv
+	rtl/core/alu.sv \
+	rtl/core/execute_unit.sv
 CORE_RTL := $(COMB_RTL) \
 	rtl/core/regfile.sv \
+	rtl/core/load_store_unit.sv \
 	rtl/core/cpu_core.sv
 PERIPH_RTL := rtl/periph/led_controller.sv \
 	rtl/periph/uart_controller.sv \
@@ -22,6 +24,10 @@ SOC_RTL := rtl/soc/mmio_cdc_bridge.sv \
 _lint-isa:
 	$(VERILATOR) --lint-only --language 1800-2012 -Wall -Wno-UNUSEDPARAM \
 		--top-module decoder $(ISA_PKG) rtl/core/decoder.sv
+	$(VERILATOR) --lint-only --language 1800-2012 -Wall -Wno-UNUSEDPARAM \
+		--top-module execute_unit $(ISA_PKG) rtl/core/alu.sv rtl/core/execute_unit.sv
+	$(VERILATOR) --lint-only --language 1800-2012 -Wall -Wno-UNUSEDPARAM \
+		--top-module load_store_unit $(ISA_PKG) rtl/core/load_store_unit.sv
 
 _lint-comb:
 	$(VERILATOR) --lint-only --language 1800-2012 -Wall -Wno-UNUSEDPARAM \
@@ -46,6 +52,12 @@ $(UNIT_DIR)/tb_alu.vvp: $(ISA_PKG) rtl/core/alu.sv sim/tb/tb_alu.sv $(BUILD_MAKE
 
 $(UNIT_DIR)/tb_decoder.vvp: $(ISA_PKG) rtl/core/decoder.sv sim/tb/tb_decoder.sv $(BUILD_MAKEFILES) | $(UNIT_DIR)
 	$(IVERILOG) -g2012 -s tb_decoder -o $@ $(ISA_PKG) rtl/core/decoder.sv sim/tb/tb_decoder.sv
+
+$(UNIT_DIR)/tb_execute_unit.vvp: $(ISA_PKG) rtl/core/alu.sv rtl/core/execute_unit.sv sim/tb/tb_execute_unit.sv $(BUILD_MAKEFILES) | $(UNIT_DIR)
+	$(IVERILOG) -g2012 -s tb_execute_unit -o $@ $(ISA_PKG) rtl/core/alu.sv rtl/core/execute_unit.sv sim/tb/tb_execute_unit.sv
+
+$(UNIT_DIR)/tb_load_store_unit.vvp: $(ISA_PKG) rtl/core/load_store_unit.sv sim/tb/tb_load_store_unit.sv $(BUILD_MAKEFILES) | $(UNIT_DIR)
+	$(IVERILOG) -g2012 -s tb_load_store_unit -o $@ $(ISA_PKG) rtl/core/load_store_unit.sv sim/tb/tb_load_store_unit.sv
 
 $(UNIT_DIR)/tb_regfile.vvp: $(ISA_PKG) rtl/core/regfile.sv sim/tb/tb_regfile.sv $(BUILD_MAKEFILES) | $(UNIT_DIR)
 	$(IVERILOG) -g2012 -s tb_regfile -o $@ $(ISA_PKG) rtl/core/regfile.sv sim/tb/tb_regfile.sv
@@ -82,6 +94,12 @@ _test-unit-alu: $(UNIT_DIR)/tb_alu.vvp
 	$(VVP) $<
 
 _test-unit-decoder: $(UNIT_DIR)/tb_decoder.vvp
+	$(VVP) $<
+
+_test-unit-execute: $(UNIT_DIR)/tb_execute_unit.vvp
+	$(VVP) $<
+
+_test-unit-lsu: $(UNIT_DIR)/tb_load_store_unit.vvp
 	$(VVP) $<
 
 _test-unit-regfile: $(UNIT_DIR)/tb_regfile.vvp
@@ -134,7 +152,8 @@ testunit:
 	esac
 
 .PHONY: _lint-isa _lint-comb _lint-core _lint-mem \
-	_test-unit-alu _test-unit-decoder _test-unit-regfile _test-unit-core \
+	_test-unit-alu _test-unit-decoder _test-unit-execute _test-unit-lsu \
+	_test-unit-regfile _test-unit-core \
 	_test-unit-led _test-unit-uart _test-unit-buttons _test-unit-periph-interconnect \
 	_test-unit-seg7 \
 	_test-unit-cdc _test-unit-interconnect _test-unit-soc _test-unit-lint testunit

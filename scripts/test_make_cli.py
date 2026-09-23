@@ -212,7 +212,8 @@ def main():
     legacy_targets = (
         "lint", "lint-isa", "lint-comb", "lint-mem",
         "test-unit", "test-sw", "test-config", "test-isa", "test-alu",
-        "test-decoder", "test-regfile", "test-core", "test-led", "test-uart",
+        "test-decoder", "test-execute", "test-lsu", "test-regfile", "test-core",
+        "test-led", "test-uart",
         "test-periph-interconnect", "test-cdc", "test-interconnect", "test-soc",
         "test-disasm", "test-memory", "test-reference", "test-simulation",
         "test-difftest", "test-integration", "test-wave", "test-sdb",

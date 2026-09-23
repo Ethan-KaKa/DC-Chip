@@ -134,6 +134,16 @@ UNIT_TESTS = [
         "default_desc": "RV32E 37条基础指令译码、立即数重组与非法指令识别自检",
     },
     {
+        "name": "execute",
+        "make_target": "_test-unit-execute",
+        "default_desc": "执行单元操作数、分支、跳转、写回与控制流对齐自检",
+    },
+    {
+        "name": "lsu",
+        "make_target": "_test-unit-lsu",
+        "default_desc": "LSU 对齐、lane、握手、响应扩展与 fault 自检",
+    },
+    {
         "name": "regfile",
         "make_target": "_test-unit-regfile",
         "default_desc": "通用寄存器堆 (x0--x15) 读写、内部旁路与 x0 写保护自检",

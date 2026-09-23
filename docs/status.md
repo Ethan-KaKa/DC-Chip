@@ -1,6 +1,6 @@
 # 当前状态
 
-- 快照日期：2026-09-14
+- 快照日期：2026-09-23
 - 证据范围：RTL lint/behavioral simulation、Verilator、软件回归与差分测试
 - FPGA 综合、实现、时序、资源、功耗与真实上板：**未验证**
 
@@ -44,6 +44,10 @@
   21/21 软件系统测试和 38/38 pinned RV32E ISA 回归。使用
   `build/test-fixtures/full-regression/` 下的隔离 default defconfig；未运行可选 Spike
   回归。
+- 2026-09-23：`rtl/core` 模块边界整理后 `make test` PASS：15/15 RTL 单元与
+  lint、13/13 默认基础设施、21/21 软件系统测试和 38/38 pinned RV32E ISA
+  回归。新增 execute 与 LSU 定向单测；使用隔离 default defconfig，未运行可选
+  Spike 回归。
 
 历史八指令 v0.2 是演进过程，不是当前能力。v0.1 可执行基线冻结于
 [`9bfb9a9`](https://github.com/Ethan-KaKa/DC-Chip/commit/9bfb9a97153be05de34c6d2311c09f41cb6f43ab)，

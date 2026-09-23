@@ -21,6 +21,31 @@ PC -> fetch handshake -> instruction register -> decoder -> regfile -> execute
 commit/trace/fault <- controller <- writeback <--------------------+
 ```
 
+核心内部按职责划分为以下模块；这些边界不改变 `cpu_core` 的公开端口或周期协议：
+
+```mermaid
+flowchart LR
+    IMEM[Instruction bus] --> CORE[cpu_core<br/>PC / fetch / commit / fault]
+    CORE --> DEC[decoder<br/>decode_info_t]
+    DEC --> EXE[execute_unit<br/>operand / ALU / control flow]
+    EXE --> LSU[load_store_unit<br/>alignment / lanes / transaction]
+    LSU <--> DMEM[Data bus]
+    CORE <--> RF[regfile]
+    EXE --> CORE
+    LSU --> CORE
+    CORE --> TRACE[trace / sticky fault]
+```
+
+- `decoder` 将指令一次性转换为 `decode_info_t`，负责 RV32E 寄存器边界、立即数、
+  操作数选择、写回、访存和控制流分类；后级不再从原始 opcode 反向推断用途。
+- `execute_unit` 是组合执行边界，包含 operand mux、`alu`、分支比较、跳转目标、
+  下一 PC、普通写回值和实际控制流目标对齐检查。
+- `load_store_unit` 独占数据事务状态和请求上下文，负责地址对齐、size、store
+  lane/strobe、load lane/扩展、访问错误分类及 `skip_ref` 传播。请求接受前 payload
+  保持稳定，reset 放弃旧事务并拒绝迟到响应。
+- `cpu_core` 只仲裁取指、LSU 完成、架构状态提交与粘滞 fault；非访存在取指响应
+  拍提交，访存仍只在成功数据响应拍提交。
+
 核心使用单一 `clk` 和同步高有效 `rst`。板级输入如何同步、转换极性和释放复位由
 FPGA wrapper 处理，当前信息见 [`../fpga/board.md`](../fpga/board.md)。
 

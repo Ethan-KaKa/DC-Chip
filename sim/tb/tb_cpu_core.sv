@@ -241,6 +241,7 @@ module tb_cpu_core;
       dmem_rsp_valid = 1'b0;
       dmem_rsp_rdata = 32'd0;
       dmem_rsp_error = 1'b0;
+      dmem_rsp_skip_ref = 1'b0;
     end
   endtask
 
@@ -843,6 +844,19 @@ module tb_cpu_core;
     fetch_same_cycle(32'd44, inst, 1'b0);
     check_commit(32'd44, inst, 32'd48);
     check_reg(4'd4, 32'd0);
+
+    // A successful memory response propagates skip_ref on its exact commit.
+    inst = enc_lw(5'd5, 5'd0, 0);
+    fetch_same_cycle(32'd48, inst, 1'b0);
+    dmem_rsp_skip_ref = 1'b1;
+    dmem_same_cycle(32'd0, 1'b0, 2'b10, 32'd0, 4'b0000,
+                    32'h1357_9bdf, 1'b0);
+    check_commit(32'd48, inst, 32'd52);
+    if (trace_skip_ref !== 1'b1) begin
+      $fatal(1, "tb_cpu_core: memory skip_ref was not propagated");
+    end
+    dmem_rsp_skip_ref = 1'b0;
+    check_reg(4'd5, 32'h1357_9bdf);
 
     $display("tb_cpu_core: PASS");
     disable clock_block;

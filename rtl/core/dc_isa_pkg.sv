@@ -93,6 +93,24 @@ package dc_isa_pkg;
     BRANCH_BGEU = 3'd6
   } branch_op_e;
 
+  typedef enum logic [1:0] {
+    OPERAND_A_ZERO = 2'd0,
+    OPERAND_A_RS1  = 2'd1,
+    OPERAND_A_PC   = 2'd2
+  } operand_a_sel_e;
+
+  typedef enum logic {
+    OPERAND_B_RS2 = 1'b0,
+    OPERAND_B_IMM = 1'b1
+  } operand_b_sel_e;
+
+  typedef enum logic [1:0] {
+    CONTROL_NONE   = 2'd0,
+    CONTROL_BRANCH = 2'd1,
+    CONTROL_JAL    = 2'd2,
+    CONTROL_JALR   = 2'd3
+  } control_flow_e;
+
   typedef enum logic [2:0] {
     FAULT_NONE                    = 3'd0,
     FAULT_ILLEGAL_INSTRUCTION     = 3'd1,
@@ -103,6 +121,80 @@ package dc_isa_pkg;
     FAULT_STORE_MISALIGNED        = 3'd6,
     FAULT_STORE_ACCESS            = 3'd7
   } fault_cause_e;
+
+  typedef struct packed {
+    logic [REG_ADDR_WIDTH-1:0] rd;
+    logic [REG_ADDR_WIDTH-1:0] rs1;
+    logic [REG_ADDR_WIDTH-1:0] rs2;
+    logic [XLEN-1:0]           imm;
+    alu_op_e                    alu_op;
+    operand_a_sel_e             operand_a_sel;
+    operand_b_sel_e             operand_b_sel;
+    writeback_sel_e             writeback_sel;
+    mem_op_e                    mem_op;
+    branch_op_e                 branch_op;
+    control_flow_e              control_flow;
+    logic                       legal;
+  } decode_info_t;
+
+  typedef struct packed {
+    logic [PC_WIDTH-1:0]       pc;
+    logic [INST_WIDTH-1:0]     inst;
+    logic [REG_ADDR_WIDTH-1:0] rd;
+    logic [XLEN-1:0]           addr;
+    logic [DATA_WIDTH-1:0]     store_data;
+    mem_op_e                   mem_op;
+  } lsu_issue_t;
+
+  typedef struct packed {
+    logic                       valid;
+    logic                       error;
+    fault_cause_e               fault_cause;
+    logic [PC_WIDTH-1:0]        pc;
+    logic [INST_WIDTH-1:0]      inst;
+    logic [REG_ADDR_WIDTH-1:0]  rd;
+    logic [DATA_WIDTH-1:0]      writeback_data;
+    logic                       writeback_en;
+    logic                       skip_ref;
+  } lsu_completion_t;
+
+  function automatic logic mem_is_load(input mem_op_e mem_op);
+    mem_is_load = (mem_op == MEM_LB)  || (mem_op == MEM_LBU) ||
+                  (mem_op == MEM_LH)  || (mem_op == MEM_LHU) ||
+                  (mem_op == MEM_LW);
+  endfunction
+
+  function automatic logic mem_is_store(input mem_op_e mem_op);
+    mem_is_store = (mem_op == MEM_SB) || (mem_op == MEM_SH) ||
+                   (mem_op == MEM_SW);
+  endfunction
+
+  function automatic logic mem_is_half(input mem_op_e mem_op);
+    mem_is_half = (mem_op == MEM_LH) || (mem_op == MEM_LHU) ||
+                  (mem_op == MEM_SH);
+  endfunction
+
+  function automatic logic mem_is_word(input mem_op_e mem_op);
+    mem_is_word = (mem_op == MEM_LW) || (mem_op == MEM_SW);
+  endfunction
+
+  function automatic logic mem_is_misaligned(
+    input mem_op_e mem_op,
+    input logic [1:0] addr
+  );
+    mem_is_misaligned = (mem_is_word(mem_op) && (addr[1:0] != 2'b00)) ||
+                        (mem_is_half(mem_op) && (addr[0] != 1'b0));
+  endfunction
+
+  function automatic logic [1:0] mem_size(input mem_op_e mem_op);
+    if (mem_is_word(mem_op)) begin
+      mem_size = 2'b10;
+    end else if (mem_is_half(mem_op)) begin
+      mem_size = 2'b01;
+    end else begin
+      mem_size = 2'b00;
+    end
+  endfunction
 endpackage
 
 `default_nettype wire
