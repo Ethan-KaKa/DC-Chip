@@ -81,7 +81,8 @@ nibble 显示在 `SEG0`，最高显示在 `SEG7`。任意 `wstrb` lane 可独立
 ## 4. 私有仿真地址
 
 `0xfffffff0` 是仿真专用 `tohost`：只有 32 位 store 合法，写入值作为 guest
-exit code；其他宽度或读访问错误。它由存储模型处理，不属于正式 FPGA MMIO，
+exit code；其他宽度或读访问错误。它由 DRAM 前端 controller 处理，不进入存储
+叶子，也不属于正式 FPGA MMIO，
 也不标记为 difftest `skip_ref`。镜像和进程退出规则见
 [`../verification/simulator.md`](../verification/simulator.md)。
 

@@ -136,8 +136,30 @@ fault 前不发出下一条取指，因此没有需 flush 的推测响应。
 
 ## 8. SoC 路由与 CDC
 
-取指只连接 IROM。LSU 经 `soc_interconnect` 把 DRAM/`tohost`、MMIO 和未映射
-错误分流；MMIO 再经 `mmio_cdc_bridge` 与 `periph_interconnect` 路由到具体外设。
+`dc_soc_top` 是自包含 composition root，实例化总线级 `dc_soc_subsystem`、两个
+存储 controller 和 IROM/DRAM 叶子。`dc_soc_subsystem` 只包含 `cpu_core`、
+`soc_interconnect` 与 `soc_periph_subsystem`；后者收拢 CDC、外设路由以及
+UART/LED/Buttons/SEG7 controller。取指只连接 IROM。LSU 经 `soc_interconnect`
+把 DRAM/`tohost`、MMIO 和未映射错误分流。
+
+```mermaid
+flowchart LR
+    CPU[cpu_core] --> IC[soc_interconnect]
+    CPU --> IRC[irom_controller] --> IR[irom]
+    IC --> DRC[dram_controller] --> DR[dram]
+    IC --> PS[soc_periph_subsystem<br/>CDC / router / devices]
+```
+
+`irom_controller` 检查 64 KiB 范围和四字节对齐，将 byte address 转为 14-bit word
+index，并保持异步读和可同拍完成的取指响应。`dram_controller` 每次保存一个在途
+事务，保持背压响应稳定，并只在成功响应握手沿向 DRAM 叶子发出 byte write
+enable 或提交 `tohost`。reset 丢弃尚未完成的事务。
+
+行为叶子 `irom(clk,a,spo)` 和 `dram(clka,addra,dina,wea,douta)` 分别实现异步 ROM
+读与单时钟同步 read-first DRAM。Verilator source set 编译带 DPI-C 的行为叶子；
+未来 Vivado source set 必须排除它们，并提供模块名、端口、16K×32 深度、DRAM
+四路 byte write enable 和 read-first 时序完全相同的 IP。不得在 SoC RTL 中用隐式
+延时补偿 IP 配置差异。`ENABLE_TOHOST=0` 时仿真私有地址只返回 access error。
 
 `mmio_cdc_bridge` 有两种参数化实现：
 

@@ -10,8 +10,8 @@
   [`isa/isa.md`](isa/isa.md) 定义的 RV32E v1.0 基础整数指令及严格
   `x0`--`x15` 边界，fault 粘滞至 reset。
 - 存储：64 KiB IROM（`0x00000000`）与 64 KiB DRAM（`0x20000000`）Harvard
-  隔离，使用独立 `.inst.bin` / `.data.bin` 镜像；仿真私有 `tohost` 位于
-  `0xfffffff0`。
+  隔离，使用独立 `.inst.bin` / `.data.bin` 镜像；协议 controller 与可替换
+  `irom`/`dram` 叶子分离，仿真私有 `tohost` 位于 `0xfffffff0`。
 - SoC：MMIO UART、16 位 LED、Buttons 输入与八位十六进制七段数码管；CPU/内存
   与外设之间提供同步直通或异步 toggle-handshake CDC 路径。
 - 软件：仓库内自包含 AM-like 运行时、`klib`、格式化输出、设备抽象、ISA 审计、
@@ -48,6 +48,11 @@
   lint、13/13 默认基础设施、21/21 软件系统测试和 38/38 pinned RV32E ISA
   回归。新增 execute 与 LSU 定向单测；使用隔离 default defconfig，未运行可选
   Spike 回归。
+- 2026-09-23：`rtl/soc` 模块边界整理后，`dc_soc_top` 成为自包含 SoC，行为
+  IROM/DRAM 可由同端口 Vivado IP 替换；`make check-paths` PASS，`make test` PASS：
+  15/15 RTL 单元与 lint、13/13 默认基础设施、21/21 软件系统测试和 38/38 pinned
+  RV32E ISA 回归。Vivado 综合、IP 参数核对、post-synth、post-implementation 与
+  上板仍未执行。
 
 历史八指令 v0.2 是演进过程，不是当前能力。v0.1 可执行基线冻结于
 [`9bfb9a9`](https://github.com/Ethan-KaKa/DC-Chip/commit/9bfb9a97153be05de34c6d2311c09f41cb6f43ab)，

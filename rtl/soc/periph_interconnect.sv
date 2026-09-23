@@ -1,10 +1,10 @@
 `default_nettype none
 
 module periph_interconnect #(
-  parameter logic [31:0] UART_BASE = 32'h1000_0000,
-  parameter logic [31:0] LED_BASE  = 32'h1000_0100,
-  parameter logic [31:0] BUTTONS_BASE = 32'h1000_0200,
-  parameter logic [31:0] SEG7_BASE = 32'h1000_0300
+  parameter logic [31:0] UART_BASE = dc_soc_addr_pkg::UART_BASE,
+  parameter logic [31:0] LED_BASE  = dc_soc_addr_pkg::LED_BASE,
+  parameter logic [31:0] BUTTONS_BASE = dc_soc_addr_pkg::BUTTONS_BASE,
+  parameter logic [31:0] SEG7_BASE = dc_soc_addr_pkg::SEG7_BASE
 ) (
   input  logic        clk,
   input  logic        rst,

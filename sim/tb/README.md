@@ -15,4 +15,4 @@
 - `tb_periph_interconnect.sv`: 1-to-N 外设总线路由器地址分流与未映射地址总线错误自检
 - `tb_mmio_cdc_bridge.sv`: CPU 与外设跨时钟域 MMIO 握手桥异步四相翻转自检
 - `tb_soc_interconnect.sv`: SoC 内存与外设地址空间译码分流与 access fault 契约自检
-- `tb_dc_soc_top.sv`: 完整 SoC 顶层单步集成、指令取指与 DRAM 访存时序自检
+- `tb_dc_soc_top.sv`: `dc_soc_subsystem` 总线级集成、指令取指与 DRAM 访存时序自检

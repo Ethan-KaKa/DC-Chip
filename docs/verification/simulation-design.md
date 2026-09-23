@@ -19,10 +19,10 @@
 ```mermaid
 flowchart LR
   SW[AM 软件与测试镜像] --> IMG[指令 / 数据镜像加载]
-  IMG --> MEM[sim_mem：IROM、DRAM、tohost]
+  IMG --> MEM[irom/dram 行为叶子：DPI-C 镜像]
   CLI[CLI / SDB] --> ENG[C++ Simulation 执行引擎]
   ENG --> TOP[sim_top]
-  TOP --> SOC[dc_soc_top：CPU、互连、外设]
+  TOP --> SOC[dc_soc_top：subsystem、存储 controller 与叶子]
   SOC <--> MEM
   TOP --> EVT[提交、fault、tohost、寄存器快照]
   EVT --> ENG
@@ -34,8 +34,8 @@ flowchart LR
 
 ## 2. DUT 封装与执行循环
 
-`sim_top` 只负责把 `dc_soc_top` 接到仿真私有内存模型，并导出提交、调试寄存器、
-fault、`tohost` 和外设可观测信号。`sim_mem` 分别模拟 IROM 与 DRAM，保持 Harvard
+`sim_top` 只实例化自包含的 `dc_soc_top`，并导出提交、调试寄存器、
+fault、`tohost` 和外设可观测信号。`irom` 与 `dram` 行为叶子保持 Harvard
 双镜像边界；仿真私有 `tohost` 用于把 guest 退出结果交给宿主。地址、容量、权限和
 副作用不在本文重述，均由 [`../architecture/memory-map.md`](../architecture/memory-map.md)
 定义。

@@ -6,7 +6,7 @@ SIM_BIN      := $(SIM_DIR)/Vsim_top
 SIM_RTL := $(CORE_RTL) \
 	$(PERIPH_RTL) \
 	$(SOC_RTL) \
-	$(MEM_RTL) \
+	$(MEMORY_LEAF_RTL) \
 	sim/verilator/sim_top.sv
 
 SIM_ENGINE_CPP := sim/verilator/memory.cpp \

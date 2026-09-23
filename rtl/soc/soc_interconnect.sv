@@ -1,11 +1,11 @@
 `default_nettype none
 
 module soc_interconnect #(
-  parameter logic [31:0] DRAM_BASE   = 32'h2000_0000,
-  parameter int unsigned DRAM_BYTES  = 65536,
-  parameter logic [31:0] MMIO_BASE   = 32'h1000_0000,
-  parameter int unsigned MMIO_BYTES  = 65536,
-  parameter logic [31:0] TOHOST_ADDR = 32'hffff_fff0
+  parameter logic [31:0] DRAM_BASE   = dc_soc_addr_pkg::DRAM_BASE,
+  parameter int unsigned DRAM_BYTES  = dc_soc_addr_pkg::DRAM_BYTES,
+  parameter logic [31:0] MMIO_BASE   = dc_soc_addr_pkg::MMIO_BASE,
+  parameter int unsigned MMIO_BYTES  = dc_soc_addr_pkg::MMIO_BYTES,
+  parameter logic [31:0] TOHOST_ADDR = dc_soc_addr_pkg::TOHOST_ADDR
 ) (
   input  logic        clk,
   input  logic        rst,

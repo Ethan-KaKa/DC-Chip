@@ -1,4 +1,4 @@
-#include "Vsim_mem.h"
+#include "Vmemory_test_top.h"
 #include "memory.h"
 #include "verilated.h"
 
@@ -125,13 +125,13 @@ void test_hex_loading(const std::filesystem::path &fixture_dir) {
 }
 
 // -----------------------------------------------------------------------------
-// Test 2: Hardware/Simulation Protocol Verification with sim_mem
+// Test 2: Controller and behavioral-leaf protocol verification
 // -----------------------------------------------------------------------------
 class MemoryTestbench {
  public:
   MemoryTestbench()
       : context_(std::make_unique<VerilatedContext>()),
-        dut_(std::make_unique<Vsim_mem>(context_.get())) {
+        dut_(std::make_unique<Vmemory_test_top>(context_.get())) {
     dut_->clk = 0;
     dut_->rst = 1;
     dut_->imem_req_valid = 0;
@@ -168,11 +168,11 @@ class MemoryTestbench {
     dut_->eval();
   }
 
-  Vsim_mem *dut() { return dut_.get(); }
+  Vmemory_test_top *dut() { return dut_.get(); }
 
  private:
   std::unique_ptr<VerilatedContext> context_;
-  std::unique_ptr<Vsim_mem> dut_;
+  std::unique_ptr<Vmemory_test_top> dut_;
 };
 
 void test_irom_protocol() {

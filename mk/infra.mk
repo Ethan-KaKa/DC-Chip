@@ -11,7 +11,12 @@ DIFF_TEST_BIN   := $(DIFF_TEST_DIR)/test_difftest
 SIM_TEST_DIR    := $(BUILD_DIR)/verilator-test
 SIM_TEST_BIN    := $(SIM_TEST_DIR)/test_simulation
 
-MEM_RTL         := sim/verilator/sim_mem.sv
+MEM_RTL         := rtl/soc/dc_soc_addr_pkg.sv \
+	rtl/soc/irom_controller.sv \
+	rtl/soc/dram_controller.sv \
+	rtl/soc/irom.sv \
+	rtl/soc/dram.sv \
+	sim/tb/memory_test_top.sv
 MEM_TEST_CPP    := sim/tests/test_memory.cpp
 DISASM_CPP      := sim/verilator/disasm.cpp
 DISASM_TEST_CPP := sim/tests/test_disasm.cpp
@@ -57,7 +62,7 @@ _test-infra-isa:
 $(MEM_TEST_BIN): $(MEM_RTL) sim/verilator/memory.cpp $(MEM_TEST_CPP) sim/verilator/memory.h $(BUILD_MAKEFILES)
 	mkdir -p $(MEM_TEST_DIR)
 	CCACHE_DISABLE=1 CXX="$(CXX)" $(VERILATOR) --cc --exe --build \
-		--language 1800-2012 -Wall --top-module sim_mem \
+		--language 1800-2012 -Wall -Wno-UNUSEDPARAM --top-module memory_test_top \
 		--Mdir $(MEM_TEST_DIR) -o test_memory \
 		-CFLAGS "-std=c++17 -I$(abspath sim/verilator)" \
 		$(MEM_RTL) sim/verilator/memory.cpp $(MEM_TEST_CPP)

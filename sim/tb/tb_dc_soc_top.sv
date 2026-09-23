@@ -49,7 +49,7 @@ module tb_dc_soc_top;
   logic        fault_inst_valid;
   logic [31:0] fault_inst;
 
-  dc_soc_top u_soc (
+  dc_soc_subsystem u_soc (
     .clk              (clk),
     .rst              (rst),
     .clk_periph       (clk),

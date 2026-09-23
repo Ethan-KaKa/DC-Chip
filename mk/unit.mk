@@ -15,10 +15,16 @@ PERIPH_RTL := rtl/periph/led_controller.sv \
 	rtl/periph/uart_controller.sv \
 	rtl/periph/buttons_controller.sv \
 	rtl/periph/seg7_controller.sv
-SOC_RTL := rtl/soc/mmio_cdc_bridge.sv \
+SOC_RTL := rtl/soc/dc_soc_addr_pkg.sv \
+	rtl/soc/mmio_cdc_bridge.sv \
 	rtl/soc/periph_interconnect.sv \
 	rtl/soc/soc_interconnect.sv \
+	rtl/soc/soc_periph_subsystem.sv \
+	rtl/soc/irom_controller.sv \
+	rtl/soc/dram_controller.sv \
+	rtl/soc/dc_soc_subsystem.sv \
 	rtl/soc/dc_soc_top.sv
+MEMORY_LEAF_RTL := rtl/soc/irom.sv rtl/soc/dram.sv
 
 # 静态规则检查 (Lint)
 _lint-isa:
@@ -40,8 +46,8 @@ _lint-core:
 		--top-module cpu_core $(CORE_RTL)
 
 _lint-mem:
-	$(VERILATOR) --lint-only --language 1800-2012 -Wall \
-		--top-module sim_mem $(MEM_RTL)
+	$(VERILATOR) --lint-only --language 1800-2012 -Wall -Wno-UNUSEDPARAM \
+		--top-module memory_test_top $(MEM_RTL)
 
 # 单元编译规则
 $(UNIT_DIR):
@@ -77,14 +83,14 @@ $(UNIT_DIR)/tb_buttons_controller.vvp: rtl/periph/buttons_controller.sv sim/tb/t
 $(UNIT_DIR)/tb_seg7_controller.vvp: rtl/periph/seg7_controller.sv sim/tb/tb_seg7_controller.sv $(BUILD_MAKEFILES) | $(UNIT_DIR)
 	$(IVERILOG) -g2012 -s tb_seg7_controller -Irtl/periph -o $@ rtl/periph/seg7_controller.sv sim/tb/tb_seg7_controller.sv
 
-$(UNIT_DIR)/tb_periph_interconnect.vvp: rtl/soc/periph_interconnect.sv sim/tb/tb_periph_interconnect.sv $(BUILD_MAKEFILES) | $(UNIT_DIR)
-	$(IVERILOG) -g2012 -s tb_periph_interconnect -Irtl/soc -o $@ rtl/soc/periph_interconnect.sv sim/tb/tb_periph_interconnect.sv
+$(UNIT_DIR)/tb_periph_interconnect.vvp: rtl/soc/dc_soc_addr_pkg.sv rtl/soc/periph_interconnect.sv sim/tb/tb_periph_interconnect.sv $(BUILD_MAKEFILES) | $(UNIT_DIR)
+	$(IVERILOG) -g2012 -s tb_periph_interconnect -Irtl/soc -o $@ rtl/soc/dc_soc_addr_pkg.sv rtl/soc/periph_interconnect.sv sim/tb/tb_periph_interconnect.sv
 
 $(UNIT_DIR)/tb_mmio_cdc_bridge.vvp: rtl/soc/mmio_cdc_bridge.sv sim/tb/tb_mmio_cdc_bridge.sv $(BUILD_MAKEFILES) | $(UNIT_DIR)
 	$(IVERILOG) -g2012 -s tb_mmio_cdc_bridge -Irtl/soc -o $@ rtl/soc/mmio_cdc_bridge.sv sim/tb/tb_mmio_cdc_bridge.sv
 
-$(UNIT_DIR)/tb_soc_interconnect.vvp: rtl/soc/soc_interconnect.sv sim/tb/tb_soc_interconnect.sv $(BUILD_MAKEFILES) | $(UNIT_DIR)
-	$(IVERILOG) -g2012 -s tb_soc_interconnect -Irtl/soc -o $@ rtl/soc/soc_interconnect.sv sim/tb/tb_soc_interconnect.sv
+$(UNIT_DIR)/tb_soc_interconnect.vvp: rtl/soc/dc_soc_addr_pkg.sv rtl/soc/soc_interconnect.sv sim/tb/tb_soc_interconnect.sv $(BUILD_MAKEFILES) | $(UNIT_DIR)
+	$(IVERILOG) -g2012 -s tb_soc_interconnect -Irtl/soc -o $@ rtl/soc/dc_soc_addr_pkg.sv rtl/soc/soc_interconnect.sv sim/tb/tb_soc_interconnect.sv
 
 $(UNIT_DIR)/tb_dc_soc_top.vvp: $(CORE_RTL) $(PERIPH_RTL) $(SOC_RTL) sim/tb/tb_dc_soc_top.sv $(BUILD_MAKEFILES) | $(UNIT_DIR)
 	$(IVERILOG) -g2012 -s tb_dc_soc_top -Irtl/core -Irtl/soc -Irtl/periph -o $@ $(CORE_RTL) $(PERIPH_RTL) $(SOC_RTL) sim/tb/tb_dc_soc_top.sv

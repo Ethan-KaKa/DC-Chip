@@ -83,10 +83,10 @@ def main():
 
     with open(NVBOARD_COMPAT_PATCH, encoding="utf-8") as patch_file:
         nvboard_patch = patch_file.read()
-    with open(os.path.join(REPO_ROOT, "rtl", "soc", "dc_soc_top.sv"), encoding="utf-8") as rtl_file:
+    with open(os.path.join(REPO_ROOT, "rtl", "soc", "soc_periph_subsystem.sv"), encoding="utf-8") as rtl_file:
         soc_top = rtl_file.read()
     require(
-        "divisor(432)" in nvboard_patch and ".BAUD_DIV   (432)" in soc_top,
+        "divisor(432)" in nvboard_patch and ".BAUD_DIV(432)" in soc_top,
         "NVBoard UART sampling divisor no longer matches the SoC BAUD_DIV",
     )
     require(
