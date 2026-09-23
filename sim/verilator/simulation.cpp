@@ -210,10 +210,13 @@ void Simulation::reset() {
   impl_->top->eval();
   for (int reset_cycle = 0; reset_cycle < 2; ++reset_cycle) {
     impl_->advance_half_cycle(1);
+    // Deassert after the second active reset edge so the following low phase
+    // records reset release separately from the first execution edge.
+    if (reset_cycle == 1) {
+      impl_->top->rst = 0;
+    }
     impl_->advance_half_cycle(0);
   }
-  impl_->top->rst = 0;
-  impl_->top->eval();
   clear_fetch_status();
   impl_->reset_done = true;
 }

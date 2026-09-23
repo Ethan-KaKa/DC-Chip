@@ -170,25 +170,78 @@ def read_vcd(path: Path) -> tuple[str, set[int]]:
     return contents, timestamps
 
 
-def verify_reset_trace(contents: str) -> None:
-    identifiers = []
+def signal_changes(contents: str, signal_name: str) -> list[tuple[int, str]]:
+    identifiers = set()
     for line in contents.splitlines():
         fields = line.split()
-        if len(fields) >= 6 and fields[0] == "$var" and fields[4] == "rst":
-            identifiers.append(fields[3])
-    require(bool(identifiers), "VCD header does not expose reset")
+        if (
+            len(fields) >= 6
+            and fields[0] == "$var"
+            and fields[4] == signal_name
+        ):
+            identifiers.add(fields[3])
+    require(bool(identifiers), f"VCD header does not expose {signal_name}")
 
     current_time = 0
-    reset_changes: list[tuple[int, str]] = []
+    changes: list[tuple[int, str]] = []
     for line in contents.splitlines():
         if line.startswith("#") and line[1:].isdigit():
             current_time = int(line[1:])
         elif line and line[0] in "01xz" and line[1:] in identifiers:
-            reset_changes.append((current_time, line[0]))
+            changes.append((current_time, line[0]))
+        elif line.startswith("b"):
+            fields = line.split()
+            if len(fields) == 2 and fields[1] in identifiers:
+                changes.append((current_time, fields[0][1:]))
+    return changes
+
+
+def signal_value_at(
+    contents: str, signal_name: str, timestamp: int
+) -> str | None:
+    value = None
+    for change_time, change_value in signal_changes(contents, signal_name):
+        if change_time > timestamp:
+            break
+        value = change_value
+    return value
+
+
+def binary_value_at(contents: str, signal_name: str, timestamp: int) -> int:
+    value = signal_value_at(contents, signal_name, timestamp)
+    require(value is not None, f"VCD has no value for {signal_name}")
+    require(
+        all(bit in "01" for bit in value),
+        f"VCD {signal_name} is unknown at time {timestamp}",
+    )
+    return int(value, 2)
+
+
+def verify_reset_trace(contents: str) -> None:
+    reset_changes = signal_changes(contents, "rst")
     require((0, "1") in reset_changes, "VCD does not start with reset asserted")
     require(
-        any(time >= 5 and value == "0" for time, value in reset_changes),
-        "VCD does not show reset deassertion before normal execution",
+        (4, "0") in reset_changes,
+        "VCD does not record reset deassertion in the final reset low phase",
+    )
+    require(
+        signal_value_at(contents, "clk", 4) == "0",
+        "VCD reset deassertion is not recorded while the clock is low",
+    )
+    require(
+        binary_value_at(contents, "pc_q", 4) == 0,
+        "VCD advances the PC before the first post-reset execution edge",
+    )
+    require(
+        signal_value_at(contents, "trace_valid", 4) == "0",
+        "VCD reports a commit during reset release",
+    )
+    require(
+        signal_value_at(contents, "clk", 5) == "1"
+        and signal_value_at(contents, "trace_valid", 5) == "1"
+        and binary_value_at(contents, "trace_pc", 5) == 0
+        and binary_value_at(contents, "pc_q", 5) == 4,
+        "VCD does not show the PC=0 commit on the first execution edge",
     )
 
 
